@@ -6,9 +6,8 @@ on:
   workflow_dispatch:
 
 jobs:
-  deploy:
+  build:
     runs-on: ubuntu-latest
-    environment: production
 
     steps:
       - name: Checkout code
@@ -20,22 +19,13 @@ jobs:
           node-version: "22"
           cache: "npm"
 
-      - name: Install frontend dependencies
-        run: npm ci
-
-      - name: Build frontend for production
-        run: npm run build
+      - name: Install and build frontend
+        run: |
+          npm ci
+          npm run build
         env:
           VITE_API_URL: https://dlea.piqagram.ir/api
           VITE_GOOGLE_CLIENT_ID: ${{ secrets.VITE_GOOGLE_CLIENT_ID }}
-
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-
-      - name: Install Python dependencies
-        run: pip install django djangorestframework django-cors-headers drf-spectacular djangorestframework-simplejwt python-dotenv psycopg2-binary gunicorn
 
       - name: Create deployment archive
         run: |
@@ -51,43 +41,15 @@ jobs:
             --exclude='.freebuff' \
             .
 
-      - name: Upload deploy artifact
-        uses: actions/upload-artifact@v4
+      - name: Copy archive to server and deploy
+        uses: burnett01/rsync-deployments@7.0.1
         with:
-          name: deploy-package
+          switches: -avzr --delete
           path: deploy.tar.gz
-          retention-days: 1
-
-      - name: Deploy to server via SSH
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ secrets.SERVER_HOST }}
-          username: ${{ secrets.SERVER_USER }}
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
-          port: 22
-          script: |
-            set -e
-            DEPLOY_DIR="/opt/dlea"
-            RELEASE_DIR="$DEPLOY_DIR/releases/$(date +%Y%m%d_%H%M%S)"
-            CURRENT_LINK="$DEPLOY_DIR/current"
-            SHARED_DIR="$DEPLOY_DIR/shared"
-
-            echo "Creating release directory..."
-            mkdir -p "$RELEASE_DIR" "$SHARED_DIR"
-
-            cd "$RELEASE_DIR"
-            tar xzf /tmp/dlea-deploy/deploy.tar.gz 2>/dev/null || echo "Archive will be uploaded separately"
-
-      - name: Upload archive to server
-        uses: appleboy/scp-action@v0.1.7
-        with:
-          host: ${{ secrets.SERVER_HOST }}
-          username: ${{ secrets.SERVER_USER }}
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
-          port: 22
-          source: "deploy.tar.gz"
-          target: "/tmp/dlea-deploy"
-          strip_components: 0
+          remote_path: /tmp/
+          remote_host: ${{ secrets.SERVER_HOST }}
+          remote_user: ${{ secrets.SERVER_USER }}
+          remote_key: ${{ secrets.SSH_PRIVATE_KEY }}
 
       - name: Run deployment on server
         uses: appleboy/ssh-action@v1.0.3
@@ -95,7 +57,6 @@ jobs:
           host: ${{ secrets.SERVER_HOST }}
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
-          port: 22
           script: |
             set -e
             DEPLOY_DIR="/opt/dlea"
@@ -106,39 +67,33 @@ jobs:
 
             echo "=== Dlea Deployment $TIMESTAMP ==="
 
-            # Create release dir
-            mkdir -p "$RELEASE_DIR"
+            mkdir -p "$RELEASE_DIR" "$SHARED_DIR"
             cd "$RELEASE_DIR"
-            tar xzf /tmp/dlea-deploy/deploy.tar.gz
-            rm -f /tmp/dlea-deploy/deploy.tar.gz
+            tar xzf /tmp/deploy.tar.gz
+            rm -f /tmp/deploy.tar.gz
 
-            # Symlink shared env
             if [ -f "$SHARED_DIR/backend/.env" ]; then
               ln -sf "$SHARED_DIR/backend/.env" "$RELEASE_DIR/backend/.env"
             fi
 
-            # Frontend
             echo "Installing frontend..."
-            npm ci --production=false 2>/dev/null || npm install
+            npm ci 2>/dev/null || npm install
+
             echo "Building frontend..."
             npm run build
 
-            # Backend
             echo "Setting up backend..."
             cd backend
             python3 -m venv .venv 2>/dev/null || true
             .venv/bin/pip install --upgrade pip -q 2>/dev/null || true
             .venv/bin/pip install -r requirements.txt -q
 
-            # Migrations
             echo "Running migrations..."
             .venv/bin/python manage.py migrate --noinput
 
-            # Symlink release
             cd "$DEPLOY_DIR"
             ln -sfn "$RELEASE_DIR" "$CURRENT_LINK"
 
-            # Restart services
             echo "Restarting services..."
             systemctl restart dlea-backend 2>/dev/null || true
             systemctl restart dlea-frontend 2>/dev/null || true
