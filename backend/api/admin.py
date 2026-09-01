@@ -1,0 +1,61 @@
+from django.contrib import admin
+
+from .models import (
+    Achievement,
+    AchievementHistory,
+    ArchivedReport,
+    AuditEntry,
+    CalendarDay,
+    CoachInsights,
+    CoachPeriod,
+    EconomicEvent,
+    EquityCurvePoint,
+    ForexSymbol,
+    Goal,
+    JournalEntry,
+    JournalGroup,
+    MonthlyPerformance,
+    NewsItem,
+    Notification,
+    Payment,
+    Plan,
+    PlatformUser,
+    Portfolio,
+    ReferralLink,
+    RoleTier,
+    Strategy,
+    Subscription,
+    Ticket,
+    TicketMessage,
+    Trade,
+    TradeColumn,
+)
+
+admin.site.register(Portfolio)
+admin.site.register(Trade)
+admin.site.register(JournalGroup)
+admin.site.register(JournalEntry)
+admin.site.register(Goal)
+admin.site.register(Achievement)
+admin.site.register(AchievementHistory)
+admin.site.register(RoleTier)
+admin.site.register(Plan)
+admin.site.register(Subscription)
+admin.site.register(PlatformUser)
+admin.site.register(Payment)
+admin.site.register(ReferralLink)
+admin.site.register(NewsItem)
+admin.site.register(Ticket)
+admin.site.register(TicketMessage)
+admin.site.register(Notification)
+admin.site.register(AuditEntry)
+admin.site.register(EconomicEvent)
+admin.site.register(EquityCurvePoint)
+admin.site.register(MonthlyPerformance)
+admin.site.register(CalendarDay)
+admin.site.register(CoachInsights)
+admin.site.register(CoachPeriod)
+admin.site.register(ArchivedReport)
+admin.site.register(ForexSymbol)
+admin.site.register(Strategy)
+admin.site.register(TradeColumn)

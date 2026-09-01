@@ -1,0 +1,21 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: dlea-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: dlea
+      POSTGRES_USER: dlea
+      POSTGRES_PASSWORD: dlea
+    ports:
+      - "5432:5432"
+    volumes:
+      - dlea_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dlea -d dlea"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  dlea_pgdata:
