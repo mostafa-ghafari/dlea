@@ -1,0 +1,18 @@
+[Unit]
+Description=Dlea Frontend (TanStack Start SSR)
+After=network.target dlea-backend.service
+
+[Service]
+Type=simple
+User=ghafari
+Group=ghafari
+WorkingDirectory=/opt/dlea/current
+Environment=NODE_ENV=production
+Environment=PORT=3000
+Environment=HOST=127.0.0.1
+ExecStart=/opt/dlea/current/node_modules/.bin/node .output/server/index.mjs
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

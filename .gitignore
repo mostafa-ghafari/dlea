@@ -1,14 +1,36 @@
 node_modules/
 dist/
+.output/
+.tanstack/
+
+# Environment files (contain secrets)
 .env
 .env.local
 .env.*.local
-*.log
-.freebuff/
+backend/.env
+
+# Backend
 __pycache__/
 *.pyc
+*.pyo
 db.sqlite3
 media/
 venv/
 .venv/
 *.egg-info/
+backend/_token.txt
+backend/db.sqlite3
+
+# Logs
+*.log
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Dev tools
+.freebuff/

@@ -1,0 +1,22 @@
+[Unit]
+Description=Dlea Django Backend (Gunicorn)
+After=network.target postgresql.service
+
+[Service]
+Type=simple
+User=ghafari
+Group=ghafari
+WorkingDirectory=/opt/dlea/current/backend
+Environment=DJANGO_SETTINGS_MODULE=config.settings
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/opt/dlea/current/backend/.venv/bin/gunicorn config.wsgi:application \
+    --bind 127.0.0.1:8000 \
+    --workers 3 \
+    --timeout 120 \
+    --access-logfile - \
+    --error-logfile -
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
