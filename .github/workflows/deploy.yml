@@ -1,12 +1,10 @@
 name: Deploy to Production
 
 on:
-  push:
-    branches: [main]
   workflow_dispatch:
 
 jobs:
-  build:
+  build-and-deploy:
     runs-on: ubuntu-latest
 
     steps:
@@ -19,7 +17,7 @@ jobs:
           node-version: "22"
           cache: "npm"
 
-      - name: Install and build frontend
+      - name: Install and build
         run: |
           npm ci
           npm run build
@@ -27,9 +25,9 @@ jobs:
           VITE_API_URL: https://dlea.piqagram.ir/api
           VITE_GOOGLE_CLIENT_ID: ${{ secrets.VITE_GOOGLE_CLIENT_ID }}
 
-      - name: Create deployment archive
+      - name: Create deployment package
         run: |
-          tar czf deploy.tar.gz \
+          tar czf dlea-deploy.tar.gz \
             --exclude='node_modules' \
             --exclude='.output' \
             --exclude='.tanstack' \
@@ -41,62 +39,26 @@ jobs:
             --exclude='.freebuff' \
             .
 
-      - name: Copy archive to server and deploy
-        uses: burnett01/rsync-deployments@7.0.1
+      - name: Upload deploy package
+        uses: actions/upload-artifact@v4
         with:
-          switches: -avzr --delete
-          path: deploy.tar.gz
-          remote_path: /tmp/
-          remote_host: ${{ secrets.SERVER_HOST }}
-          remote_user: ${{ secrets.SERVER_USER }}
-          remote_key: ${{ secrets.SSH_PRIVATE_KEY }}
+          name: dlea-deploy-package
+          path: dlea-deploy.tar.gz
+          retention-days: 3
 
-      - name: Run deployment on server
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ secrets.SERVER_HOST }}
-          username: ${{ secrets.SERVER_USER }}
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
-          script: |
-            set -e
-            DEPLOY_DIR="/opt/dlea"
-            TIMESTAMP=$(date +%Y%m%d_%H%M%S)
-            RELEASE_DIR="$DEPLOY_DIR/releases/$TIMESTAMP"
-            CURRENT_LINK="$DEPLOY_DIR/current"
-            SHARED_DIR="$DEPLOY_DIR/shared"
-
-            echo "=== Dlea Deployment $TIMESTAMP ==="
-
-            mkdir -p "$RELEASE_DIR" "$SHARED_DIR"
-            cd "$RELEASE_DIR"
-            tar xzf /tmp/deploy.tar.gz
-            rm -f /tmp/deploy.tar.gz
-
-            if [ -f "$SHARED_DIR/backend/.env" ]; then
-              ln -sf "$SHARED_DIR/backend/.env" "$RELEASE_DIR/backend/.env"
-            fi
-
-            echo "Installing frontend..."
-            npm ci 2>/dev/null || npm install
-
-            echo "Building frontend..."
-            npm run build
-
-            echo "Setting up backend..."
-            cd backend
-            python3 -m venv .venv 2>/dev/null || true
-            .venv/bin/pip install --upgrade pip -q 2>/dev/null || true
-            .venv/bin/pip install -r requirements.txt -q
-
-            echo "Running migrations..."
-            .venv/bin/python manage.py migrate --noinput
-
-            cd "$DEPLOY_DIR"
-            ln -sfn "$RELEASE_DIR" "$CURRENT_LINK"
-
-            echo "Restarting services..."
-            systemctl restart dlea-backend 2>/dev/null || true
-            systemctl restart dlea-frontend 2>/dev/null || true
-            systemctl reload nginx 2>/dev/null || true
-
-            echo "=== Deployment complete ==="
+      - name: Print instructions
+        run: |
+          echo "=========================================="
+          echo "Deployment package is ready!"
+          echo "=========================================="
+          echo ""
+          echo "Since the server is only accessible from MCI network,"
+          echo "please download the artifact and deploy locally:"
+          echo ""
+          echo "1. Download 'dlea-deploy-package' from Artifacts"
+          echo "2. Extract it on your local machine"
+          echo "3. Run: bash deploy/deploy.sh"
+          echo ""
+          echo "Or use the local deploy script:"
+          echo "  bash deploy/local-deploy.sh"
+          echo "=========================================="
