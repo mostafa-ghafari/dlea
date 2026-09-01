@@ -1,1 +1,0 @@
-import{a as e,n as t,t as n}from"./jsx-runtime-B-hcVAMW.js";var r=e(t(),1);n();var i=(0,r.createContext)({meta:{title:``},setMeta:()=>{}});function a(){return(0,r.useContext)(i)}function o(e,t,n){let{setMeta:r}=a();r({title:e,subtitle:t,actions:n})}export{o as t};
