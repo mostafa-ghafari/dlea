@@ -1,14 +1,14 @@
 import { AppShell } from "@/components/AppShell";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { FileSpreadsheet, Link2, UploadCloud, CheckCircle2, Loader2 } from "lucide-react";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { bulkImportTrades, usePortfolios, type TradeInput } from "@/lib/api";
+import { bulkImportTrades, get, post, usePortfolios, type TradeInput } from "@/lib/api";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/app/trades/new")({
@@ -350,9 +350,79 @@ function ImportPanel() {
   );
 }
 
+type MtStatus = {
+  connected: boolean;
+  token?: string;
+  webhookUrl?: string;
+  account?: string;
+  server?: string;
+  broker?: string;
+  platform?: string;
+  portfolioId?: string | null;
+};
+
 function ConnectPanel() {
-  const [connected, setConnected] = useState(false);
-  const [busy, setBusy] = useState(false);
+  const portfolios = usePortfolios();
+  const [mt, setMt] = useState<MtStatus | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [platform, setPlatform] = useState("mt5");
+  const [broker, setBroker] = useState("");
+  const [server, setServer] = useState("");
+  const [account, setAccount] = useState("");
+  const [portfolioId, setPortfolioId] = useState<string>("");
+
+  useEffect(() => {
+    get<MtStatus>("mt/status/")
+      .then((d) => {
+        setMt(d);
+        if (d.connected) {
+          setPlatform(d.platform ?? "mt5");
+          setBroker(d.broker ?? "");
+          setServer(d.server ?? "");
+          setAccount(d.account ?? "");
+          if (d.portfolioId) setPortfolioId(d.portfolioId);
+        }
+      })
+      .catch(() => setMt({ connected: false }))
+      .finally(() => setLoading(false));
+  }, []);
+
+  async function handleConnect() {
+    if (!account.trim()) {
+      toast.error("شماره حساب الزامی است");
+      return;
+    }
+    if (!portfolioId) {
+      toast.error("یک پرتفولیوی مقصد انتخاب کن");
+      return;
+    }
+    setSaving(true);
+    try {
+      const data = await post<MtStatus>("mt/connect/", {
+        platform,
+        broker: broker.trim(),
+        server: server.trim(),
+        account: account.trim(),
+        portfolioId,
+      });
+      setMt(data);
+      toast.success("اتصال متاتریدر برقرار شد — معاملات خودکار همگام می‌شوند");
+    } catch (e) {
+      toast.error(String(e instanceof Error ? e.message : "خطا در اتصال"));
+    }
+    setSaving(false);
+  }
+
+  const connected = mt?.connected;
+
+  if (loading) {
+    return (
+      <div className="card-surface grid place-items-center p-12">
+        <Loader2 className="h-6 w-6 animate-spin text-primary" />
+      </div>
+    );
+  }
 
   return (
     <div className="grid gap-4 lg:grid-cols-3">
@@ -360,15 +430,20 @@ function ConnectPanel() {
         <div className="flex items-center gap-2">
           <Link2 className="h-5 w-5 text-primary" />
           <h3 className="font-semibold">اتصال مستقیم متاتریدر</h3>
+          {connected && (
+            <Badge variant="outline" className="mr-auto border-primary/40 bg-primary/10 text-primary">
+              <CheckCircle2 className="ml-1 h-3 w-3" /> متصل
+            </Badge>
+          )}
         </div>
         <p className="text-sm text-muted-foreground">
-          با رمز Investor (فقط خواندنی) حساب را متصل کن تا معاملات جدید به‌صورت خودکار جمع‌آوری شوند.
+          با اطلاعات حساب متاتریدر، معاملات بسته‌شده به‌صورت خودکار جمع‌آوری می‌شوند.
         </p>
 
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="space-y-2">
             <Label>نسخه</Label>
-            <Select defaultValue="mt5">
+            <Select value={platform} onValueChange={setPlatform}>
               <SelectTrigger className="bg-secondary/60"><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="mt4">MT4</SelectItem>
@@ -377,51 +452,38 @@ function ConnectPanel() {
             </Select>
           </div>
           <div className="space-y-2">
+            <Label>بروکر</Label>
+            <Input value={broker} onChange={(e) => setBroker(e.target.value)} placeholder="IC Markets" className="bg-secondary/60" />
+          </div>
+          <div className="space-y-2">
             <Label>سرور بروکر</Label>
-            <Input placeholder="ICMarkets-Live01" className="bg-secondary/60" />
+            <Input value={server} onChange={(e) => setServer(e.target.value)} placeholder="ICMarkets-Live01" className="bg-secondary/60" />
           </div>
           <div className="space-y-2">
             <Label>شماره حساب</Label>
-            <Input placeholder="12345678" className="bg-secondary/60 tabular" />
-          </div>
-          <div className="space-y-2">
-            <Label>رمز Investor</Label>
-            <Input type="password" placeholder="••••••••" className="bg-secondary/60" />
+            <Input value={account} onChange={(e) => setAccount(e.target.value)} placeholder="12345678" className="bg-secondary/60 tabular" />
           </div>
           <div className="space-y-2 sm:col-span-2">
-            <Label>دوره همگام‌سازی</Label>
-            <Select defaultValue="15">
-              <SelectTrigger className="bg-secondary/60"><SelectValue /></SelectTrigger>
+            <Label>پرتفولیوی مقصد</Label>
+            <Select value={portfolioId} onValueChange={setPortfolioId}>
+              <SelectTrigger className="bg-secondary/60"><SelectValue placeholder="انتخاب پرتفولیو" /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="5">هر ۵ دقیقه</SelectItem>
-                <SelectItem value="15">هر ۱۵ دقیقه</SelectItem>
-                <SelectItem value="60">هر ساعت</SelectItem>
+                {portfolios.map((p) => (
+                  <SelectItem key={p.id} value={String(p.id)}>{p.name} — {p.broker}</SelectItem>
+                ))}
               </SelectContent>
             </Select>
+            {portfolios.length === 0 && (
+              <p className="text-xs text-amber-500">اول از بخش پرتفولیوها یک پرتفولیو بساز.</p>
+            )}
           </div>
         </div>
 
         <div className="flex items-center gap-2 pt-2">
-          <Button
-            disabled={busy}
-            onClick={() => {
-              setBusy(true);
-              setTimeout(() => {
-                setBusy(false);
-                setConnected(true);
-                toast.success("حساب متصل شد — معاملات به‌صورت خودکار همگام می‌شوند");
-              }, 1200);
-            }}
-            className="bg-primary text-primary-foreground hover:bg-primary/90"
-          >
-            {busy ? <Loader2 className="ml-1 h-4 w-4 animate-spin" /> : <Link2 className="ml-1 h-4 w-4" />}
-            اتصال حساب
+          <Button disabled={saving || portfolios.length === 0} onClick={handleConnect} className="bg-primary text-primary-foreground hover:bg-primary/90">
+            {saving ? <Loader2 className="ml-1 h-4 w-4 animate-spin" /> : <Link2 className="ml-1 h-4 w-4" />}
+            {connected ? "به‌روزرسانی اتصال" : "اتصال حساب"}
           </Button>
-          {connected && (
-            <Badge variant="outline" className="border-primary/40 bg-primary/10 text-primary">
-              <CheckCircle2 className="ml-1 h-3 w-3" /> متصل
-            </Badge>
-          )}
         </div>
       </div>
 
@@ -444,7 +506,6 @@ function ConnectPanel() {
     </div>
   );
 }
-
 function NewTrade() {
   return (
     <AppShell title="افزودن معامله" subtitle="ایمپورت فایل یا اتصال متاتریدر">

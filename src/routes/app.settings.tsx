@@ -102,7 +102,7 @@ function SettingsPage() {
 
         <TabsContent value="profile" className="mt-6">
           <div className="card-surface p-6">
-            <div className="flex items-center gap-4">
+            <div className="flex flex-wrap items-center gap-4">
               <div className="relative">
                 <Avatar className="h-16 w-16">
                   <AvatarImage src={avatarUrl ?? undefined} alt={name} />
@@ -123,7 +123,7 @@ function SettingsPage() {
                 <div className="font-semibold">{name}</div>
                 <div className="text-sm text-muted-foreground">{user?.email ?? ""}</div>
               </div>
-              <Button variant="outline" className="mr-auto" disabled={uploading} onClick={() => fileRef.current?.click()}>
+              <Button variant="outline" className="w-full sm:w-auto sm:mr-auto" disabled={uploading} onClick={() => fileRef.current?.click()}>
                 {uploading ? <Loader2 className="ml-1 h-4 w-4 animate-spin" /> : <Camera className="ml-1 h-4 w-4" />}
                 {uploading ? "در حال آپلود..." : "تغییر عکس"}
               </Button>
