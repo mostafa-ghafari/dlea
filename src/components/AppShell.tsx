@@ -583,7 +583,7 @@ export function AppShell({ children, title, subtitle, actions }: {
 
 
   return (
-    <div className="min-h-screen w-full max-w-full overflow-x-clip bg-background text-foreground">
+    <div className="min-h-screen w-full max-w-full bg-background text-foreground" style={{overflowX:"clip",maxWidth:"100%"}}>
       <div className="flex min-h-screen">
         {/* Desktop Sidebar */}
         <aside
