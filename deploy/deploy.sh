@@ -1,47 +1,34 @@
 #!/bin/bash
 set -e
 
-echo "🚀 Starting Dlea deployment..."
+echo "=== Dlea Deployment ==="
 
-DEPLOY_DIR="/opt/dlea"
-RELEASE_DIR="$DEPLOY_DIR/releases/$(date +%Y%m%d_%H%M%S)"
+DEPLOY_DIR="$HOME/dlea"
+TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+RELEASE_DIR="$DEPLOY_DIR/releases/$TIMESTAMP"
 CURRENT_LINK="$DEPLOY_DIR/current"
-SHARED_DIR="$DEPLOY_DIR/shared"
 
-# Create directories
-mkdir -p "$DEPLOY_DIR" "$SHARED_DIR"
+mkdir -p "$DEPLOY_DIR/releases"
 
-# Extract release
+echo "Extracting..."
 mkdir -p "$RELEASE_DIR"
 cd "$RELEASE_DIR"
-tar xzf /tmp/dlea-deploy/deploy.tar.gz
-rm -f /tmp/dlea-deploy/deploy.tar.gz
+tar xzf /tmp/dlea-deploy.tar.gz
 
-# Symlink shared env files
-ln -sf "$SHARED_DIR/.env" "$RELEASE_DIR/backend/.env" 2>/dev/null || true
-
-# Frontend setup
-echo "📦 Installing frontend dependencies..."
-cd "$RELEASE_DIR"
-npm ci --production=false
-
-echo "🔨 Building frontend..."
-npm run build
-
-# Backend setup
-echo "🐍 Setting up backend..."
-cd "$RELEASE_DIR/backend"
+echo "Setting up backend..."
+cd backend
 python3 -m venv .venv 2>/dev/null || true
 .venv/bin/pip install --upgrade pip -q 2>/dev/null || true
+.venv/bin/pip install -r requirements.txt -q
 
-if [ -f requirements.txt ]; then
-  .venv/bin/pip install -r requirements.txt -q
-else
-  .venv/bin/pip install django djangorestframework django-cors-headers drf-spectacular djangorestframework-simplejwt python-dotenv psycopg2-binary gunicorn -q
-fi
-
-# Run migrations
-echo "🗄️ Running database migrations..."
+echo "Running migrations..."
 .venv/bin/python manage.py migrate --noinput
 
-echo "✅ Release $RELEASE_DIR ready!"
+cd "$DEPLOY_DIR"
+ln -sfn "$RELEASE_DIR" "$CURRENT_LINK"
+
+rm -f /tmp/dlea-deploy.tar.gz /tmp/deploy.sh
+
+echo "=== Deployment complete ==="
+echo "Release: $RELEASE_DIR"
+echo "Current: $CURRENT_LINK"

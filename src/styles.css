@@ -191,6 +191,12 @@ html.light .loss {
     font-family: var(--font-sans);
     font-feature-settings: "ss01", "cv01";
     overflow-x: hidden;
+    max-width: 100vw;
+  }
+  #root,
+  #app {
+    overflow-x: hidden;
+    max-width: 100%;
   }
   html[dir="rtl"] body {
     letter-spacing: 0;

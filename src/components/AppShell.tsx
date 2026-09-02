@@ -641,7 +641,7 @@ export function AppShell({ children, title, subtitle, actions }: {
         {/* Main */}
         <div className="flex min-w-0 flex-1 flex-col overflow-x-hidden">
           {/* Topbar */}
-          <header className="sticky top-0 z-30 flex h-16 items-center gap-3 border-b border-border bg-background/80 px-4 backdrop-blur-xl md:px-8">
+          <header className="sticky top-0 z-30 flex h-16 items-center gap-3 overflow-hidden border-b border-border bg-background/80 px-4 backdrop-blur-xl md:px-8">
             {/* Mobile/Tablet menu trigger */}
             <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
               <SheetTrigger asChild>
@@ -700,8 +700,8 @@ export function AppShell({ children, title, subtitle, actions }: {
           </header>
 
           {/* Page header */}
-          <div className="border-b border-border bg-background/40 px-4 py-6 md:px-8">
-            <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-4 sm:flex sm:items-center sm:justify-between">
+          <div className="overflow-hidden border-b border-border bg-background/40 px-4 py-6 md:px-8">
+            <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-4 overflow-hidden sm:flex sm:items-center sm:justify-between">
               <div className="min-w-0">
                 <h1 className="truncate text-2xl font-bold tracking-tight">{locked ? "شروع کار" : title}</h1>
                 {subtitle && !locked && (
