@@ -190,13 +190,16 @@ html.light .loss {
     color: var(--color-foreground);
     font-family: var(--font-sans);
     font-feature-settings: "ss01", "cv01";
-    overflow-x: hidden;
+    overflow-x: clip;
     max-width: 100vw;
+    width: 100%;
+    width: 100%;
   }
   #root,
   #app {
-    overflow-x: hidden;
+    overflow-x: clip;
     max-width: 100%;
+    width: 100%;
   }
   html[dir="rtl"] body {
     letter-spacing: 0;

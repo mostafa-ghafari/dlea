@@ -134,7 +134,7 @@ function DashboardPage() {
               زنده
             </Badge>
           </div>
-          <div className="mt-4 h-72">
+          <div className="mt-4 h-72 w-full overflow-hidden">
             <ResponsiveContainer>
               <AreaChart data={equityCurve}>
                 <defs>
@@ -157,7 +157,7 @@ function DashboardPage() {
         <div className="card-surface p-5">
           <h3 className="font-semibold">نرخ برد / باخت</h3>
           <p className="text-xs text-muted-foreground">{faDigits(dashboard?.tradeCount ?? 0)} معامله</p>
-          <div className="mt-4 h-56">
+          <div className="mt-4 h-56 w-full overflow-hidden">
             <ResponsiveContainer>
               <PieChart>
                 <Pie data={winLossData} dataKey="value" innerRadius={55} outerRadius={80} paddingAngle={4}>
@@ -185,7 +185,7 @@ function DashboardPage() {
         <div className="card-surface p-5">
           <h3 className="font-semibold">عملکرد ماهانه</h3>
           <p className="text-xs text-muted-foreground">سود/زیان به دلار</p>
-          <div className="mt-4 h-64">
+          <div className="mt-4 h-64 w-full overflow-hidden">
             <ResponsiveContainer>
               <BarChart data={monthlyPerformance}>
                 <CartesianGrid strokeDasharray="3 3" stroke="oklch(0.28 0.02 255)" vertical={false} />
@@ -251,7 +251,7 @@ function DashboardPage() {
                   value={tradeQuery}
                   onChange={(e) => setTradeQuery(e.target.value)}
                   placeholder="جستجو..."
-                  className="h-8 w-40 bg-secondary/60 pr-8 text-xs"
+                  className="h-8 w-full max-w-[10rem] bg-secondary/60 pr-8 text-xs sm:w-40"
                 />
               </div>
               <Badge variant="outline">{trades.length} معامله</Badge>

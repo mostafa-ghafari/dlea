@@ -583,7 +583,7 @@ export function AppShell({ children, title, subtitle, actions }: {
 
 
   return (
-    <div className="min-h-screen bg-background text-foreground">
+    <div className="min-h-screen w-full max-w-full overflow-x-clip bg-background text-foreground">
       <div className="flex min-h-screen">
         {/* Desktop Sidebar */}
         <aside
