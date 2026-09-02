@@ -27,10 +27,6 @@ echo "Running migrations..."
 cd "$DEPLOY_DIR"
 ln -sfn "$RELEASE_DIR" "$CURRENT_LINK"
 
-echo "Installing frontend dependencies..."
-cd "$RELEASE_DIR"
-npm install --production=false 2>&1 | tail -3
-
 echo "Restarting backend (Gunicorn on port 8002)..."
 kill $(pgrep -f "gunicorn.*config.wsgi") 2>/dev/null || true
 sleep 1
@@ -45,7 +41,6 @@ cd "$RELEASE_DIR"
 nohup node .output/server/index.mjs > /tmp/frontend.log 2>&1 &
 sleep 2
 
-# Verify services
 BACKEND_OK=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:8002/api/auth/password-reset-request/ -X POST -H "Content-Type: application/json" -d '{"email":"test"}' 2>/dev/null || echo "000")
 FRONTEND_OK=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:3000/ 2>/dev/null || echo "000")
 
