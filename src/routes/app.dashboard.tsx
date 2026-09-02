@@ -89,7 +89,7 @@ function DashboardPage() {
     <AppShell title="داشبورد" subtitle="خلاصه عملکرد و آمار کلی حساب شما">
     {/* Free plan upgrade banner */}
       {limits.slug === "free" && (
-        <div className="mb-4 flex items-center gap-3 rounded-lg border border-primary/20 bg-gradient-to-l from-primary/5 to-primary/10 px-4 py-3">
+        <div className="mb-4 flex items-center gap-2 rounded-lg border border-primary/20 bg-gradient-to-l from-primary/5 to-primary/10 px-4 py-3">
           <Sparkles className="h-5 w-5 shrink-0 text-primary" />
           <div className="flex-1 text-sm">
             <span className="font-medium">پلن رایگان فعال است.</span>{" "}
@@ -105,7 +105,7 @@ function DashboardPage() {
       {/* KPI cards */}
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         {kpis.map((s) => (
-          <div key={s.label} className="card-surface p-5">
+          <div key={s.label} className="card-surface overflow-hidden p-5">
             <div className="flex items-center justify-between">
               <span className="text-sm text-muted-foreground">{s.label}</span>
               <div className={`grid h-8 w-8 place-items-center rounded-lg ${s.positive ? "bg-primary/10 text-primary" : "bg-destructive/10 text-destructive"}`}>
@@ -154,7 +154,7 @@ function DashboardPage() {
           </div>
         </div>
 
-        <div className="card-surface p-5">
+        <div className="card-surface overflow-hidden p-5">
           <h3 className="font-semibold">نرخ برد / باخت</h3>
           <p className="text-xs text-muted-foreground">{faDigits(dashboard?.tradeCount ?? 0)} معامله</p>
           <div className="mt-4 h-56 w-full overflow-hidden">
@@ -182,7 +182,7 @@ function DashboardPage() {
 
       {/* Charts row 2 */}
       <div className="mt-6 grid gap-4 lg:grid-cols-2">
-        <div className="card-surface p-5">
+        <div className="card-surface overflow-hidden p-5">
           <h3 className="font-semibold">عملکرد ماهانه</h3>
           <p className="text-xs text-muted-foreground">سود/زیان به دلار</p>
           <div className="mt-4 h-64 w-full overflow-hidden">
@@ -202,7 +202,7 @@ function DashboardPage() {
           </div>
         </div>
 
-        <div className="card-surface p-5">
+        <div className="card-surface overflow-hidden p-5">
           <div className="flex items-center gap-2">
             <CalendarClock className="h-4 w-4 text-primary" />
             <h3 className="font-semibold">تقویم اقتصادی</h3>
@@ -210,8 +210,8 @@ function DashboardPage() {
           <p className="text-xs text-muted-foreground">رویدادهای مهم امروز بازار فارکس</p>
           <div className="mt-4 max-h-64 space-y-2 overflow-y-auto pl-1">
             {economicEvents.map((ev) => (
-              <div key={ev.id} className="flex items-center gap-3 rounded-lg border border-border bg-secondary/40 p-3">
-                <span className="w-12 shrink-0 text-xs text-muted-foreground tabular">{ev.time}</span>
+              <div key={ev.id} className="flex items-center gap-2 rounded-lg border border-border bg-secondary/40 p-3">
+                <span className="shrink-0 text-xs text-muted-foreground tabular">{ev.time}</span>
                 <span className="grid h-7 w-11 shrink-0 place-items-center rounded-md bg-secondary text-[11px] font-bold">
                   {ev.currency}
                 </span>
@@ -298,7 +298,7 @@ function DashboardPage() {
         </div>
 
         <div className="space-y-4">
-          <div className="card-surface p-5">
+          <div className="card-surface overflow-hidden p-5">
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
               <Award className="h-4 w-4 text-primary" />
               بهترین معامله
@@ -309,7 +309,7 @@ function DashboardPage() {
               {bestTrade ? `R:R ${faDigits(bestTrade.rr)} • ${bestTrade.date}` : "هنوز معامله‌ای ثبت نشده"}
             </div>
           </div>
-          <div className="card-surface p-5">
+          <div className="card-surface overflow-hidden p-5">
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
               <TrendingDown className="h-4 w-4 text-destructive" />
               بدترین معامله
