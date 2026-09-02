@@ -1,6 +1,6 @@
 import { AppShell } from "@/components/AppShell";
 import { Link, createFileRoute, useNavigate } from "@tanstack/react-router";
-import { Plus, Filter, Download, CheckCircle2, XCircle, Images, ChevronRight, ChevronLeft, Columns3 } from "lucide-react";
+import { Plus, Filter, Download, CheckCircle2, Check, XCircle, Images, ChevronRight, ChevronLeft, Columns3 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -16,8 +16,9 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { useTrades, usePlanLimits, useTradeColumns } from "@/lib/api";
+import { useTrades, usePlanLimits } from "@/lib/api";
 import { useLocalState } from "@/lib/app-state";
 import { toast } from "sonner";
 
@@ -35,8 +36,11 @@ function TradesPage() {
   const [plan, setPlan] = useState<"all" | "yes" | "no">("all");
   const [result, setResult] = useState<"all" | "win" | "loss">("all");
   const [filterOpen, setFilterOpen] = useState(false);
-  const ALL_COLUMNS = useTradeColumns();
-  const [visibleColumns, setVisibleColumns] = useState<string[]>(ALL_COLUMNS.filter((c) => c.defaultVisible).map((c) => c.key));
+  const [colsOpen, setColsOpen] = useState(false);
+  const DEFAULT_COLS = ["symbol", "side", "entry", "exit", "sl", "tp", "rr", "pnl", "date"];
+  const ALL_COL_KEYS = ["id", "symbol", "side", "entry", "exit", "sl", "tp", "volume", "rr", "pnl", "followedPlan", "date", "screenshots"] as const;
+  const COL_LABELS: Record<string, string> = { id: "شناسه", symbol: "نماد", side: "نوع", entry: "ورود", exit: "خروج", sl: "SL", tp: "TP", volume: "حجم", rr: "R:R", pnl: "سود/زیان", followedPlan: "پلن", date: "تاریخ", screenshots: "اسکرین‌شات" };
+  const [visibleColumns, setVisibleColumns] = useState<string[]>([...DEFAULT_COLS]);
   function toggleColumn(key: string) {
     setVisibleColumns((prev) => prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]);
   }
@@ -140,99 +144,103 @@ function TradesPage() {
             </DialogContent>
           </Dialog>
         </div>
+        {/* Column selector */}
+        <div className="mt-4 flex items-center gap-2">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="sm">
+                <Columns3 className="ml-1 h-4 w-4" />ستون‌ها
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-48">
+              {ALL_COL_KEYS.map((key) => (
+                <DropdownMenuItem key={key} onSelect={(e) => { e.preventDefault(); toggleColumn(key); }}>
+                  <div className="flex w-full items-center gap-2">
+                    <div className={`h-4 w-4 rounded border ${visibleColumns.includes(key) ? "border-primary bg-primary" : "border-border"} flex items-center justify-center`}>
+                      {visibleColumns.includes(key) && <Check className="h-3 w-3 text-primary-foreground" />}
+                    </div>
+                    <span>{COL_LABELS[key]}</span>
+                  </div>
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
+          <span className="text-xs text-muted-foreground">{visibleColumns.length} ستون فعال</span>
+        </div>
 
-                        {/* Desktop table with column toggle */}
-        <div className="mt-5 hidden md:block">
-          <div className="mb-3 flex items-center gap-2">
-            <Columns3 className="h-4 w-4 text-muted-foreground" />
-            <span className="text-xs text-muted-foreground">ستون‌ها:</span>
-            {ALL_COLUMNS.map((col) => (
-              <button
-                key={col.key}
-                onClick={() => toggleColumn(col.key)}
-                className={`rounded-md border px-2 py-1 text-xs transition-colors ${
-                  visibleColumns.includes(col.key)
-                    ? "border-primary/40 bg-primary/10 text-primary"
-                    : "border-border bg-secondary/40 text-muted-foreground"
-                }`}
-              >
-                {col.label}
-              </button>
-            ))}
-          </div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-border text-xs text-muted-foreground">
-                  {visibleColumns.includes("id") && <th className="py-3 text-right font-medium">شناسه</th>}
-                  {visibleColumns.includes("symbol") && <th className="py-3 text-right font-medium">نماد</th>}
-                  {visibleColumns.includes("side") && <th className="py-3 text-right font-medium">نوع</th>}
-                  {visibleColumns.includes("entry") && <th className="py-3 text-right font-medium">ورود</th>}
-                  {visibleColumns.includes("exit") && <th className="py-3 text-right font-medium">خروج</th>}
-                  {visibleColumns.includes("sl") && <th className="py-3 text-right font-medium">SL</th>}
-                  {visibleColumns.includes("tp") && <th className="py-3 text-right font-medium">TP</th>}
-                  {visibleColumns.includes("volume") && <th className="py-3 text-right font-medium">حجم</th>}
-                  {visibleColumns.includes("rr") && <th className="py-3 text-right font-medium">R:R</th>}
-                  {visibleColumns.includes("pnl") && <th className="py-3 text-right font-medium">سود/زیان</th>}
-                  {visibleColumns.includes("followedPlan") && <th className="py-3 text-right font-medium">پلن</th>}
-                  {visibleColumns.includes("date") && <th className="py-3 text-right font-medium">تاریخ</th>}
-                  {visibleColumns.includes("screenshots") && <th className="py-3 text-right font-medium">اسکرین‌شات</th>}
-                  <th className="py-3 text-right font-medium">جزئیات</th>
-                </tr>
-              </thead>
-              <tbody>
-                {paginated.map((t) => (
-                  <tr
-                    key={t.id}
-                    onClick={() => navigate({ to: "/app/trades/$id", params: { id: t.id } })}
-                    className="cursor-pointer border-b border-border/50 hover:bg-secondary/30 last:border-0"
-                  >
-                    {visibleColumns.includes("id") && <td className="py-3 text-xs tabular text-muted-foreground">{t.id}</td>}
-                    {visibleColumns.includes("symbol") && <td className="py-3 font-medium">{t.symbol}</td>}
-                    {visibleColumns.includes("side") && (
-                      <td className="py-3">
-                        <Badge variant="outline" className={t.side === "buy" ? "border-primary/40 bg-primary/10 text-primary" : "border-destructive/40 bg-destructive/10 text-destructive"}>
-                          {t.side === "buy" ? "خرید" : "فروش"}
-                        </Badge>
-                      </td>
-                    )}
-                    {visibleColumns.includes("entry") && <td className="py-3 tabular">{t.entry}</td>}
-                    {visibleColumns.includes("exit") && <td className="py-3 tabular">{t.exit}</td>}
-                    {visibleColumns.includes("sl") && <td className="py-3 tabular text-destructive">{t.sl || "—"}</td>}
-                    {visibleColumns.includes("tp") && <td className="py-3 tabular text-primary">{t.tp || "—"}</td>}
-                    {visibleColumns.includes("volume") && <td className="py-3 tabular">{t.volume}</td>}
-                    {visibleColumns.includes("rr") && <td className="py-3 tabular">{t.rr}</td>}
-                    {visibleColumns.includes("pnl") && (
-                      <td className={`py-3 tabular font-medium ${t.pnl >= 0 ? "gain" : "loss"}`}>
-                        {t.pnl >= 0 ? "+" : ""}${t.pnl}
-                      </td>
-                    )}
-                    {visibleColumns.includes("followedPlan") && (
-                      <td className="py-3">
-                        {t.followedPlan ? (
-                          <CheckCircle2 className="h-4 w-4 text-primary" />
-                        ) : (
-                          <XCircle className="h-4 w-4 text-destructive" />
-                        )}
-                      </td>
-                    )}
-                    {visibleColumns.includes("date") && <td className="py-3 text-xs text-muted-foreground tabular">{t.date}</td>}
-                    {visibleColumns.includes("screenshots") && <td className="py-3"><ShotsCell id={t.id} initial={t.screenshots} /></td>}
+        {/* Desktop table */}
+        <div className="mt-3 hidden overflow-x-auto md:block">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-border text-xs text-muted-foreground">
+                {visibleColumns.includes("id") && <th className="py-3 text-right font-medium">شناسه</th>}
+                {visibleColumns.includes("symbol") && <th className="py-3 text-right font-medium">نماد</th>}
+                {visibleColumns.includes("side") && <th className="py-3 text-right font-medium">نوع</th>}
+                {visibleColumns.includes("entry") && <th className="py-3 text-right font-medium">ورود</th>}
+                {visibleColumns.includes("exit") && <th className="py-3 text-right font-medium">خروج</th>}
+                {visibleColumns.includes("sl") && <th className="py-3 text-right font-medium">SL</th>}
+                {visibleColumns.includes("tp") && <th className="py-3 text-right font-medium">TP</th>}
+                {visibleColumns.includes("volume") && <th className="py-3 text-right font-medium">حجم</th>}
+                {visibleColumns.includes("rr") && <th className="py-3 text-right font-medium">R:R</th>}
+                {visibleColumns.includes("pnl") && <th className="py-3 text-right font-medium">سود/زیان</th>}
+                {visibleColumns.includes("followedPlan") && <th className="py-3 text-right font-medium">پلن</th>}
+                {visibleColumns.includes("date") && <th className="py-3 text-right font-medium">تاریخ</th>}
+                {visibleColumns.includes("screenshots") && <th className="py-3 text-right font-medium">اسکرین‌شات</th>}
+                <th className="py-3 text-right font-medium">جزئیات</th>
+              </tr>
+            </thead>
+            <tbody>
+              {paginated.map((t) => (
+                <tr
+                  key={t.id}
+                  onClick={() => navigate({ to: "/app/trades/$id", params: { id: t.id } })}
+                  className="cursor-pointer border-b border-border/50 hover:bg-secondary/30 last:border-0"
+                >
+                  {visibleColumns.includes("id") && <td className="py-3 text-xs tabular text-muted-foreground">{t.id}</td>}
+                  {visibleColumns.includes("symbol") && <td className="py-3 font-medium">{t.symbol}</td>}
+                  {visibleColumns.includes("side") && (
                     <td className="py-3">
-                      <Link
-                        to="/app/trades/$id"
-                        params={{ id: t.id }}
-                        onClick={(e) => e.stopPropagation()}
-                        className="text-xs text-primary hover:underline"
-                      >
-                        مشاهده
-                      </Link>
+                      <Badge variant="outline" className={t.side === "buy" ? "border-primary/40 bg-primary/10 text-primary" : "border-destructive/40 bg-destructive/10 text-destructive"}>
+                        {t.side === "buy" ? "خرید" : "فروش"}
+                      </Badge>
                     </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                  )}
+                  {visibleColumns.includes("entry") && <td className="py-3 tabular">{t.entry}</td>}
+                  {visibleColumns.includes("exit") && <td className="py-3 tabular">{t.exit}</td>}
+                  {visibleColumns.includes("sl") && <td className="py-3 tabular text-destructive">{t.sl || "—"}</td>}
+                  {visibleColumns.includes("tp") && <td className="py-3 tabular text-primary">{t.tp || "—"}</td>}
+                  {visibleColumns.includes("volume") && <td className="py-3 tabular">{t.volume}</td>}
+                  {visibleColumns.includes("rr") && <td className="py-3 tabular">{t.rr}</td>}
+                  {visibleColumns.includes("pnl") && (
+                    <td className={`py-3 tabular font-medium ${t.pnl >= 0 ? "gain" : "loss"}`}>
+                      {t.pnl >= 0 ? "+" : ""}${t.pnl}
+                    </td>
+                  )}
+                  {visibleColumns.includes("followedPlan") && (
+                    <td className="py-3">
+                      {t.followedPlan ? (
+                        <CheckCircle2 className="h-4 w-4 text-primary" />
+                      ) : (
+                        <XCircle className="h-4 w-4 text-destructive" />
+                      )}
+                    </td>
+                  )}
+                  {visibleColumns.includes("date") && <td className="py-3 text-xs text-muted-foreground tabular">{t.date}</td>}
+                  {visibleColumns.includes("screenshots") && <td className="py-3"><ShotsCell id={t.id} initial={t.screenshots} /></td>}
+                  <td className="py-3">
+                    <Link
+                      to="/app/trades/$id"
+                      params={{ id: t.id }}
+                      onClick={(e) => e.stopPropagation()}
+                      className="text-xs text-primary hover:underline"
+                    >
+                      مشاهده
+                    </Link>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
           {paginated.length === 0 && (
             <div className="py-8 text-center text-sm text-muted-foreground">معامله‌ای یافت نشد.</div>
           )}
@@ -287,6 +295,7 @@ function TradesPage() {
         </div>
 
 
+        
         {/* Pagination */}
         {filtered.length > PAGE_SIZE && (
           <div className="mt-4 flex items-center justify-between text-sm text-muted-foreground">

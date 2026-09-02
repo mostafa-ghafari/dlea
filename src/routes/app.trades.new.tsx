@@ -23,6 +23,17 @@ export const Route = createFileRoute("/app/trades/new")({
   component: NewTrade,
 });
 
+type MtStatus = {
+  connected: boolean;
+  token?: string;
+  webhookUrl?: string;
+  account?: string;
+  server?: string;
+  broker?: string;
+  platform?: string;
+  portfolioId?: string | null;
+};
+
 const ACCEPT = ".csv,.htm,.html,.xlsx,.xls";
 
 type ParsedTrade = {
