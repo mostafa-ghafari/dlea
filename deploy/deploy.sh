@@ -31,14 +31,14 @@ echo "Installing frontend dependencies..."
 cd "$RELEASE_DIR"
 npm install --production=false 2>&1 | tail -3
 
-echo "Restarting backend (Gunicorn)..."
+echo "Restarting backend (Gunicorn on port 8000)..."
 kill $(pgrep -f "gunicorn.*config.wsgi") 2>/dev/null || true
 sleep 1
 cd "$RELEASE_DIR/backend"
 nohup .venv/bin/gunicorn config.wsgi:application --bind 127.0.0.1:8000 --workers 3 --timeout 120 > /tmp/gunicorn.log 2>&1 &
 sleep 2
 
-echo "Restarting frontend (Node.js)..."
+echo "Restarting frontend (Node.js on port 3000)..."
 kill $(pgrep -f "node.*start") 2>/dev/null || true
 kill $(pgrep -f "node.*index.mjs") 2>/dev/null || true
 sleep 1
@@ -46,7 +46,9 @@ cd "$RELEASE_DIR"
 nohup node .output/server/index.mjs > /tmp/frontend.log 2>&1 &
 sleep 2
 
-# Verify services
+echo "Verifying Nginx config..."
+bash /tmp/fix-nginx.sh 2>/dev/null || echo "  Nginx fix skipped (run setup-server-sudo.sh first)"
+
 BACKEND_OK=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:8000/api/auth/login/ -X POST -H "Content-Type: application/json" -d '{}' 2>/dev/null || echo "000")
 FRONTEND_OK=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:3000/ 2>/dev/null || echo "000")
 
