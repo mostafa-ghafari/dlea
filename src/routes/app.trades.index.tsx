@@ -1,6 +1,6 @@
 import { AppShell } from "@/components/AppShell";
 import { Link, createFileRoute, useNavigate } from "@tanstack/react-router";
-import { Plus, Filter, Download, CheckCircle2, XCircle, Images, ChevronRight, ChevronLeft } from "lucide-react";
+import { Plus, Filter, Download, CheckCircle2, XCircle, Images, ChevronRight, ChevronLeft, Columns3 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -17,7 +17,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { useTrades, usePlanLimits } from "@/lib/api";
+import { useTrades, usePlanLimits, useTradeColumns } from "@/lib/api";
 import { useLocalState } from "@/lib/app-state";
 import { toast } from "sonner";
 
@@ -35,6 +35,11 @@ function TradesPage() {
   const [plan, setPlan] = useState<"all" | "yes" | "no">("all");
   const [result, setResult] = useState<"all" | "win" | "loss">("all");
   const [filterOpen, setFilterOpen] = useState(false);
+  const ALL_COLUMNS = useTradeColumns();
+  const [visibleColumns, setVisibleColumns] = useState<string[]>(ALL_COLUMNS.filter((c) => c.defaultVisible).map((c) => c.key));
+  function toggleColumn(key: string) {
+    setVisibleColumns((prev) => prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]);
+  }
   const [page, setPage] = useState(1);
   const PAGE_SIZE = 20;
 
@@ -136,69 +141,98 @@ function TradesPage() {
           </Dialog>
         </div>
 
-                {/* Desktop table */}
-        <div className="mt-5 hidden overflow-x-auto md:block">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-border text-xs text-muted-foreground">
-                <th className="py-3 text-right font-medium">شناسه</th>
-                <th className="py-3 text-right font-medium">نماد</th>
-                <th className="py-3 text-right font-medium">نوع</th>
-                <th className="py-3 text-right font-medium">ورود</th>
-                <th className="py-3 text-right font-medium">خروج</th>
-                <th className="py-3 text-right font-medium">حجم</th>
-                <th className="py-3 text-right font-medium">R:R</th>
-                <th className="py-3 text-right font-medium">سود/زیان</th>
-                <th className="py-3 text-right font-medium">پلن</th>
-                <th className="py-3 text-right font-medium">تاریخ</th>
-                <th className="py-3 text-right font-medium">اسکرین‌شات</th>
-                <th className="py-3 text-right font-medium">جزئیات</th>
-              </tr>
-            </thead>
-            <tbody>
-              {paginated.map((t) => (
-                <tr
-                  key={t.id}
-                  onClick={() => navigate({ to: "/app/trades/$id", params: { id: t.id } })}
-                  className="cursor-pointer border-b border-border/50 hover:bg-secondary/30 last:border-0"
-                >
-                  <td className="py-3 text-xs tabular text-muted-foreground">{t.id}</td>
-                  <td className="py-3 font-medium">{t.symbol}</td>
-                  <td className="py-3">
-                    <Badge variant="outline" className={t.side === "buy" ? "border-primary/40 bg-primary/10 text-primary" : "border-destructive/40 bg-destructive/10 text-destructive"}>
-                      {t.side === "buy" ? "خرید" : "فروش"}
-                    </Badge>
-                  </td>
-                  <td className="py-3 tabular">{t.entry}</td>
-                  <td className="py-3 tabular">{t.exit}</td>
-                  <td className="py-3 tabular">{t.volume}</td>
-                  <td className="py-3 tabular">{t.rr}</td>
-                  <td className={`py-3 tabular font-medium ${t.pnl >= 0 ? "gain" : "loss"}`}>
-                    {t.pnl >= 0 ? "+" : ""}${t.pnl}
-                  </td>
-                  <td className="py-3">
-                    {t.followedPlan ? (
-                      <CheckCircle2 className="h-4 w-4 text-primary" />
-                    ) : (
-                      <XCircle className="h-4 w-4 text-destructive" />
-                    )}
-                  </td>
-                  <td className="py-3 text-xs text-muted-foreground tabular">{t.date}</td>
-                  <td className="py-3"><ShotsCell id={t.id} initial={t.screenshots} /></td>
-                  <td className="py-3">
-                    <Link
-                      to="/app/trades/$id"
-                      params={{ id: t.id }}
-                      onClick={(e) => e.stopPropagation()}
-                      className="text-xs text-primary hover:underline"
-                    >
-                      مشاهده
-                    </Link>
-                  </td>
+                        {/* Desktop table with column toggle */}
+        <div className="mt-5 hidden md:block">
+          <div className="mb-3 flex items-center gap-2">
+            <Columns3 className="h-4 w-4 text-muted-foreground" />
+            <span className="text-xs text-muted-foreground">ستون‌ها:</span>
+            {ALL_COLUMNS.map((col) => (
+              <button
+                key={col.key}
+                onClick={() => toggleColumn(col.key)}
+                className={`rounded-md border px-2 py-1 text-xs transition-colors ${
+                  visibleColumns.includes(col.key)
+                    ? "border-primary/40 bg-primary/10 text-primary"
+                    : "border-border bg-secondary/40 text-muted-foreground"
+                }`}
+              >
+                {col.label}
+              </button>
+            ))}
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-border text-xs text-muted-foreground">
+                  {visibleColumns.includes("id") && <th className="py-3 text-right font-medium">شناسه</th>}
+                  {visibleColumns.includes("symbol") && <th className="py-3 text-right font-medium">نماد</th>}
+                  {visibleColumns.includes("side") && <th className="py-3 text-right font-medium">نوع</th>}
+                  {visibleColumns.includes("entry") && <th className="py-3 text-right font-medium">ورود</th>}
+                  {visibleColumns.includes("exit") && <th className="py-3 text-right font-medium">خروج</th>}
+                  {visibleColumns.includes("sl") && <th className="py-3 text-right font-medium">SL</th>}
+                  {visibleColumns.includes("tp") && <th className="py-3 text-right font-medium">TP</th>}
+                  {visibleColumns.includes("volume") && <th className="py-3 text-right font-medium">حجم</th>}
+                  {visibleColumns.includes("rr") && <th className="py-3 text-right font-medium">R:R</th>}
+                  {visibleColumns.includes("pnl") && <th className="py-3 text-right font-medium">سود/زیان</th>}
+                  {visibleColumns.includes("followedPlan") && <th className="py-3 text-right font-medium">پلن</th>}
+                  {visibleColumns.includes("date") && <th className="py-3 text-right font-medium">تاریخ</th>}
+                  {visibleColumns.includes("screenshots") && <th className="py-3 text-right font-medium">اسکرین‌شات</th>}
+                  <th className="py-3 text-right font-medium">جزئیات</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {paginated.map((t) => (
+                  <tr
+                    key={t.id}
+                    onClick={() => navigate({ to: "/app/trades/$id", params: { id: t.id } })}
+                    className="cursor-pointer border-b border-border/50 hover:bg-secondary/30 last:border-0"
+                  >
+                    {visibleColumns.includes("id") && <td className="py-3 text-xs tabular text-muted-foreground">{t.id}</td>}
+                    {visibleColumns.includes("symbol") && <td className="py-3 font-medium">{t.symbol}</td>}
+                    {visibleColumns.includes("side") && (
+                      <td className="py-3">
+                        <Badge variant="outline" className={t.side === "buy" ? "border-primary/40 bg-primary/10 text-primary" : "border-destructive/40 bg-destructive/10 text-destructive"}>
+                          {t.side === "buy" ? "خرید" : "فروش"}
+                        </Badge>
+                      </td>
+                    )}
+                    {visibleColumns.includes("entry") && <td className="py-3 tabular">{t.entry}</td>}
+                    {visibleColumns.includes("exit") && <td className="py-3 tabular">{t.exit}</td>}
+                    {visibleColumns.includes("sl") && <td className="py-3 tabular text-destructive">{t.sl || "—"}</td>}
+                    {visibleColumns.includes("tp") && <td className="py-3 tabular text-primary">{t.tp || "—"}</td>}
+                    {visibleColumns.includes("volume") && <td className="py-3 tabular">{t.volume}</td>}
+                    {visibleColumns.includes("rr") && <td className="py-3 tabular">{t.rr}</td>}
+                    {visibleColumns.includes("pnl") && (
+                      <td className={`py-3 tabular font-medium ${t.pnl >= 0 ? "gain" : "loss"}`}>
+                        {t.pnl >= 0 ? "+" : ""}${t.pnl}
+                      </td>
+                    )}
+                    {visibleColumns.includes("followedPlan") && (
+                      <td className="py-3">
+                        {t.followedPlan ? (
+                          <CheckCircle2 className="h-4 w-4 text-primary" />
+                        ) : (
+                          <XCircle className="h-4 w-4 text-destructive" />
+                        )}
+                      </td>
+                    )}
+                    {visibleColumns.includes("date") && <td className="py-3 text-xs text-muted-foreground tabular">{t.date}</td>}
+                    {visibleColumns.includes("screenshots") && <td className="py-3"><ShotsCell id={t.id} initial={t.screenshots} /></td>}
+                    <td className="py-3">
+                      <Link
+                        to="/app/trades/$id"
+                        params={{ id: t.id }}
+                        onClick={(e) => e.stopPropagation()}
+                        className="text-xs text-primary hover:underline"
+                      >
+                        مشاهده
+                      </Link>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
           {paginated.length === 0 && (
             <div className="py-8 text-center text-sm text-muted-foreground">معامله‌ای یافت نشد.</div>
           )}
@@ -229,6 +263,10 @@ function TradesPage() {
                 <span className="tabular">R:R {t.rr}</span>
                 <span className="tabular">ورود: {t.entry}</span>
                 <span className="tabular">خروج: {t.exit}</span>
+              </div>
+              <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
+                {t.sl ? <span className="text-destructive tabular">SL: {t.sl}</span> : null}
+                {t.tp ? <span className="text-primary tabular">TP: {t.tp}</span> : null}
               </div>
               <div className="mt-2 flex items-center justify-between">
                 <div className="flex items-center gap-1 text-xs text-muted-foreground">
