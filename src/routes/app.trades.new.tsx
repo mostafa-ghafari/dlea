@@ -351,6 +351,207 @@ function ImportPanel() {
 }
 
 
+
+function ConnectPanel() {
+  const portfolios = usePortfolios();
+  const [mt, setMt] = useState<MtStatus | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [platform, setPlatform] = useState("mt5");
+  const [broker, setBroker] = useState("");
+  const [server, setServer] = useState("");
+  const [account, setAccount] = useState("");
+  const [portfolioId, setPortfolioId] = useState<string>("");
+  const [copied, setCopied] = useState("");
+
+  useEffect(() => {
+    get<MtStatus>("mt/status/")
+      .then((d) => {
+        setMt(d);
+        if (d.connected) {
+          setPlatform(d.platform ?? "mt5");
+          setBroker(d.broker ?? "");
+          setServer(d.server ?? "");
+          setAccount(d.account ?? "");
+          if (d.portfolioId) setPortfolioId(d.portfolioId);
+        }
+      })
+      .catch(() => setMt({ connected: false }))
+      .finally(() => setLoading(false));
+  }, []);
+
+  async function handleConnect() {
+    if (!account.trim()) {
+      toast.error("شماره حساب الزامی است");
+      return;
+    }
+    if (!portfolioId) {
+      toast.error("یک پرتفولیوی مقصد انتخاب کن");
+      return;
+    }
+    setSaving(true);
+    try {
+      const data = await post<MtStatus>("mt/connect/", {
+        platform,
+        broker: broker.trim(),
+        server: server.trim(),
+        account: account.trim(),
+        portfolioId,
+      });
+      setMt(data);
+      toast.success("اتصال متاتریدر برقرار شد — حالا EA را نصب کن");
+    } catch (e) {
+      toast.error(String(e instanceof Error ? e.message : "خطا در اتصال"));
+    }
+    setSaving(false);
+  }
+
+  function copy(value: string, key: string) {
+    navigator.clipboard?.writeText(value).then(
+      () => {
+        setCopied(key);
+        setTimeout(() => setCopied(""), 1500);
+      },
+      () => toast.error("کپی ناموفق بود"),
+    );
+  }
+
+  if (loading) {
+    return (
+      <div className="card-surface grid place-items-center p-12">
+        <Loader2 className="h-6 w-6 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  const connected = mt?.connected;
+
+  return (
+    <div className="grid gap-4 lg:grid-cols-2">
+      {/* Connection form */}
+      <div className="card-surface p-6">
+        <h3 className="font-semibold">اتصال حساب متاتریدر</h3>
+        <p className="mt-1 text-sm text-muted-foreground">
+          معاملات بسته‌شده با نصب یک EA (اکسپرت) به‌صورت خودکار همگام می‌شوند.
+        </p>
+
+        <div className="mt-6 grid gap-4 sm:grid-cols-2">
+          <div className="space-y-2">
+            <Label>نسخه</Label>
+            <Select value={platform} onValueChange={setPlatform}>
+              <SelectTrigger className="bg-secondary/60"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="mt5">MT5</SelectItem>
+                <SelectItem value="mt4">MT4</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-2">
+            <Label>بروکر</Label>
+            <Input value={broker} onChange={(e) => setBroker(e.target.value)} placeholder="IC Markets" className="bg-secondary/60" />
+          </div>
+          <div className="space-y-2">
+            <Label>سرور</Label>
+            <Input value={server} onChange={(e) => setServer(e.target.value)} placeholder="ICMarkets-Live01" className="bg-secondary/60" />
+          </div>
+          <div className="space-y-2">
+            <Label>شماره حساب</Label>
+            <Input value={account} onChange={(e) => setAccount(e.target.value)} placeholder="12345678" className="bg-secondary/60 tabular" />
+          </div>
+          <div className="space-y-2 sm:col-span-2">
+            <Label>پرتفولیوی مقصد</Label>
+            <Select value={portfolioId} onValueChange={setPortfolioId}>
+              <SelectTrigger className="bg-secondary/60"><SelectValue placeholder="انتخاب پرتفولیو" /></SelectTrigger>
+              <SelectContent>
+                {portfolios.map((p) => (
+                  <SelectItem key={p.id} value={String(p.id)}>{p.name} — {p.broker}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {portfolios.length === 0 && (
+              <p className="text-xs text-amber-500">اول از بخش پرتفولیوها یک پرتفولیو بساز.</p>
+            )}
+          </div>
+        </div>
+
+        <div className="mt-6">
+          <Button disabled={saving || portfolios.length === 0} className="bg-primary text-primary-foreground hover:bg-primary/90" onClick={handleConnect}>
+            {saving ? <Loader2 className="ml-1 h-4 w-4 animate-spin" /> : <Link2 className="ml-1 h-4 w-4" />}
+            {connected ? "به‌روزرسانی اتصال" : "اتصال"}
+          </Button>
+        </div>
+      </div>
+
+      {/* Connection status + EA instructions */}
+      {connected ? (
+        <div className="space-y-4">
+          <div className="card-surface p-6">
+            <div className="flex items-center justify-between">
+              <h3 className="font-semibold">اتصال فعال</h3>
+              <Badge className="bg-primary/15 text-primary">فعال</Badge>
+            </div>
+            <dl className="mt-4 space-y-2 text-sm">
+              <div className="flex justify-between"><dt className="text-muted-foreground">حساب</dt><dd className="tabular">{mt?.account}</dd></div>
+              <div className="flex justify-between"><dt className="text-muted-foreground">سرور</dt><dd>{mt?.server || "—"}</dd></div>
+              <div className="flex justify-between"><dt className="text-muted-foreground">نسخه</dt><dd>{mt?.platform?.toUpperCase()}</dd></div>
+            </dl>
+          </div>
+
+          <div className="card-surface p-6">
+            <h3 className="font-semibold">توکن و آدرس وب‌هوک</h3>
+            <p className="mt-1 text-xs text-muted-foreground">این دو مقدار را هنگام نصب EA وارد کن.</p>
+            <div className="mt-4 space-y-3">
+              <div>
+                <Label>آدرس وب‌هوک</Label>
+                <div className="mt-1 flex items-center gap-2">
+                  <Input readOnly value={mt?.webhookUrl ?? ""} dir="ltr" className="bg-secondary/60 font-mono text-xs" />
+                  <Button size="icon" variant="outline" onClick={() => copy(mt?.webhookUrl ?? "", "url")}>
+                    {copied === "url" ? <Check className="h-4 w-4 text-primary" /> : <Copy className="h-4 w-4" />}
+                  </Button>
+                </div>
+              </div>
+              <div>
+                <Label>توکن</Label>
+                <div className="mt-1 flex items-center gap-2">
+                  <Input readOnly value={mt?.token ?? ""} dir="ltr" className="bg-secondary/60 font-mono text-xs" />
+                  <Button size="icon" variant="outline" onClick={() => copy(mt?.token ?? "", "token")}>
+                    {copied === "token" ? <Check className="h-4 w-4 text-primary" /> : <Copy className="h-4 w-4" />}
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="card-surface p-6">
+            <h3 className="font-semibold">نصب EA (اکسپرت)</h3>
+            <ol className="mt-3 list-inside list-decimal space-y-1.5 text-sm text-muted-foreground">
+              <li>فایل <span dir="ltr" className="font-mono">DleaSync.mq5</span> را دانلود کن.</li>
+              <li>در MT5: File → Open Data Folder → پوشه MQL5/Experts.</li>
+              <li>فایل را آنجا بگذار و در MetaEditor باز کن و F7 بزن (Compile).</li>
+              <li>در MT5: Tools → Options → Expert Advisors → «Allow WebRequest» را تیک بزن و آدرس وب‌هوک را اضافه کن.</li>
+              <li>EA را روی چارت بکش، توکن و آدرس وب‌هوک را وارد کن و Algo Trading را فعال کن.</li>
+            </ol>
+            <a href="/mt/DleaSync.mq5" download className="mt-4 inline-block">
+              <Button variant="outline" className="gap-2">
+                <Download className="h-4 w-4" /> دانلود DleaSync.mq5
+              </Button>
+            </a>
+          </div>
+        </div>
+      ) : (
+        <div className="card-surface grid place-items-center p-12 text-center">
+          <div className="mx-auto grid h-14 w-14 place-items-center rounded-2xl bg-secondary/60 text-muted-foreground">
+            <Link2 className="h-7 w-7" />
+          </div>
+          <h3 className="mt-4 font-semibold">هنوز متصل نیستی</h3>
+          <p className="mt-1 max-w-xs text-sm text-muted-foreground">
+            فرم کنار را پر کن و «اتصال» را بزن تا توکن وب‌هوک برایت ساخته شود.
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}
 function NewTrade() {
   return (
     <AppShell title="افزودن معامله" subtitle="ایمپورت فایل یا اتصال متاتریدر">
