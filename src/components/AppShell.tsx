@@ -639,7 +639,7 @@ export function AppShell({ children, title, subtitle, actions }: {
         </aside>
 
         {/* Main */}
-        <div className="flex min-w-0 flex-1 flex-col overflow-x-hidden">
+        <div className="flex min-w-0 flex-1 flex-col w-full overflow-x-hidden">
           {/* Topbar */}
           <header className="sticky top-0 z-30 flex h-16 items-center gap-3 overflow-hidden border-b border-border bg-background/80 px-4 backdrop-blur-xl md:px-8">
             {/* Mobile/Tablet menu trigger */}

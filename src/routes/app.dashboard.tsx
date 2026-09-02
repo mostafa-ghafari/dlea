@@ -105,7 +105,7 @@ function DashboardPage() {
       {/* KPI cards */}
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         {kpis.map((s) => (
-          <div key={s.label} className="card-surface overflow-hidden p-5">
+          <div key={s.label} className="card-surface p-5">
             <div className="flex items-center justify-between">
               <span className="text-sm text-muted-foreground">{s.label}</span>
               <div className={`grid h-8 w-8 place-items-center rounded-lg ${s.positive ? "bg-primary/10 text-primary" : "bg-destructive/10 text-destructive"}`}>
