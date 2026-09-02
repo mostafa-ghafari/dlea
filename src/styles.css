@@ -332,6 +332,8 @@ html.light .loss {
   stroke-dashoffset: 1000;
   animation: draw-line 2.2s cubic-bezier(0.22, 1, 0.36, 1) 0.2s forwards;
 }
+#g_a11y_announcement { display: none !important; }
+
 .chart-area {
   transform-origin: bottom;
   opacity: 0;
@@ -339,7 +341,9 @@ html.light .loss {
 }
 @media (prefers-reduced-motion: reduce) {
   .chart-line,
-  .chart-area {
+  #g_a11y_announcement { display: none !important; }
+
+.chart-area {
     animation: none;
     stroke-dashoffset: 0;
     opacity: 1;
