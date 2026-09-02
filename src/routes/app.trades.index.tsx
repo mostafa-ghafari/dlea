@@ -136,7 +136,8 @@ function TradesPage() {
           </Dialog>
         </div>
 
-        <div className="mt-5 overflow-x-auto">
+                {/* Desktop table */}
+        <div className="mt-5 hidden overflow-x-auto md:block">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-border text-xs text-muted-foreground">
@@ -196,16 +197,57 @@ function TradesPage() {
                   </td>
                 </tr>
               ))}
-              {paginated.length === 0 && (
-                <tr>
-                  <td colSpan={12} className="py-8 text-center text-sm text-muted-foreground">
-                    معامله‌ای یافت نشد.
-                  </td>
-                </tr>
-              )}
             </tbody>
           </table>
+          {paginated.length === 0 && (
+            <div className="py-8 text-center text-sm text-muted-foreground">معامله‌ای یافت نشد.</div>
+          )}
         </div>
+
+        {/* Mobile card layout */}
+        <div className="mt-4 space-y-3 md:hidden">
+          {paginated.map((t) => (
+            <Link
+              key={t.id}
+              to="/app/trades/$id"
+              params={{ id: t.id }}
+              className="block rounded-lg border border-border bg-card p-4 shadow-sm"
+            >
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="font-bold">{t.symbol}</span>
+                  <Badge variant="outline" className={`text-xs ${t.side === "buy" ? "border-primary/40 bg-primary/10 text-primary" : "border-destructive/40 bg-destructive/10 text-destructive"}`}>
+                    {t.side === "buy" ? "خرید" : "فروش"}
+                  </Badge>
+                </div>
+                <span className={`text-lg font-bold tabular ${t.pnl >= 0 ? "gain" : "loss"}`}>
+                  {t.pnl >= 0 ? "+" : ""}${t.pnl}
+                </span>
+              </div>
+              <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                <span className="tabular">{t.date}</span>
+                <span className="tabular">R:R {t.rr}</span>
+                <span className="tabular">ورود: {t.entry}</span>
+                <span className="tabular">خروج: {t.exit}</span>
+              </div>
+              <div className="mt-2 flex items-center justify-between">
+                <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                  <span>حجم: {t.volume}</span>
+                  {t.followedPlan ? (
+                    <CheckCircle2 className="h-3.5 w-3.5 text-primary" />
+                  ) : (
+                    <XCircle className="h-3.5 w-3.5 text-destructive" />
+                  )}
+                </div>
+                <ShotsCell id={t.id} initial={t.screenshots} />
+              </div>
+            </Link>
+          ))}
+          {paginated.length === 0 && (
+            <div className="py-8 text-center text-sm text-muted-foreground">معامله‌ای یافت نشد.</div>
+          )}
+        </div>
+
 
         {/* Pagination */}
         {filtered.length > PAGE_SIZE && (
