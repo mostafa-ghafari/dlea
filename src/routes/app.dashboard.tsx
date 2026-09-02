@@ -57,7 +57,7 @@ function DashboardPage() {
   const trades = useTrades();
   const equityCurve = dashboard?.equityCurve ?? [];
   const winLossData = dashboard?.winLossData ?? [];
-  const monthlyPerformance = dashboard?.monthlyPerformance ?? [];
+  const monthlyPerformance = (dashboard?.monthlyPerformance ?? []).slice(-6);
   const economicEvents = dashboard?.economicEvents ?? [];
   const totalPnl = dashboard?.totalPnl ?? 0;
   const winRate = dashboard?.winRate ?? 0;
@@ -145,7 +145,7 @@ function DashboardPage() {
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" stroke="oklch(0.28 0.02 255)" vertical={false} />
                 <XAxis dataKey="day" stroke="oklch(0.68 0.02 255)" fontSize={11} tickLine={false} axisLine={false} />
-                <YAxis stroke="oklch(0.68 0.02 255)" fontSize={11} tickLine={false} axisLine={false} />
+                <YAxis stroke="oklch(0.68 0.02 255)" fontSize={11} tickLine={false} axisLine={false} width={65} padding={{ left: 10, right: 10 }} />
                 <Tooltip contentStyle={{ background: "oklch(0.185 0.022 255)", border: "1px solid oklch(0.28 0.02 255)", borderRadius: 8 }} />
                 <Area type="monotone" dataKey="equity" stroke="oklch(0.75 0.17 155)" strokeWidth={2} fill="url(#eq)" />
                 <Area type="monotone" dataKey="balance" stroke="oklch(0.68 0.16 245)" strokeWidth={1.5} fillOpacity={0} strokeDasharray="4 4" />
@@ -187,10 +187,10 @@ function DashboardPage() {
           <p className="text-xs text-muted-foreground">سود/زیان به دلار</p>
           <div className="mt-4 h-64 w-full overflow-hidden">
             <ResponsiveContainer>
-              <BarChart data={monthlyPerformance}>
+              <BarChart data={monthlyPerformance} margin={{ left: 10, right: 10 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="oklch(0.28 0.02 255)" vertical={false} />
                 <XAxis dataKey="month" stroke="oklch(0.68 0.02 255)" fontSize={11} tickLine={false} axisLine={false} />
-                <YAxis stroke="oklch(0.68 0.02 255)" fontSize={11} tickLine={false} axisLine={false} />
+                <YAxis stroke="oklch(0.68 0.02 255)" fontSize={11} tickLine={false} axisLine={false} width={55} padding={{ left: 10, right: 10 }} />
                 <Tooltip contentStyle={{ background: "oklch(0.185 0.022 255)", border: "1px solid oklch(0.28 0.02 255)", borderRadius: 8 }} />
                 <Bar dataKey="pnl" radius={[6, 6, 0, 0]}>
                   {monthlyPerformance.map((e, i) => (
@@ -257,7 +257,8 @@ function DashboardPage() {
               <Badge variant="outline">{trades.length} معامله</Badge>
             </div>
           </div>
-          <div className="mt-4 overflow-x-auto">
+          {/* Desktop table */}
+          <div className="mt-4 hidden overflow-x-auto md:block">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-border text-xs text-muted-foreground">
@@ -294,6 +295,35 @@ function DashboardPage() {
                 ))}
               </tbody>
             </table>
+          </div>
+
+          {/* Mobile card layout — same as trades page */}
+          <div className="mt-4 space-y-3 md:hidden">
+            {recentTrades.map((t) => (
+              <Link
+                key={t.id}
+                to="/app/trades/$id"
+                params={{ id: t.id }}
+                className="block rounded-lg border border-border bg-secondary/30 p-4 shadow-sm"
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <span className="font-bold">{t.symbol}</span>
+                    <Badge variant="outline" className={`text-xs ${t.side === "buy" ? "border-primary/40 bg-primary/10 text-primary" : "border-destructive/40 bg-destructive/10 text-destructive"}`}>
+                      {t.side === "buy" ? "خرید" : "فروش"}
+                    </Badge>
+                  </div>
+                  <span className={`text-lg font-bold tabular ${t.pnl >= 0 ? "gain" : "loss"}`}>
+                    {t.pnl >= 0 ? "+" : ""}${t.pnl}
+                  </span>
+                </div>
+                <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                  <span className="tabular">{t.date}</span>
+                  <span className="tabular">R:R {t.rr}</span>
+                  <span className="tabular">حجم: {t.volume}</span>
+                </div>
+              </Link>
+            ))}
           </div>
         </div>
 

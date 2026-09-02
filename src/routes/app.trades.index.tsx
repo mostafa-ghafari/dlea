@@ -1,6 +1,6 @@
 import { AppShell } from "@/components/AppShell";
 import { Link, createFileRoute, useNavigate } from "@tanstack/react-router";
-import { Plus, Filter, Download, CheckCircle2, Check, XCircle, Images, ChevronRight, ChevronLeft, Columns3 } from "lucide-react";
+import { Plus, Filter, Download, CheckCircle2, XCircle, Images, ChevronRight, ChevronLeft, Columns3 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -36,7 +36,6 @@ function TradesPage() {
   const [plan, setPlan] = useState<"all" | "yes" | "no">("all");
   const [result, setResult] = useState<"all" | "win" | "loss">("all");
   const [filterOpen, setFilterOpen] = useState(false);
-  const [colsOpen, setColsOpen] = useState(false);
   const DEFAULT_COLS = ["symbol", "side", "entry", "exit", "sl", "tp", "rr", "pnl", "date"];
   const ALL_COL_KEYS = ["id", "symbol", "side", "entry", "exit", "sl", "tp", "volume", "rr", "pnl", "followedPlan", "date", "screenshots"] as const;
   const COL_LABELS: Record<string, string> = { id: "شناسه", symbol: "نماد", side: "نوع", entry: "ورود", exit: "خروج", sl: "SL", tp: "TP", volume: "حجم", rr: "R:R", pnl: "سود/زیان", followedPlan: "پلن", date: "تاریخ", screenshots: "اسکرین‌شات" };
@@ -152,12 +151,22 @@ function TradesPage() {
                 <Columns3 className="ml-1 h-4 w-4" />ستون‌ها
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-48">
+            <DropdownMenuContent align="start" className="w-52">
               {ALL_COL_KEYS.map((key) => (
                 <DropdownMenuItem key={key} onSelect={(e) => { e.preventDefault(); toggleColumn(key); }}>
                   <div className="flex w-full items-center gap-2">
-                    <div className={`h-4 w-4 rounded border ${visibleColumns.includes(key) ? "border-primary bg-primary" : "border-border"} flex items-center justify-center`}>
-                      {visibleColumns.includes(key) && <Check className="h-3 w-3 text-primary-foreground" />}
+                    <div
+                      className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border ${
+                        visibleColumns.includes(key)
+                          ? "border-primary bg-primary"
+                          : "border-border"
+                      }`}
+                    >
+                      {visibleColumns.includes(key) && (
+                        <svg className="h-3 w-3 text-primary-foreground" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <polyline points="2 6 5 9 10 3" />
+                        </svg>
+                      )}
                     </div>
                     <span>{COL_LABELS[key]}</span>
                   </div>
@@ -246,7 +255,7 @@ function TradesPage() {
           )}
         </div>
 
-        {/* Mobile card layout */}
+        {/* Mobile card layout — respects visibleColumns */}
         <div className="mt-4 space-y-3 md:hidden">
           {paginated.map((t) => (
             <Link
@@ -255,37 +264,52 @@ function TradesPage() {
               params={{ id: t.id }}
               className="block rounded-lg border border-border bg-card p-4 shadow-sm"
             >
-              <div className="flex items-center justify-between">
+              {/* Row 1: Symbol + Side + PnL */}
+              <div className="flex items-center justify-between gap-2">
                 <div className="flex items-center gap-2">
-                  <span className="font-bold">{t.symbol}</span>
-                  <Badge variant="outline" className={`text-xs ${t.side === "buy" ? "border-primary/40 bg-primary/10 text-primary" : "border-destructive/40 bg-destructive/10 text-destructive"}`}>
-                    {t.side === "buy" ? "خرید" : "فروش"}
-                  </Badge>
-                </div>
-                <span className={`text-lg font-bold tabular ${t.pnl >= 0 ? "gain" : "loss"}`}>
-                  {t.pnl >= 0 ? "+" : ""}${t.pnl}
-                </span>
-              </div>
-              <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
-                <span className="tabular">{t.date}</span>
-                <span className="tabular">R:R {t.rr}</span>
-                <span className="tabular">ورود: {t.entry}</span>
-                <span className="tabular">خروج: {t.exit}</span>
-              </div>
-              <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
-                {t.sl ? <span className="text-destructive tabular">SL: {t.sl}</span> : null}
-                {t.tp ? <span className="text-primary tabular">TP: {t.tp}</span> : null}
-              </div>
-              <div className="mt-2 flex items-center justify-between">
-                <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                  <span>حجم: {t.volume}</span>
-                  {t.followedPlan ? (
-                    <CheckCircle2 className="h-3.5 w-3.5 text-primary" />
-                  ) : (
-                    <XCircle className="h-3.5 w-3.5 text-destructive" />
+                  {visibleColumns.includes("symbol") && <span className="font-bold">{t.symbol}</span>}
+                  {visibleColumns.includes("side") && (
+                    <Badge variant="outline" className={`text-xs ${t.side === "buy" ? "border-primary/40 bg-primary/10 text-primary" : "border-destructive/40 bg-destructive/10 text-destructive"}`}>
+                      {t.side === "buy" ? "خرید" : "فروش"}
+                    </Badge>
                   )}
                 </div>
-                <ShotsCell id={t.id} initial={t.screenshots} />
+                {visibleColumns.includes("pnl") && (
+                  <span className={`text-lg font-bold tabular ${t.pnl >= 0 ? "gain" : "loss"}`}>
+                    {t.pnl >= 0 ? "+" : ""}${t.pnl}
+                  </span>
+                )}
+              </div>
+
+              {/* Row 2: Date, R:R, Entry, Exit */}
+              <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                {visibleColumns.includes("date") && <span className="tabular">{t.date}</span>}
+                {visibleColumns.includes("rr") && <span className="tabular">R:R {t.rr}</span>}
+                {visibleColumns.includes("entry") && <span className="tabular">ورود: {t.entry}</span>}
+                {visibleColumns.includes("exit") && <span className="tabular">خروج: {t.exit}</span>}
+              </div>
+
+              {/* Row 3: SL/TP */}
+              {(visibleColumns.includes("sl") || visibleColumns.includes("tp")) && (
+                <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
+                  {visibleColumns.includes("sl") && t.sl ? <span className="text-destructive tabular">SL: {t.sl}</span> : null}
+                  {visibleColumns.includes("tp") && t.tp ? <span className="text-primary tabular">TP: {t.tp}</span> : null}
+                </div>
+              )}
+
+              {/* Row 4: Volume, Plan, Screenshots */}
+              <div className="mt-2 flex items-center justify-between">
+                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                  {visibleColumns.includes("volume") && <span>حجم: {t.volume}</span>}
+                  {visibleColumns.includes("followedPlan") && (
+                    t.followedPlan ? (
+                      <CheckCircle2 className="h-3.5 w-3.5 text-primary" />
+                    ) : (
+                      <XCircle className="h-3.5 w-3.5 text-destructive" />
+                    )
+                  )}
+                </div>
+                {visibleColumns.includes("screenshots") && <ShotsCell id={t.id} initial={t.screenshots} />}
               </div>
             </Link>
           ))}
@@ -294,8 +318,6 @@ function TradesPage() {
           )}
         </div>
 
-
-        
         {/* Pagination */}
         {filtered.length > PAGE_SIZE && (
           <div className="mt-4 flex items-center justify-between text-sm text-muted-foreground">
@@ -347,7 +369,7 @@ function TradesPage() {
         )}
       </div>
     </AppShell>
-);
+  );
 }
 
 /** Screenshot count for a trade (stored per-trade in localStorage). */
