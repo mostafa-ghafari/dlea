@@ -14,7 +14,7 @@ echo Build OK!
 
 echo.
 echo Step 2: Creating archive...
-tar czf %TEMP%\dlea-deploy.tar.gz --exclude=node_modules --exclude=.output --exclude=.tanstack --exclude=.git --exclude=.freebuff --exclude=*.log .
+tar czf %TEMP%\dlea-deploy.tar.gz --exclude=node_modules --exclude=.tanstack --exclude=.git --exclude=.freebuff --exclude=*.log --exclude=backend/.venv .
 echo Archive created!
 
 echo.
