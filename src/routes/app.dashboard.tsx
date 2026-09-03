@@ -58,8 +58,26 @@ function DashboardPage() {
   const equityCurve = dashboard?.equityCurve ?? [];
   const winLossData = dashboard?.winLossData ?? [];
   const monthlyPerformanceRaw = (dashboard?.monthlyPerformance ?? []).slice(-6);
-  // Always show 6 bars — pad missing months with pnl: 0
-  const monthlyPerformance = Array.from({ length: 6 }, (_, i) => monthlyPerformanceRaw[i] ?? { month: "—", pnl: 0 });
+  // Always show 6 bars with proper Jalaali month names for empty months
+  const faNum = (n: number) => String(n).replace(/\d/g, (d) => "۰۱۲۳۴۵۶۷۸۹"[Number(d)]!);
+  const jMonthNames = ["فروردین","اردیبهشت","خرداد","تیر","مرداد","شهریور","مهر","آبان","آذر","دی","بهمن","اسفند"];
+  const monthlyPerformance = (() => {
+    const rawMap = new Map(monthlyPerformanceRaw.map((e) => [e.month, e.pnl]));
+    // Find the latest month from raw data to anchor our 6-month window
+    const lastMonth = monthlyPerformanceRaw.at(-1);
+    let lastIdx = jMonthNames.findIndex((n) => lastMonth?.month.includes(n));
+    let lastYear = parseInt(lastMonth?.month.match(/\d{4}/)?.[0] ?? "1404");
+    if (lastIdx === -1) { lastIdx = 5; lastYear = 1404; } // fallback: شهریور
+    return Array.from({ length: 6 }, (_, i) => {
+      const offset = 5 - i; // 5=oldest, 0=newest
+      let mi = lastIdx - offset;
+      let yr = lastYear;
+      if (mi < 0) { mi += 12; yr -= 1; }
+      const label = jMonthNames[mi] + " " + faNum(yr);
+      const pnl = rawMap.get(label) ?? 0;
+      return { month: jMonthNames[mi], pnl };
+    });
+  })();
   const economicEvents = dashboard?.economicEvents ?? [];
   const totalPnl = dashboard?.totalPnl ?? 0;
   const winRate = dashboard?.winRate ?? 0;
@@ -189,10 +207,10 @@ function DashboardPage() {
           <p className="text-xs text-muted-foreground">سود/زیان به دلار</p>
           <div className="mt-4 h-52 sm:h-64 w-full overflow-hidden">
             <ResponsiveContainer>
-              <BarChart data={monthlyPerformance} margin={{ left: 5, right: 5 }}>
+              <BarChart data={monthlyPerformance} margin={{ left: 0, right: 0 }} barSize={24}>
                 <CartesianGrid strokeDasharray="3 3" stroke="oklch(0.28 0.02 255)" vertical={false} />
                 <XAxis dataKey="month" stroke="oklch(0.68 0.02 255)" fontSize={11} tickLine={false} axisLine={false} />
-                <YAxis stroke="oklch(0.68 0.02 255)" fontSize={11} tickLine={false} axisLine={false} width={55} padding={{ left: 10, right: 10 }} />
+                <YAxis stroke="oklch(0.68 0.02 255)" fontSize={10} tickLine={false} axisLine={false} width={50} tickFormatter={(v: number) => v >= 1000 ? `${v / 1000}k` : String(v)} />
                 <Tooltip contentStyle={{ background: "oklch(0.185 0.022 255)", border: "1px solid oklch(0.28 0.02 255)", borderRadius: 8 }} />
                 <Bar dataKey="pnl" radius={[6, 6, 0, 0]}>
                   {monthlyPerformance.map((e, i) => (
