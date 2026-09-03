@@ -292,8 +292,8 @@ function TradesPage() {
               {/* Row 3: SL/TP */}
               {(visibleColumns.includes("sl") || visibleColumns.includes("tp")) && (
                 <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
-                  {visibleColumns.includes("sl") && t.sl ? <span className="text-destructive tabular">SL: {t.sl}</span> : null}
-                  {visibleColumns.includes("tp") && t.tp ? <span className="text-primary tabular">TP: {t.tp}</span> : null}
+                  {visibleColumns.includes("sl") && <span className="text-destructive tabular">SL: {t.sl || "—"}</span>}
+                  {visibleColumns.includes("tp") && <span className="text-primary tabular">TP: {t.tp || "—"}</span>}
                 </div>
               )}
 

@@ -338,6 +338,10 @@ function DashboardPage() {
                   <span className="tabular">R:R {t.rr}</span>
                   <span className="tabular">حجم: {t.volume}</span>
                 </div>
+                <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
+                  {t.sl ? <span className="text-destructive tabular">SL: {t.sl}</span> : null}
+                  {t.tp ? <span className="text-primary tabular">TP: {t.tp}</span> : null}
+                </div>
               </Link>
             ))}
           </div>
