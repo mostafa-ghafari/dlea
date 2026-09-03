@@ -153,6 +153,9 @@ else:
 
 # JWT settings
 from datetime import timedelta
+# HTTPS behind reverse proxy (Nginx)
+SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+
 SIMPLE_JWT = {
     "ACCESS_TOKEN_LIFETIME": timedelta(hours=24),
     "REFRESH_TOKEN_LIFETIME": timedelta(days=7),
