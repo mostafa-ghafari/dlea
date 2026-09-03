@@ -260,7 +260,9 @@ def call_gemini(prompt: str, model: str) -> str:
     api_key = get_api_key()
     if not api_key:
         raise RuntimeError("GEMINI_API_KEY")
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
+    proxy = os.environ.get("GEMINI_PROXY", "").strip().rstrip("/")
+    api_url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
+    url = f"{proxy}/{api_url}" if proxy else api_url
     payload = json.dumps(
         {
             "contents": [{"parts": [{"text": prompt}]}],
