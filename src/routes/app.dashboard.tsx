@@ -57,7 +57,9 @@ function DashboardPage() {
   const trades = useTrades();
   const equityCurve = dashboard?.equityCurve ?? [];
   const winLossData = dashboard?.winLossData ?? [];
-  const monthlyPerformance = (dashboard?.monthlyPerformance ?? []).slice(-6);
+  const monthlyPerformanceRaw = (dashboard?.monthlyPerformance ?? []).slice(-6);
+  // Always show 6 bars — pad missing months with pnl: 0
+  const monthlyPerformance = Array.from({ length: 6 }, (_, i) => monthlyPerformanceRaw[i] ?? { month: "—", pnl: 0 });
   const economicEvents = dashboard?.economicEvents ?? [];
   const totalPnl = dashboard?.totalPnl ?? 0;
   const winRate = dashboard?.winRate ?? 0;
