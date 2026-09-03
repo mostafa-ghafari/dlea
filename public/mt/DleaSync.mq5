@@ -205,13 +205,7 @@ void OnTradeTransaction(const MqlTradeTransaction &trans,
       }
    }
 
-   //--- When a position is removed (closed), also try to send
-   //    (handles cases where DEAL_ADD fires before position removal)
-   if(trans.type == TRADE_TRANSACTION_POSITION_CLOSE)
-   {
-      // Position removal is a backup trigger — the DEAL_ENTRY_OUT above
-      // is the primary path.
-   }
+
 }
 
 //+------------------------------------------------------------------+
