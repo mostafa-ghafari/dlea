@@ -3,7 +3,7 @@
 //|              Dlea AI - MetaTrader 5 trade sync expert            |
 //+------------------------------------------------------------------+
 #property copyright "Dlea AI"
-#property version   "1.03"
+#property version   "1.04"
 #property strict
 #property description "Syncs closed trades from MetaTrader 5 to Dlea AI"
 
@@ -14,6 +14,81 @@ input bool   InpSyncHistory = true;                                       // Imp
 input bool   InpDebugLog    = true;                                       // Print sent deals to log
 
 ulong g_lastDeal = 0; // dedupe: last deal ticket we already sent
+
+//--- SL/TP cache: position ticket → {sl, tp} -------------------------
+// In MT5, when a position closes the original order's SL/TP are reset
+// to 0. We must capture them while the position is still open.
+#define CACHE_SIZE 512
+ulong g_cacheKeys[CACHE_SIZE];
+double g_cacheSL[CACHE_SIZE];
+double g_cacheTP[CACHE_SIZE];
+int g_cacheCount = 0;
+
+//+------------------------------------------------------------------+
+//| Store SL/TP for a position in the cache                           |
+//+------------------------------------------------------------------+
+void CacheSLTP(ulong posTicket, double sl, double tp)
+{
+   // Update existing entry
+   for(int i = 0; i < g_cacheCount; i++)
+   {
+      if(g_cacheKeys[i] == posTicket)
+      {
+         g_cacheSL[i] = sl;
+         g_cacheTP[i] = tp;
+         if(InpDebugLog) Print("DleaSync: cached SL/TP for pos #", posTicket, " sl=", sl, " tp=", tp);
+         return;
+      }
+   }
+   // Add new entry
+   if(g_cacheCount < CACHE_SIZE)
+   {
+      g_cacheKeys[g_cacheCount] = posTicket;
+      g_cacheSL[g_cacheCount] = sl;
+      g_cacheTP[g_cacheCount] = tp;
+      if(InpDebugLog) Print("DleaSync: cached SL/TP for pos #", posTicket, " sl=", sl, " tp=", tp);
+      g_cacheCount++;
+   }
+}
+
+//+------------------------------------------------------------------+
+//| Read cached SL/TP for a position. Returns true if found.          |
+//+------------------------------------------------------------------+
+bool GetCachedSLTP(ulong posTicket, double &sl, double &tp)
+{
+   for(int i = 0; i < g_cacheCount; i++)
+   {
+      if(g_cacheKeys[i] == posTicket)
+      {
+         sl = g_cacheSL[i];
+         tp = g_cacheTP[i];
+         return true;
+      }
+   }
+   return false;
+}
+
+//+------------------------------------------------------------------+
+//| Remove a position from the cache after it's been synced           |
+//+------------------------------------------------------------------+
+void RemoveFromCache(ulong posTicket)
+{
+   for(int i = 0; i < g_cacheCount; i++)
+   {
+      if(g_cacheKeys[i] == posTicket)
+      {
+         // Shift remaining entries
+         for(int j = i; j < g_cacheCount - 1; j++)
+         {
+            g_cacheKeys[j] = g_cacheKeys[j+1];
+            g_cacheSL[j]   = g_cacheSL[j+1];
+            g_cacheTP[j]   = g_cacheTP[j+1];
+         }
+         g_cacheCount--;
+         return;
+      }
+   }
+}
 
 //+------------------------------------------------------------------+
 //| Expert initialization                                            |
@@ -31,13 +106,34 @@ int OnInit()
       return(INIT_PARAMETERS_INCORRECT);
    }
 
-   Print("DleaSync started. Waiting for closed trades...");
+   // Warm-up: scan currently open positions to cache their SL/TP
+   CacheOpenPositions();
+
+   Print("DleaSync v1.04 started. Waiting for closed trades...");
 
    // Backfill: import trades that closed before the EA was attached.
    if(InpSyncHistory)
       SyncHistory();
 
    return(INIT_SUCCEEDED);
+}
+
+//+------------------------------------------------------------------+
+//| Scan all open positions and cache their SL/TP                    |
+//+------------------------------------------------------------------+
+void CacheOpenPositions()
+{
+   int total = PositionsTotal();
+   for(int i = 0; i < total; i++)
+   {
+      ulong ticket = PositionGetTicket(i);
+      if(ticket == 0) continue;
+      double sl = PositionGetDouble(POSITION_SL);
+      double tp = PositionGetDouble(POSITION_TP);
+      if(sl > 0 || tp > 0)
+         CacheSLTP(ticket, sl, tp);
+   }
+   if(InpDebugLog) Print("DleaSync: cached SL/TP for ", g_cacheCount, " open positions.");
 }
 
 //+------------------------------------------------------------------+
@@ -70,25 +166,52 @@ void SyncHistory()
 }
 
 //+------------------------------------------------------------------+
-//| Track every new deal and push closed ones to Dlea                |
+//| Track deals: cache SL/TP on open, send on close                 |
 //+------------------------------------------------------------------+
 void OnTradeTransaction(const MqlTradeTransaction &trans,
                         const MqlTradeRequest &request,
                         const MqlTradeResult &result)
 {
-   if(trans.type != TRADE_TRANSACTION_DEAL_ADD) return;
-   if(trans.deal == 0) return;
+   //--- When a new deal is added to history...
+   if(trans.type == TRADE_TRANSACTION_DEAL_ADD)
+   {
+      ulong dealTicket = trans.deal;
+      if(dealTicket == 0) return;
 
-   ulong dealTicket = trans.deal;
-   if(dealTicket == g_lastDeal) return; // already handled
+      if(!HistorySelect(0, TimeCurrent())) return;
 
-   if(!HistorySelect(0, TimeCurrent())) return;
+      ENUM_DEAL_ENTRY entry = (ENUM_DEAL_ENTRY)HistoryDealGetInteger(dealTicket, DEAL_ENTRY);
+      ulong position = (ulong)HistoryDealGetInteger(dealTicket, DEAL_POSITION_ID);
 
-   ENUM_DEAL_ENTRY entry = (ENUM_DEAL_ENTRY)HistoryDealGetInteger(dealTicket, DEAL_ENTRY);
-   if(entry != DEAL_ENTRY_OUT) return;
+      //--- ENTRY IN: position opened → cache SL/TP from the order
+      if(entry == DEAL_ENTRY_IN && position > 0)
+      {
+         ulong orderTicket = (ulong)HistoryDealGetInteger(dealTicket, DEAL_ORDER);
+         if(HistoryOrderSelect(orderTicket))
+         {
+            double sl = HistoryOrderGetDouble(orderTicket, ORDER_SL);
+            double tp = HistoryOrderGetDouble(orderTicket, ORDER_TP);
+            CacheSLTP(position, sl, tp);
+         }
+      }
 
-   g_lastDeal = dealTicket;
-   SendDeal(dealTicket);
+      //--- ENTRY OUT: position closed → send to server
+      if(entry == DEAL_ENTRY_OUT)
+      {
+         if(dealTicket == g_lastDeal) return;
+         g_lastDeal = dealTicket;
+         SendDeal(dealTicket);
+         RemoveFromCache(position);
+      }
+   }
+
+   //--- When a position is removed (closed), also try to send
+   //    (handles cases where DEAL_ADD fires before position removal)
+   if(trans.type == TRADE_TRANSACTION_POSITION_CLOSE)
+   {
+      // Position removal is a backup trigger — the DEAL_ENTRY_OUT above
+      // is the primary path.
+   }
 }
 
 //+------------------------------------------------------------------+
@@ -109,45 +232,6 @@ string JsonEscape(const string s)
       else              out += ShortToString(c);
    }
    return out;
-}
-
-//+------------------------------------------------------------------+
-//| Read SL/TP from the position's open order                         |
-//+------------------------------------------------------------------+
-void GetPositionSLTP(const ulong position, double &sl, double &tp)
-{
-   sl = 0.0;
-   tp = 0.0;
-   if(!HistorySelect(0, TimeCurrent())) return;
-
-   // Find the OPEN (entry IN) deal of this position
-   for(int i = HistoryDealsTotal() - 1; i >= 0; i--)
-   {
-      ulong dealT = HistoryDealGetTicket(i);
-      if(dealT == 0) continue;
-      if(HistoryDealGetInteger(dealT, DEAL_POSITION_ID) != position) continue;
-      ENUM_DEAL_ENTRY entry = (ENUM_DEAL_ENTRY)HistoryDealGetInteger(dealT, DEAL_ENTRY);
-      if(entry != DEAL_ENTRY_IN) continue;
-
-      // The position ticket from the opening deal
-      ulong posTicket = (ulong)HistoryDealGetInteger(dealT, DEAL_POSITION_ID);
-
-      // Search orders for the position open order
-      for(int j = HistoryOrdersTotal() - 1; j >= 0; j--)
-      {
-         ulong ordT = HistoryOrderGetTicket(j);
-         if(ordT == 0) continue;
-         if(HistoryOrderGetInteger(ordT, ORDER_POSITION_ID) != (long)posTicket) continue;
-         ENUM_ORDER_TYPE ordType = (ENUM_ORDER_TYPE)HistoryOrderGetInteger(ordT, ORDER_TYPE);
-         if(ordType == ORDER_TYPE_BUY || ordType == ORDER_TYPE_SELL)
-         {
-            sl = HistoryOrderGetDouble(ordT, ORDER_SL);
-            tp = HistoryOrderGetDouble(ordT, ORDER_TP);
-            return;
-         }
-      }
-      break;
-   }
 }
 
 //+------------------------------------------------------------------+
@@ -184,16 +268,38 @@ bool SendDeal(const ulong dealTicket)
       break;
    }
 
-   //--- read SL/TP from the position's open order
+   //--- get SL/TP from cache (captured when position was open)
    double sl = 0.0;
    double tp = 0.0;
-   GetPositionSLTP(position, sl, tp);
+   if(!GetCachedSLTP((ulong)position, sl, tp))
+   {
+      // Fallback: try reading from the entry order in history
+      for(int i = 0; i < total; i++)
+      {
+         ulong t = HistoryDealGetTicket(i);
+         if(t == 0) continue;
+         if(HistoryDealGetInteger(t, DEAL_POSITION_ID) != position) continue;
+         ENUM_DEAL_ENTRY e = (ENUM_DEAL_ENTRY)HistoryDealGetInteger(t, DEAL_ENTRY);
+         if(e != DEAL_ENTRY_IN) continue;
+         ulong orderTicket = (ulong)HistoryDealGetInteger(t, DEAL_ORDER);
+         if(HistoryOrderSelect(orderTicket))
+         {
+            sl = HistoryOrderGetDouble(orderTicket, ORDER_SL);
+            tp = HistoryOrderGetDouble(orderTicket, ORDER_TP);
+         }
+         break;
+      }
+   }
 
    //--- compute rough RR (server recomputes exact values)
    double risk = fabs(entryPrice - exitPrice);
    double rr   = (risk > 0) ? (fabs(profit) / (risk * volume * 100.0)) : 0.0;
 
    string sideStr = (type == DEAL_TYPE_BUY) ? "buy" : "sell";
+
+   //--- debug: print SL/TP to MT5 Experts log
+   if(InpDebugLog)
+      Print("DleaSync: deal #", dealTicket, " ", symbol, " SL=", sl, " TP=", tp, " (cache hit=", GetCachedSLTP((ulong)position, sl, tp) ? "yes" : "no", ")");
 
    //--- build the JSON payload (now includes sl and tp)
    string payload = StringFormat(
