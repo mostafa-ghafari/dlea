@@ -103,17 +103,17 @@ function DashboardPage() {
         </div>
       )}
       {/* KPI cards */}
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
         {kpis.map((s) => (
-          <div key={s.label} className="card-surface p-5">
+          <div key={s.label} className="card-surface p-3 sm:p-5">
             <div className="flex items-center justify-between">
-              <span className="text-sm text-muted-foreground">{s.label}</span>
+              <span className="text-xs sm:text-sm text-muted-foreground">{s.label}</span>
               <div className={`grid h-8 w-8 place-items-center rounded-lg ${s.positive ? "bg-primary/10 text-primary" : "bg-destructive/10 text-destructive"}`}>
                 <s.icon className="h-4 w-4" />
               </div>
             </div>
-            <div className="mt-3 text-2xl font-bold tabular">{s.value}</div>
-            <div className={`mt-1 flex items-center gap-1 text-xs tabular ${s.positive ? "gain" : "loss"}`}>
+            <div className="mt-2 sm:mt-3 text-lg sm:text-2xl font-bold tabular">{s.value}</div>
+            <div className={`mt-1 flex items-center gap-1 text-[11px] sm:text-xs tabular ${s.positive ? "gain" : "loss"}`}>
               {s.positive ? <ArrowUpRight className="h-3 w-3" /> : <ArrowDownRight className="h-3 w-3" />}
               {s.sub}
             </div>
@@ -134,9 +134,9 @@ function DashboardPage() {
               زنده
             </Badge>
           </div>
-          <div className="mt-4 h-72 w-full overflow-hidden">
+          <div className="mt-4 h-56 sm:h-72 w-full overflow-hidden">
             <ResponsiveContainer>
-              <AreaChart data={equityCurve}>
+              <AreaChart data={equityCurve} margin={{ left: 5, right: 5 }}>
                 <defs>
                   <linearGradient id="eq" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="0%" stopColor="oklch(0.75 0.17 155)" stopOpacity={0.4} />
@@ -157,7 +157,7 @@ function DashboardPage() {
         <div className="card-surface overflow-hidden p-5">
           <h3 className="font-semibold">نرخ برد / باخت</h3>
           <p className="text-xs text-muted-foreground">{faDigits(dashboard?.tradeCount ?? 0)} معامله</p>
-          <div className="mt-4 h-56 w-full overflow-hidden">
+          <div className="mt-4 h-44 sm:h-56 w-full overflow-hidden">
             <ResponsiveContainer>
               <PieChart>
                 <Pie data={winLossData} dataKey="value" innerRadius={55} outerRadius={80} paddingAngle={4}>
@@ -185,9 +185,9 @@ function DashboardPage() {
         <div className="card-surface overflow-hidden p-5">
           <h3 className="font-semibold">عملکرد ماهانه</h3>
           <p className="text-xs text-muted-foreground">سود/زیان به دلار</p>
-          <div className="mt-4 h-64 w-full overflow-hidden">
+          <div className="mt-4 h-52 sm:h-64 w-full overflow-hidden">
             <ResponsiveContainer>
-              <BarChart data={monthlyPerformance} margin={{ left: 10, right: 10 }}>
+              <BarChart data={monthlyPerformance} margin={{ left: 5, right: 5 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="oklch(0.28 0.02 255)" vertical={false} />
                 <XAxis dataKey="month" stroke="oklch(0.68 0.02 255)" fontSize={11} tickLine={false} axisLine={false} />
                 <YAxis stroke="oklch(0.68 0.02 255)" fontSize={11} tickLine={false} axisLine={false} width={55} padding={{ left: 10, right: 10 }} />
@@ -208,16 +208,16 @@ function DashboardPage() {
             <h3 className="font-semibold">تقویم اقتصادی</h3>
           </div>
           <p className="text-xs text-muted-foreground">رویدادهای مهم امروز بازار فارکس</p>
-          <div className="mt-4 max-h-64 space-y-2 overflow-y-auto pl-1">
+          <div className="mt-4 max-h-64 space-y-2 overflow-y-auto pl-1" style={{ WebkitOverflowScrolling: 'touch' }}>
             {economicEvents.map((ev) => (
-              <div key={ev.id} className="flex items-center gap-2 rounded-lg border border-border bg-secondary/40 p-3">
-                <span className="shrink-0 text-xs text-muted-foreground tabular">{ev.time}</span>
-                <span className="grid h-7 w-11 shrink-0 place-items-center rounded-md bg-secondary text-[11px] font-bold">
+              <div key={ev.id} className="flex items-center gap-1.5 sm:gap-2 rounded-lg border border-border bg-secondary/40 p-2 sm:p-3">
+                <span className="shrink-0 text-[11px] sm:text-xs text-muted-foreground tabular">{ev.time}</span>
+                <span className="grid h-6 w-9 sm:h-7 sm:w-11 shrink-0 place-items-center rounded-md bg-secondary text-[10px] sm:text-[11px] font-bold">
                   {ev.currency}
                 </span>
                 <div className="min-w-0 flex-1">
-                  <div className="truncate text-sm">{ev.title}</div>
-                  <div className="text-[11px] text-muted-foreground tabular">
+                  <div className="truncate text-xs sm:text-sm">{ev.title}</div>
+                  <div className="text-[10px] sm:text-[11px] text-muted-foreground tabular">
                     پیش‌بینی {ev.forecast} • قبلی {ev.previous}
                   </div>
                 </div>
@@ -327,26 +327,26 @@ function DashboardPage() {
           </div>
         </div>
 
-        <div className="space-y-4">
-          <div className="card-surface overflow-hidden p-5">
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-1 lg:space-y-4">
+          <div className="card-surface overflow-hidden p-3 sm:p-5">
+            <div className="flex items-center gap-2 text-xs sm:text-sm text-muted-foreground">
               <Award className="h-4 w-4 text-primary" />
               بهترین معامله
             </div>
-            <div className="mt-3 text-lg font-bold">{bestTrade?.symbol ?? "—"}</div>
-            <div className="gain text-2xl font-bold tabular">{bestTrade ? formatMoney(bestTrade.pnl) : "—"}</div>
-            <div className="mt-2 text-xs text-muted-foreground">
+            <div className="mt-2 sm:mt-3 text-base sm:text-lg font-bold">{bestTrade?.symbol ?? "—"}</div>
+            <div className="gain text-xl sm:text-2xl font-bold tabular">{bestTrade ? formatMoney(bestTrade.pnl) : "—"}</div>
+            <div className="mt-1 sm:mt-2 text-[11px] sm:text-xs text-muted-foreground">
               {bestTrade ? `R:R ${faDigits(bestTrade.rr)} • ${bestTrade.date}` : "هنوز معامله‌ای ثبت نشده"}
             </div>
           </div>
-          <div className="card-surface overflow-hidden p-5">
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <div className="card-surface overflow-hidden p-3 sm:p-5">
+            <div className="flex items-center gap-2 text-xs sm:text-sm text-muted-foreground">
               <TrendingDown className="h-4 w-4 text-destructive" />
               بدترین معامله
             </div>
-            <div className="mt-3 text-lg font-bold">{worstTrade?.symbol ?? "—"}</div>
-            <div className="loss text-2xl font-bold tabular">{worstTrade ? formatMoney(worstTrade.pnl) : "—"}</div>
-            <div className="mt-2 text-xs text-muted-foreground">
+            <div className="mt-2 sm:mt-3 text-base sm:text-lg font-bold">{worstTrade?.symbol ?? "—"}</div>
+            <div className="loss text-xl sm:text-2xl font-bold tabular">{worstTrade ? formatMoney(worstTrade.pnl) : "—"}</div>
+            <div className="mt-1 sm:mt-2 text-[11px] sm:text-xs text-muted-foreground">
               {worstTrade ? `R:R ${faDigits(worstTrade.rr)} • ${worstTrade.date}` : "هنوز معامله‌ای ثبت نشده"}
             </div>
           </div>
@@ -362,7 +362,7 @@ function DashboardPage() {
           </div>
           <Link to="/app/news" className="text-xs text-primary hover:underline">مشاهده همه</Link>
         </div>
-        <div className="mt-4 grid gap-3 md:grid-cols-3">
+        <div className="mt-4 grid gap-3 grid-cols-1 sm:grid-cols-2 md:grid-cols-3">
           {[...news].sort((a, b) => Number(b.pinned) - Number(a.pinned)).slice(0, 3).map((n) => (
             <Link
               key={n.id}
