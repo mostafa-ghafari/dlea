@@ -3,7 +3,7 @@
 //|              Dlea AI - MetaTrader 5 trade sync expert            |
 //+------------------------------------------------------------------+
 #property copyright "Dlea AI"
-#property version   "1.02"
+#property version   "1.03"
 #property strict
 #property description "Syncs closed trades from MetaTrader 5 to Dlea AI"
 
@@ -112,6 +112,45 @@ string JsonEscape(const string s)
 }
 
 //+------------------------------------------------------------------+
+//| Read SL/TP from the position's open order                         |
+//+------------------------------------------------------------------+
+void GetPositionSLTP(const ulong position, double &sl, double &tp)
+{
+   sl = 0.0;
+   tp = 0.0;
+   if(!HistorySelect(0, TimeCurrent())) return;
+
+   // Find the OPEN (entry IN) deal of this position
+   for(int i = HistoryDealsTotal() - 1; i >= 0; i--)
+   {
+      ulong dealT = HistoryDealGetTicket(i);
+      if(dealT == 0) continue;
+      if(HistoryDealGetInteger(dealT, DEAL_POSITION_ID) != position) continue;
+      ENUM_DEAL_ENTRY entry = (ENUM_DEAL_ENTRY)HistoryDealGetInteger(dealT, DEAL_ENTRY);
+      if(entry != DEAL_ENTRY_IN) continue;
+
+      // The position ticket from the opening deal
+      ulong posTicket = (ulong)HistoryDealGetInteger(dealT, DEAL_POSITION_ID);
+
+      // Search orders for the position open order
+      for(int j = HistoryOrdersTotal() - 1; j >= 0; j--)
+      {
+         ulong ordT = HistoryOrderGetTicket(j);
+         if(ordT == 0) continue;
+         if(HistoryOrderGetInteger(ordT, ORDER_POSITION_ID) != (long)posTicket) continue;
+         ENUM_ORDER_TYPE ordType = (ENUM_ORDER_TYPE)HistoryOrderGetInteger(ordT, ORDER_TYPE);
+         if(ordType == ORDER_TYPE_BUY || ordType == ORDER_TYPE_SELL)
+         {
+            sl = HistoryOrderGetDouble(ordT, ORDER_SL);
+            tp = HistoryOrderGetDouble(ordT, ORDER_TP);
+            return;
+         }
+      }
+      break;
+   }
+}
+
+//+------------------------------------------------------------------+
 //| Build the payload for one closed deal and send it to Dlea        |
 //+------------------------------------------------------------------+
 bool SendDeal(const ulong dealTicket)
@@ -145,16 +184,21 @@ bool SendDeal(const ulong dealTicket)
       break;
    }
 
+   //--- read SL/TP from the position's open order
+   double sl = 0.0;
+   double tp = 0.0;
+   GetPositionSLTP(position, sl, tp);
+
    //--- compute rough RR (server recomputes exact values)
    double risk = fabs(entryPrice - exitPrice);
    double rr   = (risk > 0) ? (fabs(profit) / (risk * volume * 100.0)) : 0.0;
 
    string sideStr = (type == DEAL_TYPE_BUY) ? "buy" : "sell";
 
-   //--- build the JSON payload
+   //--- build the JSON payload (now includes sl and tp)
    string payload = StringFormat(
       "{\"token\":\"%s\",\"trades\":[{\"ticket\":\"%I64u\",\"symbol\":\"%s\",\"side\":\"%s\","
-      "\"entry\":%.5f,\"exit\":%.5f,\"volume\":%.2f,\"pnl\":%.2f,\"commission\":%.2f,"
+      "\"entry\":%.5f,\"exit\":%.5f,\"sl\":%.5f,\"tp\":%.5f,\"volume\":%.2f,\"pnl\":%.2f,\"commission\":%.2f,"
       "\"swap\":%.2f,\"rr\":%.2f,\"open_time\":\"%s\",\"close_time\":\"%s\","
       "\"magic\":%I64d,\"comment\":\"%s\",\"reason\":\"EA\",\"followedPlan\":true}]}",
       InpToken,
@@ -163,6 +207,8 @@ bool SendDeal(const ulong dealTicket)
       sideStr,
       entryPrice,
       exitPrice,
+      sl,
+      tp,
       volume,
       profit,
       commission,

@@ -383,15 +383,15 @@ function MetaTraderTab() {
           <div className="card-surface p-6">
             <h3 className="font-semibold">نصب EA (اکسپرت)</h3>
             <ol className="mt-3 list-inside list-decimal space-y-1.5 text-sm text-muted-foreground">
-              <li>فایل <span dir="ltr" className="font-mono">DleaSync.mq5</span> را دانلود کن.</li>
+              <li>فایل <span dir="ltr" className="font-mono">DleaSync.ex5</span> را دانلود کن.</li>
               <li>در MT5: File → Open Data Folder → پوشه MQL5/Experts.</li>
-              <li>فایل را آنجا بگذار و در MetaEditor باز کن و F7 بزن (Compile).</li>
+              <li>فایل <span dir="ltr" className="font-mono">DleaSync.ex5</span> را در پوشه <span dir="ltr" className="font-mono">MQL5/Experts</span> متاتریدر کپی کن.</li>
               <li>در MT5: Tools → Options → Expert Advisors → «Allow WebRequest» را تیک بزن و آدرس وب‌هوک را اضافه کن.</li>
               <li>EA را روی چارت بکش، توکن و آدرس وب‌هوک را وارد کن و Algo Trading را فعال کن.</li>
             </ol>
-            <a href="/mt/DleaSync.mq5" download className="mt-4 inline-block">
+            <a href="/mt/DleaSync.ex5" download className="mt-4 inline-block">
               <Button variant="outline" className="gap-2">
-                <Download className="h-4 w-4" /> دانلود DleaSync.mq5
+                <Download className="h-4 w-4" /> دانلود DleaSync.ex5
               </Button>
             </a>
           </div>
