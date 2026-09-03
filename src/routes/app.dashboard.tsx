@@ -57,7 +57,23 @@ function DashboardPage() {
   const trades = useTrades();
   const equityCurve = dashboard?.equityCurve ?? [];
   const winLossData = dashboard?.winLossData ?? [];
-  const monthlyPerformance = (dashboard?.monthlyPerformance ?? []).slice(-6);
+  const monthlyPerformance = (() => {
+    const raw = dashboard?.monthlyPerformance ?? [];
+    const rawMap = new Map(raw.map((e) => [e.month, e.pnl]));
+    const jMonths = ["فروردین","اردیبهشت","خرداد","تیر","مرداد","شهریور","مهر","آبان","آذر","دی","بهمن","اسفند"];
+    // Find which Jalaali month the last data point falls in
+    const lastLabel = raw.at(-1)?.month ?? "";
+    const lastMonthIdx = jMonths.findIndex((m) => lastLabel.includes(m));
+    const fallbackIdx = lastMonthIdx >= 0 ? lastMonthIdx : 5; // شهریور fallback
+    // Build 6 bars ending at the latest data month
+    return Array.from({ length: 6 }, (_, i) => {
+      const mi = (fallbackIdx - (5 - i) + 12) % 12;
+      const name = jMonths[mi];
+      // Find pnl by matching month name (not year, to avoid Persian digit mismatch)
+      const match = raw.find((e) => e.month.includes(name));
+      return { month: name, pnl: match?.pnl ?? 0 };
+    });
+  })();
   const economicEvents = dashboard?.economicEvents ?? [];
   const totalPnl = dashboard?.totalPnl ?? 0;
   const winRate = dashboard?.winRate ?? 0;
