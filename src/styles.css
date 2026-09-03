@@ -209,6 +209,10 @@ html.light .loss {
     font-variant-numeric: tabular-nums;
     font-feature-settings: "tnum";
   }
+  /* Recharts Y-axis numbers always LTR */
+  .recharts-layer.recharts-cartesian-axis.recharts-yAxis {
+    direction: ltr;
+  }
 }
 
 @utility card-surface {
