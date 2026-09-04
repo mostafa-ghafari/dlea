@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import * as XLSX from "xlsx";
 import { bulkImportTrades, get, post, usePortfolios, type TradeInput } from "@/lib/api";
 import { toast } from "sonner";
 
@@ -125,6 +126,44 @@ function normalizeMtDate(raw: string): string {
   return new Date().toISOString();
 }
 
+/** Parse XLSX file and extract trade rows as string arrays. */
+function parseXlsx(buffer: ArrayBuffer): ParsedTrade[] {
+  const wb = XLSX.read(buffer, { type: "array" });
+  const ws = wb.Sheets[wb.SheetNames[0]];
+  const raw: string[][] = XLSX.utils.sheet_to_json(ws, { header: 1, defval: "" });
+  // Convert each row to the same format parseStatement expects
+  const rows: string[][] = raw.filter((r: string[]) => r.length >= 6);
+  const num = (v: string) => Number(String(v).replace(/[^\d.\-]/g, ""));
+  const trades: ParsedTrade[] = [];
+
+  rows.forEach((c) => {
+    const symbolIdx = c.findIndex((v) => /^[A-Za-z]{6}(\.[a-z]+)?$|^(XAUUSD|XAGUSD|US30|NAS100)/i.test(v.trim()));
+    const sideIdx = c.findIndex((v) => /^(buy|sell)$/i.test(v.trim()));
+    if (symbolIdx === -1 || sideIdx === -1) return;
+
+    const ticket = c.find((v) => /^\d{6,}$/.test(v.trim())) || "-";
+    const times = c.filter((v) => /\d{4}[./-]\d{2}[./-]\d{2}[ T]\d{2}:\d{2}/.test(v));
+    // Only import closed positions (require both open and close times)
+    if (times.length < 2) return;
+    const numbers = c.filter((v) => /^-?[\d\s,]*\.?\d+$/.test(v.trim()) && v.trim() !== ticket);
+
+    const profitRaw = numbers.length ? numbers[numbers.length - 1]! : "0";
+    const volumeRaw = c[sideIdx + 1] && num(c[sideIdx + 1]!) ? c[sideIdx + 1]! : (numbers[0] || "0");
+
+    trades.push({
+      ticket,
+      symbol: c[symbolIdx]!.toUpperCase(),
+      side: c[sideIdx]!.toLowerCase() === "buy" ? "خرید" : "فروش",
+      volume: String(num(volumeRaw) || 0),
+      openTime: times[0] || "-",
+      closeTime: times[1] || "-",
+      profit: String(num(profitRaw) || 0),
+    });
+  });
+
+  return trades;
+}
+
 function ImportPanel() {
   const inputRef = useRef<HTMLInputElement>(null);
   const navigate = useNavigate();
@@ -157,8 +196,19 @@ function ImportPanel() {
       } catch {
         toast.error("خواندن فایل ناموفق بود");
       }
-    } else {
-      toast.success(`فایل «${f.name}» انتخاب شد — پیش‌نمایش فقط برای CSV/HTML است`);
+    } else if (/\.xlsx?$/i.test(f.name)) {
+      try {
+        const buffer = await f.arrayBuffer();
+        const rows = parseXlsx(buffer);
+        setParsed(rows);
+        if (rows.length === 0) {
+          toast.warning("معامله‌ای در فایل شناسایی نشد — ساختار گزارش را بررسی کن");
+        } else {
+          toast.success(`${rows.length} معامله در فایل «${f.name}» شناسایی شد`);
+        }
+      } catch {
+        toast.error("خواندن فایل XLSX ناموفق بود");
+      }
     }
   }
 
