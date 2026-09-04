@@ -516,3 +516,12 @@ def run(stdout, stderr):
     _run_coach()
     stdout.write(f"  trades={Trade.objects.count()} portfolios={Portfolio.objects.count()} "
                  f"journal={JournalEntry.objects.count()} news={NewsItem.objects.count()}")
+
+from django.core.management.base import BaseCommand
+
+class Command(BaseCommand):
+    help = 'Seed the database with sample data'
+
+    def handle(self, *args, **options):
+        from api.management.commands.seed_data import run
+        run(self.stdout, self.stderr)
