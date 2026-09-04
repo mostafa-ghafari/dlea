@@ -99,7 +99,7 @@ function GoalsPage() {
                   </div>
                   <div className="space-y-2">
                     <Label>مهلت (روز)</Label>
-                    <Input type="number" placeholder="۳۰" className="bg-secondary/60 tabular" />
+                    <Input type="number" min={1} placeholder="۳۰" className="bg-secondary/60 tabular" />
                   </div>
                 </div>
               </div>
