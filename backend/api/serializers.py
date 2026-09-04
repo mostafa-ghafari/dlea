@@ -166,8 +166,6 @@ class TradeSerializer(serializers.ModelSerializer):
     swap = serializers.FloatField(required=False)
     taxes = serializers.FloatField(required=False)
     strategy = serializers.CharField(required=False, allow_blank=True)
-    type = serializers.CharField(required=False, allow_blank=True, default="")
-    is_active = serializers.BooleanField(required=False, default=True)
     # write-only fields used when creating/importing trades
     open_time = serializers.DateTimeField(write_only=True, required=False)
     close_time = serializers.DateTimeField(write_only=True, required=False)
