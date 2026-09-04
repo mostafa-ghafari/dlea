@@ -95,6 +95,8 @@ function parseStatement(text: string, isHtml: boolean): ParsedTrade[] {
 
     const ticket = c.find((v) => /^\d{6,}$/.test(v.trim())) ?? "-";
     const times = c.filter((v) => /\d{4}[./-]\d{2}[./-]\d{2}[ T]\d{2}:\d{2}/.test(v));
+    // Only import closed positions (require both open and close times)
+    if (times.length < 2) return;
     const numbers = c.filter((v) => /^-?[\d\s,]*\.?\d+$/.test(v.trim()) && v.trim() !== ticket);
     const profitRaw = numbers.length ? numbers[numbers.length - 1]! : "0";
     const volumeRaw = c[sideIdx + 1] && num(c[sideIdx + 1]!) ? c[sideIdx + 1]! : (numbers[0] ?? "0");

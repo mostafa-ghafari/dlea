@@ -82,6 +82,7 @@ class Portfolio(Timestamped):
     user = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.CASCADE, related_name="+")
     name = models.CharField(max_length=64)
     broker = models.CharField(max_length=64)
+    is_active = models.BooleanField(default=True)
     type = models.CharField(max_length=32)
     balance = models.DecimalField(max_digits=14, decimal_places=2)
     initial = models.DecimalField(max_digits=14, decimal_places=2)
@@ -303,6 +304,8 @@ class Payment(models.Model):
     amount = models.CharField(max_length=64)
     date = models.DateField()
     status = models.CharField(max_length=16, default="موفق")
+    reference_id = models.CharField(max_length=128, blank=True, default="")
+    raw_response = models.JSONField(default=dict, blank=True)
 
     def __str__(self):
         return f"{self.user} — {self.plan}"

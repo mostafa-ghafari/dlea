@@ -96,6 +96,19 @@ class PortfolioViewSet(UserScopedMixin, viewsets.ModelViewSet):
     queryset = Portfolio.objects.all()
     serializer_class = PortfolioSerializer
 
+    @action(detail=True, methods=["post"], url_path="activate")
+    def activate(self, request, pk=None):
+        """Set this portfolio as active, deactivate all others for the user."""
+        portfolio = self.get_object()
+        user = request.user
+        if user.is_authenticated:
+            Portfolio.objects.filter(user=user).update(is_active=False)
+        else:
+            Portfolio.objects.filter(user__isnull=True).update(is_active=False)
+        portfolio.is_active = True
+        portfolio.save(update_fields=["is_active", "updated_at"])
+        return Response(PortfolioSerializer(portfolio).data)
+
 
 class TradeViewSet(viewsets.ModelViewSet):
     queryset = Trade.objects.select_related("portfolio").all()
@@ -425,6 +438,12 @@ class NewsItemViewSet(viewsets.ModelViewSet):
 class TicketViewSet(viewsets.ModelViewSet):
     queryset = Ticket.objects.prefetch_related("messages").all()
     serializer_class = TicketSerializer
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        if self.request.user.is_authenticated:
+            return qs.filter(email=self.request.user.email)
+        return qs.none()
 
     @action(detail=True, methods=["post"])
     def reply(self, request, pk=None):
