@@ -282,7 +282,7 @@ export const fetchSubscription = async (): Promise<Subscription | null> => {
   return list[0] ?? null;
 };
 export const fetchAiInsights = (portfolioId?: string) => get<AiInsights>(portfolioId ? `coach/insights/?portfolio=${portfolioId}` : "coach/insights/");
-export const fetchCoachPeriods = () => get<CoachPeriod[]>("coach/periods/");
+export const fetchCoachPeriods = (portfolioId?: string) => get<CoachPeriod[]>(portfolioId ? `coach/periods/?portfolio=${portfolioId}` : "coach/periods/");
 
 export type GeneratedCoachReport = CoachPeriod & { _generated?: boolean };
 

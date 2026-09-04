@@ -628,6 +628,18 @@ class CoachInsightsView(APIView):
             base = base.filter(user__isnull=True)
         if portfolio_id:
             base = base.filter(portfolio_id=portfolio_id)
+        else:
+            # No portfolio filter: show only active portfolio's insights.
+            # Legacy (portfolio=null) only if user has NO active portfolio.
+            from .models import Portfolio as PortfolioModel
+            if request.user.is_authenticated:
+                active = PortfolioModel.objects.filter(user=request.user, is_active=True).first()
+            else:
+                active = PortfolioModel.objects.filter(user__isnull=True, is_active=True).first()
+            if active:
+                base = base.filter(portfolio=active)
+            else:
+                base = base.filter(portfolio__isnull=True)
         obj = base.first()
         if not obj:
             # New user with no insights yet — empty structure keeps the UI working.
@@ -755,15 +767,18 @@ class CoachPeriodViewSet(UserScopedMixin, viewsets.ReadOnlyModelViewSet):
             qs = qs.filter(scope=scope)
         if portfolio:
             qs = qs.filter(portfolio_id=portfolio)
-        elif not portfolio:
-            # If no portfolio specified, show periods without portfolio (legacy) + active portfolio
+        else:
+            # No portfolio filter: show only the active portfolio's periods.
+            # Legacy periods (portfolio=null) only shown if user has NO active portfolio.
             from .models import Portfolio as PortfolioModel
             if self.request.user.is_authenticated:
                 active = PortfolioModel.objects.filter(user=self.request.user, is_active=True).first()
             else:
                 active = PortfolioModel.objects.filter(user__isnull=True, is_active=True).first()
             if active:
-                qs = qs.filter(Q(portfolio=active) | Q(portfolio__isnull=True))
+                qs = qs.filter(portfolio=active)
+            else:
+                qs = qs.filter(portfolio__isnull=True)
         return qs
 
 
