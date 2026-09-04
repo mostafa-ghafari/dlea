@@ -125,7 +125,7 @@ class TradeViewSet(viewsets.ModelViewSet):
         if symbol:
             qs = qs.filter(symbol__iexact=symbol)
         if portfolio:
-            qs = qs.filter(portfolio__name__icontains=portfolio)
+            qs = qs.filter(portfolio__id=portfolio)
         return qs
 
     @action(detail=False, methods=["post"], url_path="import")
