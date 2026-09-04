@@ -169,24 +169,10 @@ class JournalEntryViewSet(UserScopedMixin, viewsets.ModelViewSet):
     queryset = JournalEntry.objects.select_related("group").all()
     serializer_class = JournalEntrySerializer
 
-    def get_queryset(self):
-        qs = super().get_queryset()
-        portfolio_id = self.request.query_params.get("portfolio")
-        if portfolio_id:
-            qs = qs.filter(portfolio__id=portfolio_id)
-        return qs
-
 
 class GoalViewSet(UserScopedMixin, viewsets.ModelViewSet):
     queryset = Goal.objects.all()
     serializer_class = GoalSerializer
-
-    def get_queryset(self):
-        qs = super().get_queryset()
-        portfolio_id = self.request.query_params.get("portfolio")
-        if portfolio_id:
-            qs = qs.filter(portfolio__id=portfolio_id)
-        return qs
 
 
 class AchievementViewSet(viewsets.ReadOnlyModelViewSet):

@@ -253,9 +253,9 @@ export const fetchDashboard = (portfolioId?: string) => get<DashboardPayload>(po
 export const fetchTrades = (portfolioId?: string) => get<Trade[]>(portfolioId ? `trades/?portfolio=${portfolioId}` : "trades/");
 export const fetchPortfolios = () => get<Portfolio[]>("portfolios/");
 export const activatePortfolio = (id: string) => post<Portfolio>(`portfolios/${id}/activate/`, {});
-export const fetchJournalGroups = (portfolioId?: string) => get<JournalGroup[]>(portfolioId ? `journal/groups/?portfolio=${portfolioId}` : "journal/groups/");
-export const fetchJournalEntries = (portfolioId?: string) => get<JournalEntry[]>(portfolioId ? `journal/entries/?portfolio=${portfolioId}` : "journal/entries/");
-export const fetchGoals = (portfolioId?: string) => get<Goal[]>(portfolioId ? `goals/?portfolio=${portfolioId}` : "goals/");
+export const fetchJournalGroups = () => get<JournalGroup[]>("journal/groups/");
+export const fetchJournalEntries = () => get<JournalEntry[]>("journal/entries/");
+export const fetchGoals = () => get<Goal[]>("goals/");
 export const fetchAchievements = () => get<Achievement[]>("achievements/");
 export const fetchAchievementHistory = () => get<AchievementHistoryItem[]>("achievement-history/");
 export const fetchRoleTiers = () => get<RoleTier[]>("role-tiers/");
@@ -521,18 +521,15 @@ export function usePortfolios(): Portfolio[] {
 }
 
 export function useJournalGroups(): JournalGroup[] {
-  const [pid] = useActivePortfolioId();
-  return useApi(() => fetchJournalGroups(pid ?? undefined), [pid]).data ?? [];
+  return useApi(fetchJournalGroups).data ?? [];
 }
 
 export function useJournalEntries(): JournalEntry[] {
-  const [pid] = useActivePortfolioId();
-  return useApi(() => fetchJournalEntries(pid ?? undefined), [pid]).data ?? [];
+  return useApi(fetchJournalEntries).data ?? [];
 }
 
 export function useGoals(): Goal[] {
-  const [pid] = useActivePortfolioId();
-  return useApi(() => fetchGoals(pid ?? undefined), [pid]).data ?? [];
+  return useApi(fetchGoals).data ?? [];
 }
 
 export function useAchievements(): Achievement[] {
