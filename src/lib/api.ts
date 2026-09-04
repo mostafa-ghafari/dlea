@@ -505,14 +505,14 @@ export function useApi<T>(loader: () => Promise<T>, deps: readonly unknown[] = [
   return { data, loading, error, reload: () => setTick((t) => t + 1) };
 }
 
-import { getActivePortfolioId } from "@/lib/app-state";
+import { useActivePortfolioId } from "@/lib/app-state";
 
 /* ------------------------------------------------------------------ */
 /* Named hooks — same names as the old mock-data exports               */
 /* ------------------------------------------------------------------ */
 
 export function useTrades(): Trade[] {
-  const pid = getActivePortfolioId();
+  const [pid] = useActivePortfolioId();
   return useApi(() => fetchTrades(pid ?? undefined), [pid]).data ?? [];
 }
 
@@ -521,17 +521,17 @@ export function usePortfolios(): Portfolio[] {
 }
 
 export function useJournalGroups(): JournalGroup[] {
-  const pid = getActivePortfolioId();
+  const [pid] = useActivePortfolioId();
   return useApi(() => fetchJournalGroups(pid ?? undefined), [pid]).data ?? [];
 }
 
 export function useJournalEntries(): JournalEntry[] {
-  const pid = getActivePortfolioId();
+  const [pid] = useActivePortfolioId();
   return useApi(() => fetchJournalEntries(pid ?? undefined), [pid]).data ?? [];
 }
 
 export function useGoals(): Goal[] {
-  const pid = getActivePortfolioId();
+  const [pid] = useActivePortfolioId();
   return useApi(() => fetchGoals(pid ?? undefined), [pid]).data ?? [];
 }
 
@@ -612,7 +612,7 @@ export function useArchivedReports(): ArchivedReport[] {
 }
 
 export function useDashboard(): DashboardPayload | null {
-  const pid = getActivePortfolioId();
+  const [pid] = useActivePortfolioId();
   return useApi(() => fetchDashboard(pid ?? undefined), [pid]).data;
 }
 
