@@ -206,8 +206,8 @@ function ImportPanel() {
         } else {
           toast.success(`${rows.length} معامله در فایل «${f.name}» شناسایی شد`);
         }
-      } catch {
-        toast.error("خواندن فایل XLSX ناموفق بود");
+} catch (err) {
+        toast.error("خواندن فایل XLSX ناموفق بود: " + (err instanceof Error ? err.message : String(err)));
       }
     }
   }
