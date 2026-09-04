@@ -629,15 +629,15 @@ class CoachInsightsView(APIView):
         if portfolio_id:
             base = base.filter(portfolio_id=portfolio_id)
         else:
-            # No portfolio filter: show only active portfolio's insights.
-            # Legacy (portfolio=null) only if user has NO active portfolio.
+            # No portfolio filter: show insights from active portfolio + legacy (portfolio=null)
             from .models import Portfolio as PortfolioModel
+            from django.db.models import Q
             if request.user.is_authenticated:
                 active = PortfolioModel.objects.filter(user=request.user, is_active=True).first()
             else:
                 active = PortfolioModel.objects.filter(user__isnull=True, is_active=True).first()
             if active:
-                base = base.filter(portfolio=active)
+                base = base.filter(Q(portfolio=active) | Q(portfolio__isnull=True))
             else:
                 base = base.filter(portfolio__isnull=True)
         obj = base.first()
@@ -768,15 +768,14 @@ class CoachPeriodViewSet(UserScopedMixin, viewsets.ReadOnlyModelViewSet):
         if portfolio:
             qs = qs.filter(portfolio_id=portfolio)
         else:
-            # No portfolio filter: show only the active portfolio's periods.
-            # Legacy periods (portfolio=null) only shown if user has NO active portfolio.
+            # No portfolio filter: show active portfolio's periods + legacy (portfolio=null)
             from .models import Portfolio as PortfolioModel
             if self.request.user.is_authenticated:
                 active = PortfolioModel.objects.filter(user=self.request.user, is_active=True).first()
             else:
                 active = PortfolioModel.objects.filter(user__isnull=True, is_active=True).first()
             if active:
-                qs = qs.filter(portfolio=active)
+                qs = qs.filter(Q(portfolio=active) | Q(portfolio__isnull=True))
             else:
                 qs = qs.filter(portfolio__isnull=True)
         return qs
