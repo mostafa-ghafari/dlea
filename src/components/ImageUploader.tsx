@@ -1,4 +1,6 @@
+import { useState } from "react";
 import { ImagePlus, X } from "lucide-react";
+import { ImageLightbox } from "./ImageLightbox";
 import { useRef } from "react";
 import { toast } from "sonner";
 
@@ -67,6 +69,7 @@ export function ImageUploader({
   compact?: boolean;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
+  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
 
   async function handleFiles(files: FileList | null) {
     if (!files || files.length === 0) return;
@@ -110,7 +113,7 @@ export function ImageUploader({
                 alt={`اسکرین‌شات ${i + 1}`}
                 loading="lazy"
                 className="h-24 w-full cursor-pointer object-cover"
-                onClick={() => window.open(src, '_blank')}
+                onClick={() => setLightboxIndex(i)}
               />
               <button
                 type="button"
@@ -123,6 +126,13 @@ export function ImageUploader({
             </div>
           ))}
         </div>
+      )}
+      {lightboxIndex !== null && (
+        <ImageLightbox
+          images={images}
+          initialIndex={lightboxIndex}
+          onClose={() => setLightboxIndex(null)}
+        />
       )}
     </div>
   );
