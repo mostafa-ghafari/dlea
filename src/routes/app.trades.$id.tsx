@@ -81,7 +81,7 @@ function TradeDetail() {
             >
               {trade.side === "buy" ? "خرید" : "فروش"}
             </Badge>
-            <Badge variant="outline">{trade.strategy}</Badge>
+            {trade.strategy && <Badge variant="outline">{trade.strategy}</Badge>}
             <Badge
               variant="outline"
               className={trade.followedPlan ? "border-primary/40 bg-primary/10 text-primary" : "border-destructive/40 bg-destructive/10 text-destructive"}
@@ -91,7 +91,7 @@ function TradeDetail() {
             </Badge>
           </div>
 
-          <div className={`mt-4 text-3xl font-bold tabular ${trade.pnl >= 0 ? "gain" : "loss"}`}>
+          <div dir="ltr" className={`mt-4 text-3xl font-bold tabular ${trade.pnl >= 0 ? "gain" : "loss"}`}>
             {trade.pnl >= 0 ? "+" : ""}${trade.pnl}
           </div>
 

@@ -222,7 +222,7 @@ function TradesPage() {
                   {visibleColumns.includes("rr") && <td className="py-3 tabular">{t.rr}</td>}
                   {visibleColumns.includes("pnl") && (
                     <td className={`py-3 tabular font-medium ${t.pnl >= 0 ? "gain" : "loss"}`}>
-                      {t.pnl >= 0 ? "+" : ""}${t.pnl}
+                      <span dir="ltr">{t.pnl >= 0 ? "+" : ""}${t.pnl}</span>
                     </td>
                   )}
                   {visibleColumns.includes("followedPlan") && (
@@ -276,7 +276,7 @@ function TradesPage() {
                 </div>
                 {visibleColumns.includes("pnl") && (
                   <span className={`text-lg font-bold tabular ${t.pnl >= 0 ? "gain" : "loss"}`}>
-                    {t.pnl >= 0 ? "+" : ""}${t.pnl}
+                    <span dir="ltr">{t.pnl >= 0 ? "+" : ""}${t.pnl}</span>
                   </span>
                 )}
               </div>
