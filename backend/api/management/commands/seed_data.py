@@ -424,11 +424,11 @@ def seed_content():
                                  body="فایل گزارش MT5 را آپلود میکنم ولی هیچ معاملهای شناسایی نمیشود.",
                                  created_at=_jalali_to_gregorian(1403, 8, 11, 9, 40), attachments=[])
 
-    Notification.objects.create(kind="news", title="تخفیف ۳۰٪ اشتراک Pro Max", desc="کد PROMAX30 تا پایان هفته فعال است.",
+    Notification.objects.create(user=None, kind="news", title="تخفیف ۳۰٪ اشتراک Pro Max", desc="کد PROMAX30 تا پایان هفته فعال است.",
                                 time=_jalali_to_gregorian(1403, 8, 14).date(), link="/app/news/N-3", read=False)
-    Notification.objects.create(kind="ticket", title="پاسخ پشتیبانی به تیکت TK-1024", desc="تراکنش بررسی و اشتراک فعال شد.",
+    Notification.objects.create(user=None, kind="ticket", title="پاسخ پشتیبانی به تیکت TK-1024", desc="تراکنش بررسی و اشتراک فعال شد.",
                                 time=_jalali_to_gregorian(1403, 8, 12).date(), link="/app/support", read=False)
-    Notification.objects.create(kind="system", title="یادآور ژورنال", desc="برای معامله T-1042 ژورنال ثبت نکردی.",
+    Notification.objects.create(user=None, kind="system", title="یادآور ژورنال", desc="برای معامله T-1042 ژورنال ثبت نکردی.",
                                 time=_jalali_to_gregorian(1403, 8, 12).date(), link="/app/journal", read=False)
 
     AuditEntry.objects.create(actor="مدیر سیستم", action="تغییر پلن", target="مریم احمدی",

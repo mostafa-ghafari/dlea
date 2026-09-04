@@ -391,6 +391,7 @@ class TicketMessage(Timestamped):
 class Notification(models.Model):
     KIND = [("news", "news"), ("ticket", "ticket"), ("system", "system")]
 
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.CASCADE, related_name="notifications")
     kind = models.CharField(max_length=8, choices=KIND)
     title = models.CharField(max_length=160)
     desc = models.CharField(max_length=320)

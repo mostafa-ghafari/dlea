@@ -486,9 +486,16 @@ class NotificationViewSet(viewsets.ModelViewSet):
     queryset = Notification.objects.all()
     serializer_class = NotificationSerializer
 
+    def get_queryset(self):
+        qs = super().get_queryset()
+        if self.request.user.is_authenticated:
+            return qs.filter(user=self.request.user)
+        return qs.none()
+
     @action(detail=False, methods=["post"])
     def read_all(self, request):
-        Notification.objects.update(read=True)
+        if request.user.is_authenticated:
+            Notification.objects.filter(user=request.user).update(read=True)
         return Response({"ok": True})
 
 
