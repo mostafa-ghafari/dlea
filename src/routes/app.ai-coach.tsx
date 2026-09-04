@@ -29,6 +29,7 @@ import { fetchCoachPeriods, generateCoachReport, useAiInsights, useApi, usePlanL
 import { scopeLabels, type CoachScope } from "@/lib/ai-coach-data";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
+import { useActivePortfolioId } from "@/lib/app-state";
 
 export const Route = createFileRoute("/app/ai-coach")({
   head: () => ({
@@ -73,6 +74,7 @@ function AiCoach() {
   const [scope, setScope] = useState<CoachScope>("weekly");
   const list = useMemo(() => coachPeriods.filter((p) => p.scope === scope), [scope, coachPeriods]);
   const [index, setIndex] = useState(0);
+  const [activePortfolioId] = useActivePortfolioId();
   const period = list[Math.min(index, list.length - 1)];
 
   function changeScope(next: CoachScope) {
@@ -84,7 +86,7 @@ function AiCoach() {
     if (generating) return;
     setGenerating(true);
     try {
-      await generateCoachReport(scope, model);
+      await generateCoachReport(scope, model, activePortfolioId ?? undefined);
       toast.success(`تحلیل ${scopeLabels[scope]} با ${activeModel.name} ساخته شد و در لیست بازه‌ها ذخیره شد.`);
       // The fresh report has the newest sort_key, so it lands at the top of its scope list.
       await periodsApi.reload();

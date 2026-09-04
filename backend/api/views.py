@@ -620,10 +620,15 @@ class TradeColumnViewSet(viewsets.ReadOnlyModelViewSet):
 
 class CoachInsightsView(APIView):
     def get(self, request):
+        portfolio_id = request.query_params.get("portfolio")
+        base = CoachInsights.objects.all()
         if request.user.is_authenticated:
-            obj = CoachInsights.objects.filter(user=request.user).first()
+            base = base.filter(user=request.user)
         else:
-            obj = CoachInsights.objects.filter(user__isnull=True).first()
+            base = base.filter(user__isnull=True)
+        if portfolio_id:
+            base = base.filter(portfolio_id=portfolio_id)
+        obj = base.first()
         if not obj:
             # New user with no insights yet — empty structure keeps the UI working.
             payload = {
@@ -668,10 +673,13 @@ class CoachGenerateView(APIView):
                 status=400,
             )
         user = request.user if request.user.is_authenticated else None
+        portfolio_id = request.data.get("portfolio")
         if user:
             trades = Trade.objects.filter(portfolio__user=user)
         else:
             trades = Trade.objects.filter(portfolio__user__isnull=True)
+        if portfolio_id:
+            trades = trades.filter(portfolio__id=portfolio_id)
         try:
             report = gemini.generate_coach_report(scope, request.data.get("model"), trades)
         except LookupError as exc:
@@ -700,10 +708,20 @@ class CoachGenerateView(APIView):
         except Exception:
             pass
 
-        report_id = report["id"] + (f"-u{user.id}" if user else "")
+        # Find the portfolio object if portfolio_id was provided
+        portfolio_obj = None
+        if portfolio_id and user:
+            from .models import Portfolio as PortfolioModel
+            try:
+                portfolio_obj = PortfolioModel.objects.get(id=portfolio_id, user=user)
+            except PortfolioModel.DoesNotExist:
+                pass
+
+        report_id = report["id"] + (f"-u{user.id}" if user else "") + (f"-p{portfolio_id}" if portfolio_id else "")
         period, created = CoachPeriod.objects.update_or_create(
             id=report_id,
             user=user,
+            portfolio=portfolio_obj,
             defaults={
                 "scope": scope,
                 "label": report["label"],
@@ -732,8 +750,20 @@ class CoachPeriodViewSet(UserScopedMixin, viewsets.ReadOnlyModelViewSet):
     def get_queryset(self):
         qs = super().get_queryset()
         scope = self.request.query_params.get("scope")
+        portfolio = self.request.query_params.get("portfolio")
         if scope:
             qs = qs.filter(scope=scope)
+        if portfolio:
+            qs = qs.filter(portfolio_id=portfolio)
+        elif not portfolio:
+            # If no portfolio specified, show periods without portfolio (legacy) + active portfolio
+            from .models import Portfolio as PortfolioModel
+            if self.request.user.is_authenticated:
+                active = PortfolioModel.objects.filter(user=self.request.user, is_active=True).first()
+            else:
+                active = PortfolioModel.objects.filter(user__isnull=True, is_active=True).first()
+            if active:
+                qs = qs.filter(Q(portfolio=active) | Q(portfolio__isnull=True))
         return qs
 
 

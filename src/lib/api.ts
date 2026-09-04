@@ -281,13 +281,13 @@ export const fetchSubscription = async (): Promise<Subscription | null> => {
   const list = await get<Subscription[]>("subscription/");
   return list[0] ?? null;
 };
-export const fetchAiInsights = () => get<AiInsights>("coach/insights/");
+export const fetchAiInsights = (portfolioId?: string) => get<AiInsights>(portfolioId ? `coach/insights/?portfolio=${portfolioId}` : "coach/insights/");
 export const fetchCoachPeriods = () => get<CoachPeriod[]>("coach/periods/");
 
 export type GeneratedCoachReport = CoachPeriod & { _generated?: boolean };
 
-export function generateCoachReport(scope: CoachScope, model?: string) {
-  return post<GeneratedCoachReport>("coach/generate/", { scope, model });
+export function generateCoachReport(scope: CoachScope, model?: string, portfolioId?: string) {
+  return post<GeneratedCoachReport>("coach/generate/", { scope, model, portfolio: portfolioId });
 }
 export const fetchArchivedReports = () => get<ArchivedReport[]>("coach/archive/");
 export const fetchEconomicEvents = () => get<EconomicEvent[]>("economic-events/");
@@ -597,11 +597,13 @@ export function useProfile(): UserProfile | null {
 }
 
 export function useAiInsights(): AiInsights | null {
-  return useApi(fetchAiInsights).data;
+  const [pid] = useActivePortfolioId();
+  return useApi(() => fetchAiInsights(pid ?? undefined), [pid]).data;
 }
 
 export function useCoachPeriods(): CoachPeriod[] {
-  return useApi(fetchCoachPeriods).data ?? [];
+  const [pid] = useActivePortfolioId();
+  return useApi(() => fetchCoachPeriods(pid ?? undefined), [pid]).data ?? [];
 }
 
 export function useArchivedReports(): ArchivedReport[] {

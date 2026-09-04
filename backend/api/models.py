@@ -472,6 +472,7 @@ class CoachInsights(Timestamped):
     """Singleton row holding the AI coach's composite payload as JSON."""
 
     user = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.CASCADE, related_name="+")
+    portfolio = models.ForeignKey("Portfolio", null=True, blank=True, on_delete=models.CASCADE, related_name="+")
     payload = models.JSONField(default=dict)
 
     class Meta:
@@ -484,6 +485,7 @@ class CoachInsights(Timestamped):
 class CoachPeriod(models.Model):
     id = models.CharField(max_length=32, primary_key=True)
     user = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.CASCADE, related_name="+")
+    portfolio = models.ForeignKey("Portfolio", null=True, blank=True, on_delete=models.CASCADE, related_name="+")
     scope = models.CharField(max_length=8, choices=[("daily", "daily"), ("weekly", "weekly"), ("monthly", "monthly"), ("yearly", "yearly")])
     label = models.CharField(max_length=64)
     range = models.CharField(max_length=64)
