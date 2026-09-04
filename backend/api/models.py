@@ -83,14 +83,14 @@ class Portfolio(Timestamped):
     name = models.CharField(max_length=64)
     broker = models.CharField(max_length=64)
     is_active = models.BooleanField(default=True)
-    type = models.CharField(max_length=32)
+    type = models.CharField(max_length=32, default="", blank=True)
     balance = models.DecimalField(max_digits=14, decimal_places=2)
     initial = models.DecimalField(max_digits=14, decimal_places=2)
     leverage = models.CharField(max_length=16)
     currency = models.CharField(max_length=8, default="USD")
     trades = models.PositiveIntegerField(default=0)
     status = models.CharField(max_length=16, default="فعال")
-    strategy = models.CharField(max_length=64, default="")
+    strategy = models.CharField(max_length=64, default="", blank=True)
 
     def __str__(self):
         return self.name
@@ -118,7 +118,7 @@ class Trade(Timestamped):
     magic = models.PositiveIntegerField(default=0)
     comment = models.CharField(max_length=128, default="")
     reason = models.CharField(max_length=32, default="Client")
-    strategy = models.CharField(max_length=64, default="")
+    strategy = models.CharField(max_length=64, default="", blank=True)
     portfolio = models.ForeignKey(Portfolio, on_delete=models.CASCADE, related_name="trade_set")
     followed_plan = models.BooleanField(default=True)
     emotion = models.CharField(max_length=32, default="آرام")
