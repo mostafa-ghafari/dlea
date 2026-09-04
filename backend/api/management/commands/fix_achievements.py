@@ -11,6 +11,7 @@ FIXES = {
     "تصیف": "تضمین",
     "اقیابیده": "ایجاد کردید",
     "تیکخورده": "تیک‌خورده",
+    "ستآپهای": "ستاپ‌های",
     "ثبت شده باشد": "ثبت‌شده باشد",
     "ثبت نشده": "ثبت‌نشده",
 }
@@ -24,6 +25,9 @@ class Command(BaseCommand):
             original = a.desc
             for old, new in FIXES.items():
                 a.desc = a.desc.replace(old, new)
+            # Remove trailing period
+            if a.desc.endswith("."):
+                a.desc = a.desc[:-1]
             if a.desc != original:
                 a.save(update_fields=["desc"])
                 updated += 1
