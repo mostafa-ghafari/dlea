@@ -274,7 +274,7 @@ function Portfolios() {
           const pnl = p.balance - p.initial;
           const pct = p.initial ? (pnl / p.initial) * 100 : 0;
           return (
-            <div key={p.id} className={`card-surface p-5 transition-all hover:border-primary/40 ${activeId === p.id ? "border-primary ring-1 ring-primary/30" : ""}`}>
+            <div key={p.id} className={`card-surface p-5 transition-all hover:border-primary/40 ${activeId === p.id ? "!border-primary bg-primary/5" : ""}`}>
               <div className="flex items-start justify-between">
                 <div className="flex items-center gap-3">
                   <div className="grid h-11 w-11 place-items-center rounded-lg bg-primary/10 text-primary">
