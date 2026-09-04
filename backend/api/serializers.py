@@ -90,6 +90,8 @@ class PortfolioSerializer(serializers.ModelSerializer):
 
     id = serializers.CharField(source="pk", read_only=True)
     strategy = serializers.CharField(required=False, allow_blank=True)
+    type = serializers.CharField(required=False, allow_blank=True, default="")
+    is_active = serializers.BooleanField(required=False, default=True)
     initial = serializers.FloatField()
     balance = serializers.SerializerMethodField()
     trades = serializers.SerializerMethodField()
@@ -100,7 +102,7 @@ class PortfolioSerializer(serializers.ModelSerializer):
         model = Portfolio
         fields = [
             "id", "name", "broker", "type", "balance", "initial", "leverage",
-            "currency", "trades", "status", "strategy", "pnl", "winRate",
+            "currency", "trades", "status", "strategy", "pnl", "winRate", "is_active",
         ]
         read_only_fields = ["balance", "trades", "pnl", "winRate"]
 
@@ -164,6 +166,8 @@ class TradeSerializer(serializers.ModelSerializer):
     swap = serializers.FloatField(required=False)
     taxes = serializers.FloatField(required=False)
     strategy = serializers.CharField(required=False, allow_blank=True)
+    type = serializers.CharField(required=False, allow_blank=True, default="")
+    is_active = serializers.BooleanField(required=False, default=True)
     # write-only fields used when creating/importing trades
     open_time = serializers.DateTimeField(write_only=True, required=False)
     close_time = serializers.DateTimeField(write_only=True, required=False)
