@@ -249,12 +249,13 @@ export function postRaw<T>(path: string, body: FormData) {
 /* Fetchers                                                            */
 /* ------------------------------------------------------------------ */
 
-export const fetchDashboard = () => get<DashboardPayload>("dashboard/");
-export const fetchTrades = () => get<Trade[]>("trades/");
+export const fetchDashboard = (portfolioId?: string) => get<DashboardPayload>(portfolioId ? `dashboard/?portfolio=${portfolioId}` : "dashboard/");
+export const fetchTrades = (portfolioId?: string) => get<Trade[]>(portfolioId ? `trades/?portfolio=${portfolioId}` : "trades/");
 export const fetchPortfolios = () => get<Portfolio[]>("portfolios/");
-export const fetchJournalGroups = () => get<JournalGroup[]>("journal/groups/");
-export const fetchJournalEntries = () => get<JournalEntry[]>("journal/entries/");
-export const fetchGoals = () => get<Goal[]>("goals/");
+export const activatePortfolio = (id: string) => post<Portfolio>(`portfolios/${id}/activate/`, {});
+export const fetchJournalGroups = (portfolioId?: string) => get<JournalGroup[]>(portfolioId ? `journal/groups/?portfolio=${portfolioId}` : "journal/groups/");
+export const fetchJournalEntries = (portfolioId?: string) => get<JournalEntry[]>(portfolioId ? `journal/entries/?portfolio=${portfolioId}` : "journal/entries/");
+export const fetchGoals = (portfolioId?: string) => get<Goal[]>(portfolioId ? `goals/?portfolio=${portfolioId}` : "goals/");
 export const fetchAchievements = () => get<Achievement[]>("achievements/");
 export const fetchAchievementHistory = () => get<AchievementHistoryItem[]>("achievement-history/");
 export const fetchRoleTiers = () => get<RoleTier[]>("role-tiers/");
@@ -504,12 +505,15 @@ export function useApi<T>(loader: () => Promise<T>, deps: readonly unknown[] = [
   return { data, loading, error, reload: () => setTick((t) => t + 1) };
 }
 
+import { getActivePortfolioId } from "@/lib/app-state";
+
 /* ------------------------------------------------------------------ */
 /* Named hooks — same names as the old mock-data exports               */
 /* ------------------------------------------------------------------ */
 
 export function useTrades(): Trade[] {
-  return useApi(fetchTrades).data ?? [];
+  const pid = getActivePortfolioId();
+  return useApi(() => fetchTrades(pid ?? undefined), [pid]).data ?? [];
 }
 
 export function usePortfolios(): Portfolio[] {
@@ -517,15 +521,18 @@ export function usePortfolios(): Portfolio[] {
 }
 
 export function useJournalGroups(): JournalGroup[] {
-  return useApi(fetchJournalGroups).data ?? [];
+  const pid = getActivePortfolioId();
+  return useApi(() => fetchJournalGroups(pid ?? undefined), [pid]).data ?? [];
 }
 
 export function useJournalEntries(): JournalEntry[] {
-  return useApi(fetchJournalEntries).data ?? [];
+  const pid = getActivePortfolioId();
+  return useApi(() => fetchJournalEntries(pid ?? undefined), [pid]).data ?? [];
 }
 
 export function useGoals(): Goal[] {
-  return useApi(fetchGoals).data ?? [];
+  const pid = getActivePortfolioId();
+  return useApi(() => fetchGoals(pid ?? undefined), [pid]).data ?? [];
 }
 
 export function useAchievements(): Achievement[] {
@@ -605,7 +612,8 @@ export function useArchivedReports(): ArchivedReport[] {
 }
 
 export function useDashboard(): DashboardPayload | null {
-  return useApi(fetchDashboard).data;
+  const pid = getActivePortfolioId();
+  return useApi(() => fetchDashboard(pid ?? undefined), [pid]).data;
 }
 
 export function useForexSymbols(): string[] {

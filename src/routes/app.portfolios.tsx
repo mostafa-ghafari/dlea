@@ -1,6 +1,6 @@
 import { AppShell } from "@/components/AppShell";
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { Plus, MoreVertical, Wallet, Archive, ArchiveRestore, Edit, Link2, Trash2, Copy, BarChart3 } from "lucide-react";
+import { Plus, MoreVertical, Wallet, Archive, ArchiveRestore, Edit, Link2, Trash2, Copy, BarChart3, Zap } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -25,10 +25,10 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { createPortfolio, deletePortfolio, fetchPortfolios, updatePortfolio, type Portfolio, usePlanLimits } from "@/lib/api";
+import { createPortfolio, deletePortfolio, fetchPortfolios, updatePortfolio, activatePortfolio, type Portfolio, usePlanLimits } from "@/lib/api";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import { useHasPortfolio } from "@/lib/app-state";
+import { useHasPortfolio, useActivePortfolioId } from "@/lib/app-state";
 
 export const Route = createFileRoute("/app/portfolios")({
   head: () => ({ meta: [{ title: "پرتفولیوها" }] }),
@@ -37,6 +37,7 @@ export const Route = createFileRoute("/app/portfolios")({
 
 function Portfolios() {
   const [portfolios, setPortfolios] = useState<Portfolio[]>([]);
+  const [activeId, setActiveId] = useActivePortfolioId();
   const [, setHasPortfolio] = useHasPortfolio();
   const [open, setOpen] = useState(false);
   const [loaded, setLoaded] = useState(false);
@@ -104,6 +105,17 @@ function Portfolios() {
       toast.success(`پرتفولیو «${p.name}» حذف شد`);
     } catch (err) {
       toast.error(`حذف پرتفولیو ناموفق بود: ${err instanceof Error ? err.message : err}`);
+    }
+  }
+
+  async function activate(p: Portfolio) {
+    try {
+      await activatePortfolio(p.id);
+      setActiveId(p.id);
+      setPortfolios((list) => list.map((x) => ({ ...x, is_active: x.id === p.id })));
+      toast.success(`${p.name} فعال شد — تمام بخش‌ها با این پرتفولیو آپدیت شد`);
+    } catch (err) {
+      toast.error(`فعال‌سازی پرتفولیو ناموفق بود: ${err instanceof Error ? err.message : err}`);
     }
   }
 
@@ -262,7 +274,7 @@ function Portfolios() {
           const pnl = p.balance - p.initial;
           const pct = p.initial ? (pnl / p.initial) * 100 : 0;
           return (
-            <div key={p.id} className="card-surface p-5 transition-all hover:border-primary/40">
+            <div key={p.id} className={`card-surface p-5 transition-all hover:border-primary/40 ${activeId === p.id ? "border-primary ring-1 ring-primary/30" : ""}`}>
               <div className="flex items-start justify-between">
                 <div className="flex items-center gap-3">
                   <div className="grid h-11 w-11 place-items-center rounded-lg bg-primary/10 text-primary">
@@ -337,9 +349,15 @@ function Portfolios() {
               </div>
 
               <div className="mt-4 flex gap-2">
-                <Button size="sm" variant="outline" className="flex-1" onClick={() => toast.success(`اتصال ${p.name} به متاتریدر شروع شد`)}>
-                  <Link2 className="ml-1 h-3 w-3" />اتصال MT
-                </Button>
+                {activeId === p.id ? (
+                  <Button size="sm" className="flex-1 bg-primary text-primary-foreground" disabled>
+                    ✓ فعال
+                  </Button>
+                ) : (
+                  <Button size="sm" variant="outline" className="flex-1" onClick={() => activate(p)}>
+                    <Zap className="ml-1 h-3 w-3" />فعال‌سازی
+                  </Button>
+                )}
                 <Button size="sm" variant="outline" aria-label="ویرایش" onClick={() => openEdit(p)}><Edit className="h-3 w-3" /></Button>
                 <Button size="sm" variant="outline" aria-label="آرشیو" onClick={() => toggleArchive(p)}><Archive className="h-3 w-3" /></Button>
               </div>

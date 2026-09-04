@@ -169,10 +169,24 @@ class JournalEntryViewSet(UserScopedMixin, viewsets.ModelViewSet):
     queryset = JournalEntry.objects.select_related("group").all()
     serializer_class = JournalEntrySerializer
 
+    def get_queryset(self):
+        qs = super().get_queryset()
+        portfolio_id = self.request.query_params.get("portfolio")
+        if portfolio_id:
+            qs = qs.filter(portfolio__id=portfolio_id)
+        return qs
+
 
 class GoalViewSet(UserScopedMixin, viewsets.ModelViewSet):
     queryset = Goal.objects.all()
     serializer_class = GoalSerializer
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        portfolio_id = self.request.query_params.get("portfolio")
+        if portfolio_id:
+            qs = qs.filter(portfolio__id=portfolio_id)
+        return qs
 
 
 class AchievementViewSet(viewsets.ReadOnlyModelViewSet):
@@ -750,12 +764,16 @@ class DashboardView(APIView):
     """
 
     def get(self, request):
+        portfolio_id = request.query_params.get("portfolio")
         if request.user.is_authenticated:
             trades = Trade.objects.filter(portfolio__user=request.user).order_by("close_time")
             portfolios = Portfolio.objects.filter(user=request.user)
         else:
             trades = Trade.objects.filter(portfolio__user__isnull=True).order_by("close_time")
             portfolios = Portfolio.objects.filter(user__isnull=True)
+        if portfolio_id:
+            trades = trades.filter(portfolio__id=portfolio_id)
+            portfolios = portfolios.filter(id=portfolio_id)
 
         total = trades.count()
         winners = trades.filter(pnl__gt=0).count()

@@ -77,3 +77,30 @@ export function useHasPortfolio(): [boolean, (v: boolean) => void, boolean] {
   const ready = lsReady && !loading;
   return [hasPortfolio, setManual, ready];
 }
+export const ACTIVE_PORTFOLIO_KEY = "dlea:active-portfolio";
+
+/** Get the currently active portfolio ID from localStorage. */
+export function getActivePortfolioId(): string | null {
+  if (typeof window === "undefined") return null;
+  return window.localStorage.getItem(ACTIVE_PORTFOLIO_KEY);
+}
+
+/** Set the active portfolio ID in localStorage. */
+export function setActivePortfolioId(id: string | null) {
+  if (typeof window === "undefined") return;
+  if (id) {
+    window.localStorage.setItem(ACTIVE_PORTFOLIO_KEY, id);
+  } else {
+    window.localStorage.removeItem(ACTIVE_PORTFOLIO_KEY);
+  }
+}
+
+/** React hook for the active portfolio ID. */
+export function useActivePortfolioId(): [string | null, (id: string | null) => void] {
+  const [id, setId] = useLocalState<string | null>(ACTIVE_PORTFOLIO_KEY, null);
+  const set = useCallback((next: string | null) => {
+    setId(next);
+    setActivePortfolioId(next);
+  }, [setId]);
+  return [id, set];
+}
