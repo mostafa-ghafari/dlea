@@ -130,9 +130,11 @@ function normalizeMtDate(raw: string): string {
 function parseXlsx(buffer: ArrayBuffer): ParsedTrade[] {
   const wb = XLSX.read(buffer, { type: "array" });
   const ws = wb.Sheets[wb.SheetNames[0]];
-  const raw: string[][] = XLSX.utils.sheet_to_json(ws, { header: 1, defval: "" });
-  // Convert each row to the same format parseStatement expects
-  const rows: string[][] = raw.filter((r: string[]) => r.length >= 6);
+  const raw = XLSX.utils.sheet_to_json(ws, { header: 1, defval: "" });
+  // Convert all cell values to strings (XLSX can return numbers)
+  const rows: string[][] = raw
+    .map((r: unknown[]) => r.map((v) => v == null ? "" : String(v)))
+    .filter((r: string[]) => r.length >= 6);
   const num = (v: string) => Number(String(v).replace(/[^\d.\-]/g, ""));
   const trades: ParsedTrade[] = [];
 
