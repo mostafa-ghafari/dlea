@@ -25,7 +25,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { fetchCoachPeriods, generateCoachReport, useAiInsights, useApi } from "@/lib/api";
+import { fetchCoachPeriods, generateCoachReport, useAiInsights, useApi, usePlanLimits } from "@/lib/api";
 import { scopeLabels, type CoachScope } from "@/lib/ai-coach-data";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -50,9 +50,13 @@ const severityStyle: Record<string, string> = {
 
 function AiCoach() {
   const insights = useAiInsights();
+  const limits = usePlanLimits();
   const periodsApi = useApi(fetchCoachPeriods);
   const coachPeriods = periodsApi.data ?? [];
   const [generating, setGenerating] = useState(false);
+  const existingCount = coachPeriods.length;
+  const isFree = limits.slug === "free";
+  const canAnalyze = !isFree || existingCount < 1;
   const models = insights?.models ?? [];
   const [model, setModel] = useState<string | undefined>(undefined);
   // Sync model when models load from API — pick the first available model
@@ -94,9 +98,9 @@ function AiCoach() {
 
   return (
     <AppShell title="مربی هوشمند AI" subtitle="تحلیل عملکرد در هر بازه زمانی؛ با تمرکز روی ضعف‌ها و راهکار رفع آن‌ها" actions={
-      <Button className="bg-primary text-primary-foreground hover:bg-primary/90" disabled={generating} onClick={runNewAnalysis}>
+      <Button className="bg-primary text-primary-foreground hover:bg-primary/90" disabled={generating || !canAnalyze} onClick={runNewAnalysis}>
         <RefreshCw className={`ml-1 h-4 w-4 ${generating ? "animate-spin" : ""}`} />
-        {generating ? "در حال تحلیل با Gemini..." : "تحلیل جدید"}
+        {generating ? "در حال تحلیل با Gemini..." : canAnalyze ? "تحلیل جدید" : "محدودت تحلیل رایگان"}
       </Button>
     }>
       {/* Model selector */}

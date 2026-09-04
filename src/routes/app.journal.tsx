@@ -289,10 +289,16 @@ function JournalPage() {
 
   return (
     <AppShell title="ژورنال معاملاتی" subtitle="یادداشت و تحلیل معاملات" actions={
+      <>
+      <Button className="bg-primary text-primary-foreground hover:bg-primary/90" onClick={openNew}>
+        <Plus className="ml-1 h-4 w-4" />
+        ژورنال جدید
+      </Button>
       <Button variant="outline" onClick={() => setGroupOpen(true)}>
         <FolderPlus className="ml-1 h-4 w-4" />
         گروه‌ها
       </Button>
+      </>
     }>
       <Dialog open={groupOpen} onOpenChange={setGroupOpen}>
             <DialogContent>

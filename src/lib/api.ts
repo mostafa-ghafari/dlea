@@ -687,7 +687,7 @@ const PLAN_LIMITS_MAP: Record<string, PlanLimits> = {
     slug: "free",
     maxPortfolios: 1,
     maxTradesPerMonth: 50,
-    features: ["portfolios", "trades", "journal", "calendar", "goals", "achievements", "news", "support", "settings"],
+    features: ["portfolios", "trades", "journal", "calendar", "goals", "achievements", "news", "support", "settings", "ai-coach", "risk"],
   },
   pro: {
     slug: "pro",

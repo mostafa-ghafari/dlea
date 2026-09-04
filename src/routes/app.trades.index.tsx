@@ -39,7 +39,7 @@ function TradesPage() {
   const DEFAULT_COLS = ["symbol", "side", "entry", "exit", "sl", "tp", "rr", "pnl", "date"];
   const ALL_COL_KEYS = ["id", "symbol", "side", "entry", "exit", "sl", "tp", "volume", "rr", "pnl", "followedPlan", "date", "screenshots"] as const;
   const COL_LABELS: Record<string, string> = { id: "شناسه", symbol: "نماد", side: "نوع", entry: "ورود", exit: "خروج", sl: "SL", tp: "TP", volume: "حجم", rr: "R:R", pnl: "سود/زیان", followedPlan: "پلن", date: "تاریخ", screenshots: "اسکرین‌شات" };
-  const [visibleColumns, setVisibleColumns] = useState<string[]>([...DEFAULT_COLS]);
+  const [visibleColumns, setVisibleColumns] = useLocalState<string[]>("dlea:trade-columns", [...DEFAULT_COLS]);
   function toggleColumn(key: string) {
     setVisibleColumns((prev) => prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]);
   }

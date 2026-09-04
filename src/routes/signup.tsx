@@ -1,6 +1,6 @@
 import { Link, createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { LineChart, ArrowLeft, CheckCircle2, Mail, Loader2 } from "lucide-react";
+import { LineChart, ArrowLeft, CheckCircle2, Mail, Loader2, Eye, EyeOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -29,6 +29,7 @@ function SignupPage() {
   const [googleLoading, setGoogleLoading] = useState(false);
   const [countdown, setCountdown] = useState(0);
   const [debugOtp, setDebugOtp] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
 
   // Initialize Google Identity Services
   useEffect(() => {
@@ -220,7 +221,12 @@ function SignupPage() {
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="password">رمز عبور</Label>
-                    <Input id="password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="حداقل ۸ کاراکتر" className="bg-secondary/60" />
+                    <div className="relative">
+                      <Input id="password" type={showPassword ? "text" : "password"} value={password} onChange={(e) => setPassword(e.target.value)} placeholder="حداقل ۸ کاراکتر" className="bg-secondary/60 pl-10" />
+                      <button type="button" tabIndex={-1} onClick={() => setShowPassword(!showPassword)} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+                        {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      </button>
+                    </div>
                   </div>
                   <Button type="submit" disabled={loading} className="mt-2 w-full bg-primary text-primary-foreground hover:bg-primary/90">
                     {loading ? <Loader2 className="ml-2 h-4 w-4 animate-spin" /> : <ArrowLeft className="mr-1 h-4 w-4" />}

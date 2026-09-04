@@ -24,7 +24,7 @@ export const Route = createFileRoute("/contact")({
 
 const teamMembers = [
   {
-    name: "دکتر رضا غلارمضایی",
+    name: "دکتر رضا غلامرضایی",
     role: "فاندر پروژه",
     email: "rezagholamrezaei1377@gmail.com",
     phones: ["+989215429539", "+983146372557"],

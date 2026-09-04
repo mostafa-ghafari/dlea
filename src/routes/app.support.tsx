@@ -22,6 +22,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { usePlatform, type TicketStatus, type TicketTopic } from "@/lib/platform-store";
+import { useCurrentUser } from "@/lib/app-state";
 
 export const Route = createFileRoute("/app/support")({
   head: () => ({
@@ -46,7 +47,8 @@ export function statusClass(status: TicketStatus) {
 
 function SupportPage() {
   const { tickets, createTicket, replyTicket } = usePlatform();
-  const mine = tickets.filter((t) => t.email === "ali@example.com");
+  const currentUser = useCurrentUser();
+  const mine = tickets.filter((t) => !currentUser || t.email === currentUser.email);
 
   const [subject, setSubject] = useState("");
   const [topic, setTopic] = useState<TicketTopic>("فنی");
