@@ -63,6 +63,7 @@ export type Portfolio = {
   trades: number;
   status: string;
   strategy: string;
+  is_active?: boolean;
 };
 
 export type Goal = {
