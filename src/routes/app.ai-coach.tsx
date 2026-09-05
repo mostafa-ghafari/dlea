@@ -52,7 +52,8 @@ const severityStyle: Record<string, string> = {
 function AiCoach() {
   const insights = useAiInsights();
   const limits = usePlanLimits();
-  const periodsApi = useApi(fetchCoachPeriods);
+  const [activePortfolioId] = useActivePortfolioId();
+  const periodsApi = useApi(() => fetchCoachPeriods(activePortfolioId ?? undefined), [activePortfolioId]);
   const coachPeriods = periodsApi.data ?? [];
   const [generating, setGenerating] = useState(false);
   const existingCount = coachPeriods.length;
@@ -74,7 +75,6 @@ function AiCoach() {
   const [scope, setScope] = useState<CoachScope>("weekly");
   const list = useMemo(() => coachPeriods.filter((p) => p.scope === scope), [scope, coachPeriods]);
   const [index, setIndex] = useState(0);
-  const [activePortfolioId] = useActivePortfolioId();
   const period = list[Math.min(index, list.length - 1)];
 
   function changeScope(next: CoachScope) {
