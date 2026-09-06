@@ -88,10 +88,7 @@ const nav = [
   { to: "/app/admin/logs", icon: Activity, label: "لاگ‌ها", feature: null, admin: true },
 ] as const;
 
-const staticNotifications = [
-  { id: "S-1", kind: "system" as const, title: "نزدیک به سقف ریسک روزانه", desc: "به ۸۰٪ ریسک روزانه رسیدی.", time: "۵ دقیقه پیش", link: "/app/risk", read: false },
-  { id: "S-2", kind: "system" as const, title: "نشان جدید کسب کردی", desc: "«۷ روز پایبند به پلن» فعال شد.", time: "دیروز", link: "/app/achievements", read: false },
-];
+
 
 function notifIcon(kind: string) {
   if (kind === "news") return Megaphone;
@@ -340,18 +337,14 @@ function NavList({ onNavigate, collapsed = false }: { onNavigate?: () => void; c
   );
 }
 
-const adminStaticNotifications = [
-  { id: "AS-1", kind: "system" as const, title: "کاربر جدید ثبت‌نام کرد", desc: "یک کاربر جدید به تازگی در سیستم ثبت‌نام کرده است.", time: "۱۰ دقیقه پیش", link: "/app/admin/users", read: false },
-  { id: "AS-2", kind: "system" as const, title: "اشتراک جدید فعال شد", desc: "یک کاربر اشتراک Pro را فعال کرد.", time: "۱ ساعت پیش", link: "/app/admin/payments", read: false },
-  { id: "AS-3", kind: "system" as const, title: "تیکت پشتیبانی جدید", desc: "یک تیکت پشتیبانی جدید نیاز به بررسی دارد.", time: "۳ ساعت پیش", link: "/app/admin/tickets", read: false },
-];
+
 
 function NotificationsMenu() {
   const { notifications, markAllRead, markRead, dismissNotification, dismissAllNotifications } = usePlatform();
   const navigate = useNavigate();
   const roleData4 = useRole();
   const isAdminNotif = roleData4?.effective === "admin";
-  const all = isAdminNotif ? [...notifications, ...adminStaticNotifications] : [...notifications, ...staticNotifications];
+  const all = notifications;
   const unread = all.filter((n) => !n.read).length;
 
   return (
