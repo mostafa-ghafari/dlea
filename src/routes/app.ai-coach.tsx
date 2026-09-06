@@ -25,7 +25,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { fetchCoachPeriods, generateCoachReport, useAiInsights, useApi, usePlanLimits } from "@/lib/api";
+import { fetchCoachPeriods, generateCoachReport, invalidateCache, useAiInsights, useApi, usePlanLimits } from "@/lib/api";
 import { scopeLabels, type CoachScope } from "@/lib/ai-coach-data";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -89,6 +89,7 @@ function AiCoach() {
       await generateCoachReport(scope, model, activePortfolioId ?? undefined);
       toast.success(`تحلیل ${scopeLabels[scope]} با ${activeModel.name} ساخته شد و در لیست بازه‌ها ذخیره شد.`);
       // The fresh report has the newest sort_key, so it lands at the top of its scope list.
+      invalidateCache("coach/periods");
       await periodsApi.reload();
       setIndex(0);
     } catch (e) {
