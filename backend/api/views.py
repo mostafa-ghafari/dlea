@@ -455,8 +455,33 @@ class TicketViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         qs = super().get_queryset()
         if self.request.user.is_authenticated:
+            # Admins/staff see all tickets; regular users see only their own.
+            if self.request.user.is_staff:
+                return qs
             return qs.filter(email=self.request.user.email)
         return qs.none()
+
+    def perform_create(self, serializer):
+        ticket = serializer.save()
+        # Notify all admin users that a new ticket was created.
+        if self.request.user.is_authenticated:
+            from django.contrib.auth import get_user_model
+            User = get_user_model()
+            admin_emails = (
+                User.objects.filter(is_staff=True)
+                .exclude(email=self.request.user.email)
+                .values_list("email", flat=True)
+            )
+            from django.utils import timezone
+            for admin_email in admin_emails:
+                Notification.objects.create(
+                    user=User.objects.filter(email=admin_email).first(),
+                    kind="ticket",
+                    title=f"تیکت جدید: {ticket.subject}",
+                    desc=f"کاربر {ticket.user} تیکتی با موضوع «{ticket.topic}» ثبت کرد.",
+                    time=timezone.localdate(),
+                    link="/app/admin/tickets",
+                )
 
     @action(detail=True, methods=["post"])
     def reply(self, request, pk=None):
@@ -480,6 +505,42 @@ class TicketViewSet(viewsets.ModelViewSet):
         elif ticket.status == "بسته":
             ticket.status = "باز"
         ticket.save(update_fields=["status", "updated_at"])
+
+        # --- Create notifications ---
+        from django.contrib.auth import get_user_model
+        from django.utils import timezone
+        User = get_user_model()
+
+        if author == "admin":
+            # Admin replied → notify the ticket owner
+            ticket_owner = User.objects.filter(email=ticket.email).first()
+            if ticket_owner and (not request.user.is_authenticated or ticket_owner.email != request.user.email):
+                Notification.objects.create(
+                    user=ticket_owner,
+                    kind="ticket",
+                    title=f"پاسخ جدید برای تیکت {ticket.subject}",
+                    desc=body[:120],
+                    time=timezone.localdate(),
+                    link="/app/support",
+                )
+        else:
+            # User replied → notify all admins
+            if request.user.is_authenticated:
+                admin_emails = (
+                    User.objects.filter(is_staff=True)
+                    .exclude(email=request.user.email)
+                    .values_list("email", flat=True)
+                )
+                for admin_email in admin_emails:
+                    Notification.objects.create(
+                        user=User.objects.filter(email=admin_email).first(),
+                        kind="ticket",
+                        title=f"پاسخ جدید کاربر در تیکت {ticket.subject}",
+                        desc=f"{ticket.user}: {body[:120]}",
+                        time=timezone.localdate(),
+                        link="/app/admin/tickets",
+                    )
+
         from .serializers import TicketMessageSerializer
 
         return Response(TicketMessageSerializer(msg).data, status=201)

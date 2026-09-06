@@ -231,17 +231,11 @@ export function PlatformProvider({ children }: { children: ReactNode }) {
               : t,
           ),
         );
+        // Backend creates the notification for the correct recipient
+        // (admin reply → user, user reply → admins).
         void post(`tickets/${id}/reply/`, { author, body, attachments }).catch(() => {
           /* optimistic write failed */
         });
-        if (author === "admin") {
-          pushNotification({
-            kind: "ticket",
-            title: `پاسخ جدید برای تیکت ${id}`,
-            desc: body.slice(0, 70),
-            link: "/app/support",
-          });
-        }
       },
       setTicketStatus: (id, status) => {
         setTickets((list) => list.map((t) => (t.id === id ? { ...t, status, updatedAt: nowStamp() } : t)));
