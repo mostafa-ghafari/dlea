@@ -1,0 +1,49 @@
+import {
+  LayoutDashboard,
+  Wallet,
+  LineChart,
+  BookOpen,
+  Sparkles,
+  CalendarDays,
+  ShieldCheck,
+  ShieldAlert,
+  Target,
+  Trophy,
+  Settings,
+  Users,
+  CreditCard,
+  TrendingUp,
+  Megaphone,
+  LifeBuoy,
+  Cpu,
+  Activity,
+} from "lucide-react";
+import type { PlanFeature } from "@/lib/api";
+
+export const nav = [
+  { to: "/app/dashboard", icon: LayoutDashboard, label: "داشبورد", feature: null, admin: false },
+  { to: "/app/portfolios", icon: Wallet, label: "پرتفولیوها", feature: "portfolios" as PlanFeature, admin: false },
+  { to: "/app/trades", icon: LineChart, label: "معاملات", feature: "trades" as PlanFeature, admin: false },
+  { to: "/app/journal", icon: BookOpen, label: "ژورنال", feature: "journal" as PlanFeature, admin: false },
+  { to: "/app/ai-coach", icon: Sparkles, label: "مربی هوشمند", feature: "ai-coach" as PlanFeature, admin: false },
+  { to: "/app/calendar", icon: CalendarDays, label: "تقویم معاملاتی", feature: "calendar" as PlanFeature, admin: false },
+  { to: "/app/risk", icon: ShieldCheck, label: "مدیریت ریسک", feature: "risk" as PlanFeature, admin: false },
+  { to: "/app/goals", icon: Target, label: "اهداف", feature: "goals" as PlanFeature, admin: false },
+  { to: "/app/achievements", icon: Trophy, label: "نشان‌ها", feature: "achievements" as PlanFeature, admin: false },
+  { to: "/app/news", icon: Megaphone, label: "اخبار و اطلاعیه‌ها", feature: "news" as PlanFeature, admin: false },
+  { to: "/app/support", icon: LifeBuoy, label: "پشتیبانی", feature: "support" as PlanFeature, admin: false },
+  { to: "/app/settings", icon: Settings, label: "تنظیمات", feature: "settings" as PlanFeature, admin: false },
+  { to: "/app/billing", icon: CreditCard, label: "خرید اشتراک", feature: null, admin: false },
+  // Admin-only items
+  { to: "/app/admin/dashboard", icon: LayoutDashboard, label: "داشبورد مدیریت", feature: null, admin: true },
+  { to: "/app/admin/users", icon: Users, label: "مدیریت کاربران", feature: null, admin: true },
+  { to: "/app/admin/payments", icon: CreditCard, label: "پرداخت‌ها", feature: null, admin: true },
+  { to: "/app/admin/plans", icon: TrendingUp, label: "مدیریت پلن‌ها", feature: null, admin: true },
+  { to: "/app/admin/news", icon: Megaphone, label: "اخبار (مدیریت)", feature: null, admin: true },
+  { to: "/app/admin/tickets", icon: LifeBuoy, label: "پشتیبانی (مدیریت)", feature: null, admin: true },
+  { to: "/app/admin/apis", icon: Cpu, label: "API هوش مصنوعی", feature: null, admin: true },
+  { to: "/app/admin/audit", icon: ShieldAlert, label: "Audit Log", feature: null, admin: true },
+  { to: "/app/admin/logs", icon: Activity, label: "لاگ‌ها", feature: null, admin: true },
+] as const;
+
+export type NavItem = typeof nav[number];
