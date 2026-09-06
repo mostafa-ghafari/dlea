@@ -423,15 +423,46 @@ function NotificationsMenu() {
 function GlobalSearch() {
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
-  const [q, setQ] = useState("");
-  const trades = useTrades();
-  const journalEntries = useJournalEntries();
   const roleData3 = useRole();
   const isAdmin = roleData3?.effective === "admin";
-  const allUsers = useUsers();
 
   const adminPages = nav.filter((n) => n.admin);
   const userPages = nav.filter((n) => !n.admin);
+
+  function go(to: string) {
+    setOpen(false);
+    void navigate({ to });
+  }
+
+  return (
+    <>
+      <button
+        onClick={() => setOpen(true)}
+        className="relative flex h-10 w-full min-w-0 max-w-md items-center rounded-md border border-border bg-secondary/60 pr-9 pl-3 text-right text-sm text-muted-foreground transition-colors hover:border-primary/40"
+      >
+        <Search className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+        <span className="truncate">{isAdmin ? "جستجو در بخش‌های مدیریت..." : "جستجو در صفحات، معاملات و ژورنال..."}</span>
+      </button>
+
+      <Dialog open={open} onOpenChange={setOpen}>
+        {open && <GlobalSearchContent isAdmin={isAdmin} adminPages={adminPages} userPages={userPages} go={go} />}
+      </Dialog>
+    </>
+  );
+}
+
+/** Rendered inside the Dialog — only mounts when open, so its heavy
+ *  data hooks (trades, journal, users) don't fire on every page load. */
+function GlobalSearchContent({ isAdmin, adminPages, userPages, go }: {
+  isAdmin: boolean;
+  adminPages: readonly (typeof nav)[number][];
+  userPages: readonly (typeof nav)[number][];
+  go: (to: string) => void;
+}) {
+  const [q, setQ] = useState("");
+  const trades = useTrades();
+  const journalEntries = useJournalEntries();
+  const allUsers = useUsers();
 
   const results = useMemo(() => {
     const term = q.trim().toLowerCase();
@@ -453,24 +484,8 @@ function GlobalSearch() {
     } as const;
   }, [q, trades, journalEntries, isAdmin, allUsers]);
 
-  function go(to: string) {
-    setOpen(false);
-    setQ("");
-    void navigate({ to });
-  }
-
   return (
-    <>
-      <button
-        onClick={() => setOpen(true)}
-        className="relative flex h-10 w-full min-w-0 max-w-md items-center rounded-md border border-border bg-secondary/60 pr-9 pl-3 text-right text-sm text-muted-foreground transition-colors hover:border-primary/40"
-      >
-        <Search className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-        <span className="truncate">{isAdmin ? "جستجو در بخش‌های مدیریت..." : "جستجو در صفحات، معاملات و ژورنال..."}</span>
-      </button>
-
-      <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-w-lg">
+    <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle>جستجوی سریع</DialogTitle>
             <DialogDescription>{isAdmin ? "نام بخش مدیریت را بنویس." : "نام صفحه، نماد معامله، شماره تیکت یا عنوان ژورنال را بنویس."}</DialogDescription>
@@ -529,10 +544,9 @@ function GlobalSearch() {
             )}
           </div>
         </DialogContent>
-      </Dialog>
-    </>
   );
 }
+
 
 /** Onboarding gate: the first mandatory action is creating a portfolio. */
 function PortfolioGate() {

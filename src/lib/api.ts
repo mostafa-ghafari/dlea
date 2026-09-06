@@ -180,7 +180,37 @@ function getAccessToken(): string | null {
   }
 }
 
+// ── In-memory GET cache + request deduplication ──────────────────────
+// Prevents redundant network requests when multiple components mount
+// and call the same hook (e.g. useRole) at the same time, or when
+// navigating between pages and re-mounting the layout.
+const _getCache = new Map<string, { data: unknown; ts: number }>();
+const _inflight = new Map<string, Promise<unknown>>();
+const CACHE_TTL_MS = 60_000; // serve fresh data for 60 s
+
+/** Evict any cached GET entries whose path starts with `prefix`. */
+export function invalidateCache(prefix: string) {
+  for (const key of _getCache.keys()) {
+    if (key.startsWith(prefix)) _getCache.delete(key);
+  }
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const method = (init?.method ?? "GET").toUpperCase();
+
+  // ── Cache check for GET requests ──────────────────────────────────
+  if (method === "GET") {
+    const cached = _getCache.get(path);
+    if (cached && Date.now() - cached.ts < CACHE_TTL_MS) {
+      return cached.data as T;
+    }
+    // Deduplicate concurrent in-flight requests
+    const inflight = _inflight.get(path);
+    if (inflight) {
+      return inflight as Promise<T>;
+    }
+  }
+
   const headers: Record<string, string> = {};
   // Don't set Content-Type for FormData — browser sets it with boundary
   if (!(init?.body instanceof FormData)) {
@@ -188,37 +218,61 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   }
   const token = getAccessToken();
   if (token) headers.Authorization = `Bearer ${token}`;
-  const res = await fetch(`${API_BASE}/${path.replace(/^\//, "")}`, {
+
+  const fetchPromise = fetch(`${API_BASE}/${path.replace(/^\//, "")}`, {
     headers,
     ...init,
-  });
-  if (!res.ok) {
-    let detail = `API ${res.status}: ${path}`;
-    try {
-      const body = (await res.json()) as { detail?: string };
-      if (body?.detail) detail = body.detail;
-    } catch {
-      /* non-JSON error body */
-    }
-    throw new Error(detail);
+  })
+    .then(async (res) => {
+      if (!res.ok) {
+        let detail = `API ${res.status}: ${path}`;
+        try {
+          const body = (await res.json()) as { detail?: string };
+          if (body?.detail) detail = body.detail;
+        } catch {
+          /* non-JSON error body */
+        }
+        throw new Error(detail);
+      }
+      if (res.status === 204) {
+        return undefined as T;
+      }
+      const text = await res.text();
+      if (!text) return undefined as T;
+      const data = JSON.parse(text) as unknown;
+      // DRF pagination wrapper: { count, next, previous, results }
+      if (data && typeof data === "object" && Array.isArray((data as { results?: unknown }).results)) {
+        const keys = Object.keys(data as object);
+        const isStandardDRF = keys.every((k) => ["count", "next", "previous", "results"].includes(k));
+        if (isStandardDRF) {
+          return (data as { results: T }).results;
+        }
+      }
+      return data as T;
+    });
+
+  // Track in-flight GETs for deduplication
+  if (method === "GET") {
+    _inflight.set(path, fetchPromise as Promise<unknown>);
+    fetchPromise
+      .then((data) => {
+        _getCache.set(path, { data, ts: Date.now() });
+      })
+      .catch(() => {
+        // Don't cache errors
+      })
+      .finally(() => {
+        _inflight.delete(path);
+      });
   }
-  if (res.status === 204) {
-    // DRF returns 204 No Content for DELETE — there is no body to parse.
-    return undefined as T;
+
+  // Invalidate stale GET entries when a mutation happens to the same prefix
+  if (method !== "GET") {
+    const prefix = path.split("?")[0].replace(/\/$/, "");
+    invalidateCache(prefix);
   }
-  const text = await res.text();
-  if (!text) return undefined as T;
-  const data = JSON.parse(text) as unknown;
-  // DRF pagination wrapper: { count, next, previous, results }
-  // Only unwrap when it's the standard DRF pagination (no extra fields like page/page_size)
-  if (data && typeof data === "object" && Array.isArray((data as { results?: unknown }).results)) {
-    const keys = Object.keys(data as object);
-    const isStandardDRF = keys.every((k) => ["count", "next", "previous", "results"].includes(k));
-    if (isStandardDRF) {
-      return (data as { results: T }).results;
-    }
-  }
-  return data as T;
+
+  return fetchPromise;
 }
 
 export function get<T>(path: string) {
@@ -315,6 +369,7 @@ export type PortfolioInput = {
   trades?: number;
   status?: string;
   strategy?: string;
+  is_active?: boolean;
 };
 
 export function createPortfolio(input: PortfolioInput) {
