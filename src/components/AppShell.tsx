@@ -340,10 +340,8 @@ function NavList({ onNavigate, collapsed = false }: { onNavigate?: () => void; c
 
 
 function NotificationsMenu() {
-  const { notifications, markAllRead, markRead, dismissNotification, dismissAllNotifications } = usePlatform();
+  const { notifications, dismissNotification, dismissAllNotifications } = usePlatform();
   const navigate = useNavigate();
-  const roleData4 = useRole();
-  const isAdminNotif = roleData4?.effective === "admin";
   const all = notifications;
   const unread = all.filter((n) => !n.read).length;
 
@@ -361,7 +359,7 @@ function NotificationsMenu() {
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-80">
         <DropdownMenuLabel className="flex items-center justify-between">
-          <span>{isAdminNotif ? "اعلان‌های مدیریت" : "اعلان‌ها"}</span>
+          <span>اعلان‌ها</span>
           <button
             onClick={() => {
               dismissAllNotifications();
@@ -374,6 +372,11 @@ function NotificationsMenu() {
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
         <div className="max-h-80 overflow-y-auto">
+          {all.length === 0 && (
+            <div className="py-8 text-center text-sm text-muted-foreground">
+              اعلانی وجود ندارد
+            </div>
+          )}
           {all.map((n) => {
             const Icon = notifIcon(n.kind);
             return (
