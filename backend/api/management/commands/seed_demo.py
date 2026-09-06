@@ -11,7 +11,7 @@ PLAN_CHOICES = ["رایگان", "Pro", "Pro Max", "VIP"]
 PLAN_PRICES = {"Pro": "299000", "Pro Max": "599000", "VIP": "999000"}
 STATUS_CHOICES = ["موفق", "موفق", "موفق", "ناموفق"]  # 75% success
 
-AI_MODELS = ["gemini-2.0-flash", "gemini-3.1-pro-preview"]
+AI_MODELS = ["gemini-2.0-flash", "gemini-1.5-pro"]
 AI_ENDPOINTS = ["/api/coach/generate/", "/api/coach/insights/"]
 
 
