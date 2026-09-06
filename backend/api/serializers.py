@@ -271,34 +271,32 @@ class AchievementSerializer(serializers.ModelSerializer):
         count = trades.count()
         if count == 0:
             return False
-        # Simple heuristic: earned if user has enough activity
-        # id range mapping from seed: 113-128 (16 achievements)
-        obj_id = obj.id
         total_pnl = sum(float(t.pnl or 0) for t in trades)
         win_count = trades.filter(pnl__gt=0).count()
         win_rate = (win_count / count * 100) if count else 0
         portfolio_count = Portfolio.objects.filter(user=user).count()
         has_mt = portfolio_count > 0 and trades.count() > 0
-        # Map achievement rules to simple checks
+        # Map achievement titles to simple heuristic checks
+        title = obj.title
         rules = {
-            113: count >= 10,               # 7 consecutive plan days → approx trades >= 10
-            114: total_pnl > 0,              # drawdown reduction → simplified
-            115: count >= 20,                 # no revenge trade → approx
-            116: count >= 100,                # 100 trades
-            117: win_rate > 50 and count >= 20, # PF > 2
-            118: count >= 30,                 # no emotional entry → approx
-            119: count >= 1,                  # first trade
-            120: count >= 30,                 # 30 days journaling
-            121: total_pnl > 0,               # profitable month
-            122: win_rate > 70 and count >= 20, # WR > 70%
-            123: count >= 50,                 # risk < 1%
-            124: count < 50,                  # no overtrading (less than threshold)
-            125: total_pnl > 0 and count >= 5, # double capital
-            126: count >= 10,                 # 10 A+ trades
-            127: has_mt,                      # MT connected
-            128: count >= 50,                 # checklist master
+            "۷ روز پایبند به پلن": count >= 10,
+            "کاهش دراودان ۵٪": total_pnl > 0,
+            "بدون Revenge Trade در یک ماه": count >= 20,
+            "۱۰۰ معامله ثبت‌شده": count >= 100,
+            "Profit Factor بالای ۲": win_rate > 50 and count >= 20,
+            "بدون ورود احساسی در ۳۰ روز": count >= 30,
+            "اولین معامله ثبت‌شده": count >= 1,
+            "۳۰ روز متوالی ژورنال‌نویسی": count >= 30,
+            "ماه سودده": total_pnl > 0,
+            "Win Rate بالای ۷۰٪": win_rate > 70 and count >= 20,
+            "ریسک زیر ۱٪ در ۵۰ معامله": count >= 50,
+            "بدون Overtrading در ۲ هفته": count < 50,
+            "دابل کردن سرمایه": total_pnl > 0 and count >= 5,
+            "۱۰ معامله A+ متوالی": count >= 10,
+            "اتصال موفق متاتریدر": has_mt,
+            "استاد چکلیست": count >= 50,
         }
-        return rules.get(obj.id, count >= 1)
+        return rules.get(title, count >= 1)
 
 
 class AchievementHistorySerializer(serializers.ModelSerializer):
