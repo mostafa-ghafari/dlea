@@ -29,7 +29,7 @@ echo Upload OK!
 
 echo.
 echo Step 4: Deploying on server...
-ssh ghafari@37.255.212.55 "bash /tmp/deploy.sh"
+ssh ghafari@37.255.212.55 "sed -i 's/\r$//' /tmp/deploy.sh && bash /tmp/deploy.sh"
 if %errorlevel% neq 0 (
     echo Deploy failed!
     exit /b 1
