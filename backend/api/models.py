@@ -225,6 +225,10 @@ class Plan(models.Model):
     highlight = models.BooleanField(default=False)
     sellable = models.BooleanField(default=True)
     users = models.PositiveIntegerField(default=0)
+    # Feature-gating limits (-1 = unlimited)
+    max_portfolios = models.IntegerField(default=-1)
+    max_trades_per_month = models.IntegerField(default=-1)
+    plan_features = models.JSONField(default=list, blank=True)
 
     class Meta:
         ordering = ["id"]

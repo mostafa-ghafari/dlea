@@ -32,6 +32,7 @@ from .views import (
     NewsItemViewSet,
     NotificationViewSet,
     PaymentViewSet,
+    PlanLimitsView,
     PlanViewSet,
     PlatformUserViewSet,
     PortfolioViewSet,
@@ -92,5 +93,6 @@ urlpatterns = [
     path("admin/stats/", AdminStatsView.as_view(), name="admin-stats"),
     path("admin/charts/", AdminChartsView.as_view(), name="admin-charts"),
     path("admin/ai-apis/", AdminAiApisView.as_view(), name="admin-ai-apis"),
+    path("plans/limits/", PlanLimitsView.as_view(), name="plan-limits"),
     path("", include(router.urls)),
 ]

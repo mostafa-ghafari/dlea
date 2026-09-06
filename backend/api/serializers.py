@@ -313,10 +313,13 @@ class AchievementHistorySerializer(serializers.ModelSerializer):
 class PlanSerializer(serializers.ModelSerializer):
     id = serializers.CharField(source="slug", read_only=True)
     portfolioLimit = serializers.CharField(source="portfolio_limit")
+    maxPortfolios = serializers.IntegerField(source="max_portfolios")
+    maxTradesPerMonth = serializers.IntegerField(source="max_trades_per_month")
+    planFeatures = serializers.JSONField(source="plan_features")
 
     class Meta:
         model = Plan
-        fields = ["id", "name", "price", "unit", "tagline", "portfolioLimit", "features", "cta", "highlight", "sellable", "users"]
+        fields = ["id", "name", "price", "unit", "tagline", "portfolioLimit", "features", "cta", "highlight", "sellable", "users", "maxPortfolios", "maxTradesPerMonth", "planFeatures"]
 
 
 class SubscriptionSerializer(serializers.ModelSerializer):

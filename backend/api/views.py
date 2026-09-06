@@ -208,6 +208,22 @@ class PlanViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = PlanSerializer
 
 
+class PlanLimitsView(APIView):
+    """Return plan limits for feature gating (public, no auth required)."""
+    def get(self, request):
+        plans = Plan.objects.all()
+        data = [
+            {
+                "slug": p.slug,
+                "maxPortfolios": p.max_portfolios,
+                "maxTradesPerMonth": p.max_trades_per_month,
+                "features": p.plan_features,
+            }
+            for p in plans
+        ]
+        return Response(data)
+
+
 class SubscriptionViewSet(UserScopedMixin, viewsets.ReadOnlyModelViewSet):
     queryset = Subscription.objects.all()
     serializer_class = SubscriptionSerializer

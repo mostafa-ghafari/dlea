@@ -745,38 +745,24 @@ export type PlanLimits = {
   features: PlanFeature[];
 };
 
-const PLAN_LIMITS_MAP: Record<string, PlanLimits> = {
-  free: {
-    slug: "free",
-    maxPortfolios: 1,
-    maxTradesPerMonth: 50,
-    features: ["portfolios", "trades", "journal", "calendar", "goals", "achievements", "news", "support", "settings", "ai-coach", "risk"],
-  },
-  pro: {
-    slug: "pro",
-    maxPortfolios: -1,
-    maxTradesPerMonth: -1,
-    features: ["portfolios", "trades", "journal", "calendar", "goals", "achievements", "news", "support", "settings", "ai-coach", "risk", "mt-connection", "reports"],
-  },
-  promax: {
-    slug: "promax",
-    maxPortfolios: -1,
-    maxTradesPerMonth: -1,
-    features: ["portfolios", "trades", "journal", "calendar", "goals", "achievements", "news", "support", "settings", "ai-coach", "risk", "mt-connection", "reports", "psychology"],
-  },
-  vip: {
-    slug: "vip",
-    maxPortfolios: -1,
-    maxTradesPerMonth: -1,
-    features: ["portfolios", "trades", "journal", "calendar", "goals", "achievements", "news", "support", "settings", "ai-coach", "risk", "mt-connection", "reports", "psychology"],
-  },
+/** Fallback for when plans API is unavailable. */
+const FREE_LIMITS: PlanLimits = {
+  slug: "free",
+  maxPortfolios: 1,
+  maxTradesPerMonth: 50,
+  features: ["portfolios", "trades", "journal", "calendar", "goals", "achievements", "news", "support", "settings", "ai-coach", "risk"],
 };
+
+/** Fetch plan limits from the backend API. */
+export const fetchPlanLimits = () => get<PlanLimits[]>("plans/limits/");
 
 /** Return the limits for the current subscription. Falls back to "free". */
 export function usePlanLimits(): PlanLimits {
   const sub = useSubscription();
   const slug = sub?.plan?.toLowerCase().replace(/\s+/g, "").replace(/[^a-z0-9-]/g, "") ?? "free";
-  return PLAN_LIMITS_MAP[slug] ?? PLAN_LIMITS_MAP.free;
+  const plans = useApi(fetchPlanLimits).data;
+  if (!plans) return FREE_LIMITS;
+  return plans.find((p) => p.slug === slug) ?? FREE_LIMITS;
 }
 
 /** Check whether a specific feature is allowed for the current plan. */
