@@ -20,6 +20,7 @@ from .views import (
     ArchivedReportViewSet,
     AuditEntryViewSet,
     CalendarDayViewSet,
+    LogEntryViewSet,
     CoachGenerateView,
     CoachInsightsView,
     CoachPeriodViewSet,
@@ -72,6 +73,7 @@ router.register("strategies", StrategyViewSet)
 router.register("trade-columns", TradeColumnViewSet)
 router.register("coach/periods", CoachPeriodViewSet)
 router.register("coach/archive", ArchivedReportViewSet)
+router.register("admin/logs", LogEntryViewSet, basename="admin-log")
 
 urlpatterns = [
     # Auth endpoints

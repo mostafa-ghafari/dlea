@@ -15,6 +15,7 @@ from .models import (
     ArchivedReport,
     AuditEntry,
     CalendarDay,
+    LogEntry,
     CoachInsights,
     CoachPeriod,
     EconomicEvent,
@@ -449,6 +450,19 @@ class AuditEntrySerializer(serializers.ModelSerializer):
 
     def get_time(self, obj):
         return jutils.to_jalali(obj.created_at)
+
+
+class LogEntrySerializer(serializers.ModelSerializer):
+    t = serializers.SerializerMethodField()
+    l = serializers.CharField(source="level")
+    m = serializers.CharField(source="message")
+
+    class Meta:
+        model = LogEntry
+        fields = ["id", "t", "l", "m"]
+
+    def get_t(self, obj):
+        return obj.created_at.strftime("%H:%M:%S")
 
 
 # ---------------------------------------------------------------------------

@@ -353,6 +353,8 @@ export const fetchNews = () => get<NewsItem[]>("news/");
 export const fetchTickets = () => get<Ticket[]>("tickets/");
 export const fetchNotifications = () => get<AppNotification[]>("notifications/");
 export const fetchAudit = () => get<AuditEntry[]>("audit/");
+export type AdminLogEntry = { id: string; t: string; l: string; m: string };
+export const fetchLogs = () => get<AdminLogEntry[]>("admin/logs/");
 
 /* ------------------------------------------------------------------ */
 /* Mutations                                                           */

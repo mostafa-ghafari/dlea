@@ -21,6 +21,7 @@ from .models import (
     ArchivedReport,
     AuditEntry,
     CalendarDay,
+    LogEntry,
     CoachInsights,
     CoachPeriod,
     EconomicEvent,
@@ -53,6 +54,7 @@ from .serializers import (
     ArchivedReportSerializer,
     AuditEntrySerializer,
     CalendarDaySerializer,
+    LogEntrySerializer,
     CoachInsightsSerializer,
     CoachPeriodSerializer,
     EconomicEventSerializer,
@@ -630,6 +632,11 @@ class NotificationViewSet(viewsets.ModelViewSet):
 class AuditEntryViewSet(viewsets.ModelViewSet):
     queryset = AuditEntry.objects.all()
     serializer_class = AuditEntrySerializer
+
+
+class LogEntryViewSet(viewsets.ReadOnlyModelViewSet):
+    queryset = LogEntry.objects.all()
+    serializer_class = LogEntrySerializer
 
 
 class EconomicEventViewSet(viewsets.ReadOnlyModelViewSet):

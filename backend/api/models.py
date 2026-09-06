@@ -530,3 +530,20 @@ class ArchivedReport(models.Model):
 
     def __str__(self):
         return self.title
+
+
+class LogEntry(Timestamped):
+    """System log entries for the admin logs page."""
+    LEVEL_CHOICES = [
+        ("INFO", "INFO"),
+        ("WARN", "WARN"),
+        ("ERROR", "ERROR"),
+    ]
+    level = models.CharField(max_length=16, choices=LEVEL_CHOICES, default="INFO")
+    message = models.CharField(max_length=512)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"[{self.level}] {self.message}"
