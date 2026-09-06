@@ -747,7 +747,7 @@ export type PlanLimits = {
   features: PlanFeature[];
 };
 
-/** Fallback for when plans API is unavailable. */
+/** Fallback for free plan when plans API is unavailable. */
 const FREE_LIMITS: PlanLimits = {
   slug: "free",
   maxPortfolios: 1,
@@ -755,16 +755,27 @@ const FREE_LIMITS: PlanLimits = {
   features: ["portfolios", "trades", "journal", "calendar", "goals", "achievements", "news", "support", "settings", "ai-coach", "risk"],
 };
 
+/** Permissive fallback for paid plans when plans API is unavailable. */
+const PAID_LIMITS: PlanLimits = {
+  slug: "paid",
+  maxPortfolios: -1,
+  maxTradesPerMonth: -1,
+  features: ["portfolios", "trades", "journal", "calendar", "goals", "achievements", "news", "support", "settings", "ai-coach", "risk", "mt-connection", "reports", "psychology"],
+};
+
 /** Fetch plan limits from the backend API. */
 export const fetchPlanLimits = () => get<PlanLimits[]>("plans/limits/");
 
-/** Return the limits for the current subscription. Falls back to "free". */
+/** Return the limits for the current subscription. Falls back to "free" or permissive for paid plans. */
 export function usePlanLimits(): PlanLimits {
   const sub = useSubscription();
   const slug = sub?.plan?.toLowerCase().replace(/\s+/g, "").replace(/[^a-z0-9-]/g, "") ?? "free";
   const plans = useApi(fetchPlanLimits).data;
-  if (!plans) return FREE_LIMITS;
-  return plans.find((p) => p.slug === slug) ?? FREE_LIMITS;
+  if (plans && plans.length > 0) {
+    return plans.find((p) => p.slug === slug) ?? FREE_LIMITS;
+  }
+  // Plans API unavailable — use subscription to decide fallback
+  return slug === "free" ? FREE_LIMITS : PAID_LIMITS;
 }
 
 /** Check whether a specific feature is allowed for the current plan. */
