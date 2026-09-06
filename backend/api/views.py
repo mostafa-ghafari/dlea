@@ -604,6 +604,12 @@ class NotificationViewSet(viewsets.ModelViewSet):
             Notification.objects.filter(user=request.user).update(read=True)
         return Response({"ok": True})
 
+    @action(detail=False, methods=["post"])
+    def delete_all(self, request):
+        if request.user.is_authenticated:
+            Notification.objects.filter(user=request.user).delete()
+        return Response({"ok": True})
+
 
 class AuditEntryViewSet(viewsets.ModelViewSet):
     queryset = AuditEntry.objects.all()

@@ -347,7 +347,7 @@ const adminStaticNotifications = [
 ];
 
 function NotificationsMenu() {
-  const { notifications, markAllRead, markRead } = usePlatform();
+  const { notifications, markAllRead, markRead, dismissNotification, dismissAllNotifications } = usePlatform();
   const navigate = useNavigate();
   const roleData4 = useRole();
   const isAdminNotif = roleData4?.effective === "admin";
@@ -371,8 +371,8 @@ function NotificationsMenu() {
           <span>{isAdminNotif ? "اعلان‌های مدیریت" : "اعلان‌ها"}</span>
           <button
             onClick={() => {
-              markAllRead();
-              toast.success("همه اعلان‌ها خوانده شد");
+              dismissAllNotifications();
+              toast.success("همه اعلان‌ها حذف شد");
             }}
             className="text-[11px] text-primary hover:underline"
           >
@@ -388,7 +388,7 @@ function NotificationsMenu() {
                 key={n.id}
                 className="cursor-pointer items-start gap-3 py-2.5"
                 onSelect={() => {
-                  markRead(n.id);
+                  dismissNotification(n.id);
                   if (n.link) void navigate({ to: n.link });
                 }}
               >

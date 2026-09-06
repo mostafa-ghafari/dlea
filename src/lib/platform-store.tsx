@@ -77,6 +77,8 @@ type Store = {
   setTicketStatus: (id: string, status: TicketStatus) => void;
   markAllRead: () => void;
   markRead: (id: string) => void;
+  dismissNotification: (id: string) => void;
+  dismissAllNotifications: () => void;
   pushNotification: (n: Omit<AppNotification, "id" | "read" | "time"> & { time?: string }) => void;
   logAudit: (entry: Omit<AuditEntry, "id" | "time">) => void;
 };
@@ -278,6 +280,18 @@ export function PlatformProvider({ children }: { children: ReactNode }) {
         setNotifications((list) => list.map((n) => (n.id === id ? { ...n, read: true } : n)));
         void patch(`notifications/${id}/`, { read: true }).catch(() => {
           /* optimistic write failed */
+        });
+      },
+      dismissNotification: (id) => {
+        setNotifications((list) => list.filter((n) => n.id !== id));
+        void del(`notifications/${id}/`).catch(() => {
+          /* optimistic delete failed */
+        });
+      },
+      dismissAllNotifications: () => {
+        setNotifications([]);
+        void post("notifications/delete_all/").catch(() => {
+          /* optimistic delete failed */
         });
       },
       pushNotification,
