@@ -45,7 +45,7 @@ import {
   updateJournalFavorite,
   type JournalEntryInput,
 } from "@/lib/api";
-import type { JournalEntry, JournalGroup } from "@/lib/mock-data";
+import type { JournalEntry, JournalGroup } from "@/lib/types";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/app/journal")({

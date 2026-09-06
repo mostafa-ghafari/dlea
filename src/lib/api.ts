@@ -2,7 +2,7 @@
  * Typed API client for the Dlea Django backend.
  *
  * Every endpoint mirrors a named export that used to live in `mock-data.ts`,
- * so pages can swap `import { trades } from "@/lib/mock-data"` for
+ * so pages can swap `import { trades } from "@/lib/types"` for
  * `const trades = useTrades()` with no other changes. All fetches happen in
  * `useEffect`, so SSR renders keep working (they see empty defaults).
  */
@@ -16,7 +16,7 @@ import type {
   Plan,
   Trade,
   TradeColumn,
-} from "@/lib/mock-data";
+} from "@/lib/types";
 import type { CoachPeriod, CoachScope } from "@/lib/ai-coach-data";
 import type {
   AppNotification,
@@ -34,7 +34,7 @@ export type {
   Plan,
   Trade,
   TradeColumn,
-} from "@/lib/mock-data";
+} from "@/lib/types";
 export type { CoachPeriod } from "@/lib/ai-coach-data";
 export type {
   AppNotification,

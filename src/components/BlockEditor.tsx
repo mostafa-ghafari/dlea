@@ -1,7 +1,7 @@
 import { Heading2, List, Quote, Type as TypeIcon, Trash2, Plus, ImagePlus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import type { JournalBlock } from "@/lib/mock-data";
+import type { JournalBlock } from "@/lib/types";
 
 const TYPES: { type: JournalBlock["type"]; label: string; icon: typeof TypeIcon }[] = [
   { type: "p", label: "متن", icon: TypeIcon },
