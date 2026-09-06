@@ -25,14 +25,13 @@ import jdatetime
 
 from . import jutils
 
-DEFAULT_MODEL = "gemini-2.0-flash"
+DEFAULT_MODEL = "gemini-3.6-flash"
 
-# Free-tier Gemini models offered in the coach model selector when a key is set.
-# All models below are available on the Google AI free tier.
+# Gemini models offered in the coach model selector when a key is set.
 GEMINI_MODELS = [
-    {"id": "gemini-2.0-flash", "name": "Gemini 2.0 Flash", "desc": "پیش‌فرض — سریع و قدرتمند"},
-    {"id": "gemini-1.5-flash", "name": "Gemini 1.5 Flash", "desc": "تحلیل سریع و مقرون‌به‌صرفه"},
-    {"id": "gemini-1.5-pro", "name": "Gemini 1.5 Pro", "desc": "عمیق‌ترین تحلیل برای بازه‌های بزرگ"},
+    {"id": "gemini-3.6-flash", "name": "Gemini 3.6 Flash", "desc": "پیش‌فرض — سریع و قدرتمند"},
+    {"id": "gemini-3.5-flash", "name": "Gemini 3.5 Flash", "desc": "تحلیل سریع و مقرون‌به‌صرفه"},
+    {"id": "gemini-3.1-flash-lite", "name": "Gemini 3.1 Flash Lite", "desc": "سبک و سریع — مناسب گزارشهای کوتاه"},
 ]
 
 SEVERITIES = ("بحرانی", "مهم", "قابل بهبود")
