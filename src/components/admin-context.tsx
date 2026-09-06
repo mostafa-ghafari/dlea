@@ -838,7 +838,7 @@ export function NewsManager() {
                   if (!draft.title.trim() || !draft.summary.trim()) { toast.error("عنوان و خلاصه الزامی است"); return; }
                   const isNew = !news.some((n) => n.id === draft.id);
                   saveNews(draft);
-                  if (isNew) pushNotification({ kind: "news", title: draft.title, desc: draft.summary, link: `/app/news/${draft.id}` });
+                  // Backend NewsItemViewSet.perform_create creates a notification for every user.
                   toast.success(isNew ? "خبر منتشر شد" : "خبر به‌روزرسانی شد");
                   setDraft(null);
                 }}>ذخیره و انتشار</Button>

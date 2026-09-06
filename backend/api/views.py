@@ -447,6 +447,22 @@ class NewsItemViewSet(viewsets.ModelViewSet):
     queryset = NewsItem.objects.all()
     serializer_class = NewsItemSerializer
 
+    def perform_create(self, serializer):
+        news = serializer.save()
+        # Notify ALL users about new news
+        from django.contrib.auth import get_user_model
+        from django.utils import timezone
+        User = get_user_model()
+        for u in User.objects.filter(is_active=True):
+            Notification.objects.create(
+                user=u,
+                kind="news",
+                title=news.title,
+                desc=news.summary[:120] if news.summary else "",
+                time=timezone.localdate(),
+                link=f"/app/news/{news.pk}",
+            )
+
 
 class TicketViewSet(viewsets.ModelViewSet):
     queryset = Ticket.objects.prefetch_related("messages").all()
@@ -565,6 +581,12 @@ class NotificationViewSet(viewsets.ModelViewSet):
         if self.request.user.is_authenticated:
             return qs.filter(user=self.request.user)
         return qs.none()
+
+    def perform_create(self, serializer):
+        # When the frontend pushes a notification, assign it to the current
+        # user so it appears in their bell dropdown.
+        user = self.request.user if self.request.user.is_authenticated else None
+        serializer.save(user=user)
 
     @action(detail=False, methods=["post"])
     def read_all(self, request):
