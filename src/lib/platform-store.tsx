@@ -100,36 +100,28 @@ export function PlatformProvider({ children }: { children: ReactNode }) {
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [audit, setAudit] = useState<AuditEntry[]>([]);
 
-  // hydrate from the Django API
+  // hydrate from the Django API — each fetch is independent so one failure
+  // doesn't prevent the others from loading.
   useEffect(() => {
     let alive = true;
-    Promise.all([fetchNews(), fetchTickets(), fetchNotifications(), fetchAudit()])
-      .then(([n, t, notif, a]) => {
-        if (!alive) return;
-        setNews(n);
-        setTickets(t);
-        setNotifications(notif);
-        setAudit(a);
-      })
-      .catch(() => {
-        /* API unavailable — the app keeps running with empty lists */
-      });
-    return () => {
-      alive = false;
-    };
+    fetchNews().then((n) => { if (alive) setNews(n); }).catch(() => {});
+    fetchTickets().then((t) => { if (alive) setTickets(t); }).catch(() => {});
+    fetchNotifications().then((n) => { if (alive) setNotifications(n); }).catch(() => {});
+    fetchAudit().then((a) => { if (alive) setAudit(a); }).catch(() => {});
+    return () => { alive = false; };
   }, []);
 
-  // Poll notifications every 30 s so backend-created notifications
-  // (ticket create/reply, news publish) appear without a full page refresh.
+  // Poll tickets + notifications every 20 s so data created by other users
+  // (new tickets, admin replies, news) appears without a full page refresh.
   useEffect(() => {
     const id = setInterval(() => {
+      invalidateCache("tickets");
       invalidateCache("notifications/");
-      fetchNotifications()
-        .then((n) => {
-          setNotifications(n);
-        })
-        .catch(() => {});
-    }, 30_000);
+      invalidateCache("news/");
+      fetchTickets().then((t) => setTickets(t)).catch(() => {});
+      fetchNotifications().then((n) => setNotifications(n)).catch(() => {});
+      fetchNews().then((n) => setNews(n)).catch(() => {});
+    }, 20_000);
     return () => clearInterval(id);
   }, []);
 
