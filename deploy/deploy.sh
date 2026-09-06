@@ -18,16 +18,7 @@ tar xzf /tmp/dlea-deploy.tar.gz
 
 echo "Setting up backend..."
 cd backend
-
-# Reuse existing venv from running directory if available, otherwise create new one
-if [ -d "$RUNNING_DIR/backend/.venv" ] && [ -f "$RUNNING_DIR/backend/.venv/bin/python" ]; then
-    echo "Reusing existing venv from $RUNNING_DIR/backend/.venv"
-    ln -sfn "$RUNNING_DIR/backend/.venv" .venv
-elif [ ! -f ".venv/bin/python" ]; then
-    echo "Creating new venv..."
-    python3 -m venv .venv
-fi
-
+python3 -m venv .venv 2>/dev/null || true
 .venv/bin/pip install --upgrade pip -q 2>/dev/null || true
 .venv/bin/pip install -r requirements.txt -q
 
