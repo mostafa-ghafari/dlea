@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
-import { del, fetchAudit, fetchNews, fetchNotifications, fetchTickets, patch, post } from "@/lib/api";
+import { del, fetchAudit, fetchNews, fetchNotifications, fetchTickets, invalidateCache, patch, post } from "@/lib/api";
 import { fullName, getCurrentUser } from "@/lib/app-state";
 
 /* ------------------------------------------------------------------ */
@@ -119,6 +119,20 @@ export function PlatformProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
+  // Poll notifications every 30 s so backend-created notifications
+  // (ticket create/reply, news publish) appear without a full page refresh.
+  useEffect(() => {
+    const id = setInterval(() => {
+      invalidateCache("notifications/");
+      fetchNotifications()
+        .then((n) => {
+          setNotifications(n);
+        })
+        .catch(() => {});
+    }, 30_000);
+    return () => clearInterval(id);
+  }, []);
+
   const pushNotification = useCallback<Store["pushNotification"]>((n) => {
     const item: AppNotification = {
       id: `AN-${Date.now()}`,
@@ -134,6 +148,9 @@ export function PlatformProvider({ children }: { children: ReactNode }) {
       time: isoDate(),
       link: item.link ?? "",
       read: false,
+    }).then(() => {
+      // Invalidate so the next poll picks up the server-assigned id
+      invalidateCache("notifications/");
     }).catch(() => {
       /* optimistic write failed — keep local copy */
     });
@@ -174,12 +191,12 @@ export function PlatformProvider({ children }: { children: ReactNode }) {
         });
       },
       createTicket: ({ subject, topic, body, attachments }) => {
-        const id = `TK-${Math.floor(1000 + Math.random() * 9000)}`;
+        const localId = `TK-${Math.floor(1000 + Math.random() * 9000)}`;
         const stamp = nowStamp();
         const current = getCurrentUser();
         const authorName = fullName(current);
         const ticket: Ticket = {
-          id,
+          id: localId,
           subject,
           topic,
           status: "باز",
@@ -199,13 +216,23 @@ export function PlatformProvider({ children }: { children: ReactNode }) {
         })
           .then((created) => {
             if (created?.id) {
-              void post(`tickets/${created.id}/reply/`, { author: "user", body, attachments }).catch(() => {});
+              // Sync the local ticket ID with the backend's real ID so that
+              // admin replies (which use the backend ID) reach the user.
+              const backendId = String(created.id);
+              if (backendId !== localId) {
+                setTickets((list) =>
+                  list.map((t) => (t.id === localId ? { ...t, id: backendId } : t)),
+                );
+              }
+              // Invalidate tickets list cache so fresh data is available
+              invalidateCache("tickets");
+              void post(`tickets/${backendId}/reply/`, { author: "user", body, attachments }).catch(() => {});
             }
           })
           .catch(() => {
             /* optimistic write failed */
           });
-        return id;
+        return localId;
       },
       replyTicket: (id, { author, body, attachments }) => {
         const stamp = nowStamp();
@@ -233,9 +260,15 @@ export function PlatformProvider({ children }: { children: ReactNode }) {
         );
         // Backend creates the notification for the correct recipient
         // (admin reply → user, user reply → admins).
-        void post(`tickets/${id}/reply/`, { author, body, attachments }).catch(() => {
-          /* optimistic write failed */
-        });
+        void post(`tickets/${id}/reply/`, { author, body, attachments })
+          .then(() => {
+            // Invalidate caches so the other party sees fresh data
+            invalidateCache("tickets");
+            invalidateCache("notifications");
+          })
+          .catch(() => {
+            /* optimistic write failed */
+          });
       },
       setTicketStatus: (id, status) => {
         setTickets((list) => list.map((t) => (t.id === id ? { ...t, status, updatedAt: nowStamp() } : t)));
