@@ -7,11 +7,12 @@ import {
   HeadContent,
   Scripts,
 } from "@tanstack/react-router";
-import { type ReactNode } from "react";
+import { Suspense, type ReactNode } from "react";
 
 import appCss from "../styles.css?url";
 import { Toaster } from "@/components/ui/sonner";
 import { PlatformProvider } from "@/lib/platform-store";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 
 function NotFoundComponent() {
   return (
@@ -119,13 +120,28 @@ function RootShell({ children }: { children: ReactNode }) {
   );
 }
 
+function RootFallback() {
+  return (
+    <div className="dark flex min-h-screen items-center justify-center bg-background">
+      <div className="flex flex-col items-center gap-3">
+        <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+        <span className="text-sm text-muted-foreground">در حال بارگذاری...</span>
+      </div>
+    </div>
+  );
+}
+
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
 
   return (
     <QueryClientProvider client={queryClient}>
       <PlatformProvider>
-        <Outlet />
+        <ErrorBoundary fallback={<RootFallback />}>
+          <Suspense fallback={<RootFallback />}>
+            <Outlet />
+          </Suspense>
+        </ErrorBoundary>
         <Toaster position="top-center" richColors />
       </PlatformProvider>
     </QueryClientProvider>
