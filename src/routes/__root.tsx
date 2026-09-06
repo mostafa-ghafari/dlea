@@ -1,8 +1,8 @@
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+
 import {
   Outlet,
   Link,
-  createRootRouteWithContext,
+  createRootRoute,
   useRouter,
   HeadContent,
   Scripts,
@@ -70,7 +70,7 @@ function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
   );
 }
 
-export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()({
+export const Route = createRootRoute()({
   head: () => ({
     meta: [
       { charSet: "utf-8" },
@@ -132,18 +132,14 @@ function RootFallback() {
 }
 
 function RootComponent() {
-  const { queryClient } = Route.useRouteContext();
-
   return (
-    <QueryClientProvider client={queryClient}>
-      <PlatformProvider>
-        <ErrorBoundary fallback={<RootFallback />}>
-          <Suspense fallback={<RootFallback />}>
-            <Outlet />
-          </Suspense>
-        </ErrorBoundary>
-        <Toaster position="top-center" richColors />
-      </PlatformProvider>
-    </QueryClientProvider>
+    <PlatformProvider>
+      <ErrorBoundary fallback={<RootFallback />}>
+        <Suspense fallback={<RootFallback />}>
+          <Outlet />
+        </Suspense>
+      </ErrorBoundary>
+      <Toaster position="top-center" richColors />
+    </PlatformProvider>
   );
 }
