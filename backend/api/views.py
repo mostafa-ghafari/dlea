@@ -464,6 +464,28 @@ class NewsItemViewSet(viewsets.ModelViewSet):
             )
 
 
+def _is_admin_user(user):
+    """Return True if the user is staff OR has an admin-level UserProfile.role."""
+    if not user.is_authenticated:
+        return False
+    if user.is_staff:
+        return True
+    try:
+        profile = user.profile
+        return profile.role in {"admin", "vip", "trader-vip", "professional-vip", "master-vip"}
+    except UserProfile.DoesNotExist:
+        return False
+
+
+def _admin_queryset():
+    """Return a User queryset of all admin-level users (is_staff or admin role)."""
+    from django.db.models import Q
+    admin_profiles = UserProfile.objects.filter(
+        Q(user__is_staff=True) | Q(role__in={"admin", "vip", "trader-vip", "professional-vip", "master-vip"})
+    ).values_list("user_id", flat=True)
+    return User.objects.filter(id__in=admin_profiles)
+
+
 class TicketViewSet(viewsets.ModelViewSet):
     queryset = Ticket.objects.prefetch_related("messages").all()
     serializer_class = TicketSerializer
@@ -471,8 +493,8 @@ class TicketViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         qs = super().get_queryset()
         if self.request.user.is_authenticated:
-            # Admins/staff see all tickets; regular users see only their own.
-            if self.request.user.is_staff:
+            # Admins see all tickets; regular users see only their own.
+            if _is_admin_user(self.request.user):
                 return qs
             return qs.filter(email=self.request.user.email)
         return qs.none()
@@ -481,17 +503,10 @@ class TicketViewSet(viewsets.ModelViewSet):
         ticket = serializer.save()
         # Notify all admin users that a new ticket was created.
         if self.request.user.is_authenticated:
-            from django.contrib.auth import get_user_model
-            User = get_user_model()
-            admin_emails = (
-                User.objects.filter(is_staff=True)
-                .exclude(email=self.request.user.email)
-                .values_list("email", flat=True)
-            )
             from django.utils import timezone
-            for admin_email in admin_emails:
+            for admin_user in _admin_queryset().exclude(email=self.request.user.email):
                 Notification.objects.create(
-                    user=User.objects.filter(email=admin_email).first(),
+                    user=admin_user,
                     kind="ticket",
                     title=f"تیکت جدید: {ticket.subject}",
                     desc=f"کاربر {ticket.user} تیکتی با موضوع «{ticket.topic}» ثبت کرد.",
@@ -542,14 +557,9 @@ class TicketViewSet(viewsets.ModelViewSet):
         else:
             # User replied → notify all admins
             if request.user.is_authenticated:
-                admin_emails = (
-                    User.objects.filter(is_staff=True)
-                    .exclude(email=request.user.email)
-                    .values_list("email", flat=True)
-                )
-                for admin_email in admin_emails:
+                for admin_user in _admin_queryset().exclude(email=request.user.email):
                     Notification.objects.create(
-                        user=User.objects.filter(email=admin_email).first(),
+                        user=admin_user,
                         kind="ticket",
                         title=f"پاسخ جدید کاربر در تیکت {ticket.subject}",
                         desc=f"{ticket.user}: {body[:120]}",
