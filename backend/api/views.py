@@ -96,6 +96,19 @@ class PortfolioViewSet(UserScopedMixin, viewsets.ModelViewSet):
     queryset = Portfolio.objects.all()
     serializer_class = PortfolioSerializer
 
+    def perform_create(self, serializer):
+        user = self.request.user if self.request.user.is_authenticated else None
+        portfolio = serializer.save(user=user)
+        # Only one portfolio may be active at a time — deactivate the rest,
+        # unless the new portfolio was explicitly created inactive (e.g. a copy).
+        if portfolio.is_active:
+            others = Portfolio.objects.exclude(id=portfolio.id)
+            if user is not None:
+                others = others.filter(user=user)
+            else:
+                others = others.filter(user__isnull=True)
+            others.update(is_active=False)
+
     @action(detail=True, methods=["post"], url_path="activate")
     def activate(self, request, pk=None):
         """Set this portfolio as active, deactivate all others for the user."""

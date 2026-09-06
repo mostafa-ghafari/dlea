@@ -166,10 +166,13 @@ def seed_portfolios():
         ("P2", "پرتفوی دوم", "Pepperstone", "Raw Spread", 4820, 5000, "1:200", 34, "فعال", "Range Reversal"),
         ("P3", "حساب چالش FTMO", "FTMO", "چالش", 100000, 100000, "1:100", 12, "آرشیو", "Break & Retest"),
     ]
-    for _id, name, broker, ptype, balance, initial, lev, trades, status, strat in data:
+    for idx, (_id, name, broker, ptype, balance, initial, lev, trades, status, strat) in enumerate(data):
+        # Only the first portfolio is active — a single active portfolio is
+        # required for the card highlighting and portfolio-scoped panels.
         Portfolio.objects.create(
             name=name, broker=broker, type=ptype, balance=D(balance), initial=D(initial),
             leverage=lev, trades=trades, status=status, strategy=strat,
+            is_active=(idx == 0),
         )
 
 

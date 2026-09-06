@@ -102,6 +102,7 @@ function Portfolios() {
     try {
       await deletePortfolio(p.id);
       setPortfolios((list) => list.filter((x) => x.id !== p.id));
+      if (activeId === p.id) setActiveId(null);
       toast.success(`پرتفولیو «${p.name}» حذف شد`);
     } catch (err) {
       toast.error(`حذف پرتفولیو ناموفق بود: ${err instanceof Error ? err.message : err}`);
@@ -132,6 +133,7 @@ function Portfolios() {
         trades: 0,
         status: p.status,
         strategy: p.strategy,
+        is_active: false,
       });
       setPortfolios((list) => [...list, created]);
       toast.success("کپی پرتفولیو ساخته شد");
@@ -178,9 +180,15 @@ function Portfolios() {
         status: "فعال",
         strategy: strategy.trim() || "",
       });
-      setPortfolios((p) => [...p, created]);
+      // The API deactivates the previous portfolio. Mirror that change locally
+      // so the previous card does not stay highlighted until the next refresh.
+      setPortfolios((list) => [
+        ...list.map((portfolio) => ({ ...portfolio, is_active: false })),
+        { ...created, is_active: true },
+      ]);
+      setActiveId(created.id);
       setHasPortfolio(true);
-      toast.success(`پرتفولیو «${created.name}» ساخته شد`);
+      toast.success(`پرتفولیو «${created.name}» ساخته و فعال شد`);
     } catch (err) {
       toast.error(`ساخت پرتفولیو ناموفق بود: ${err instanceof Error ? err.message : err}`);
       return;
