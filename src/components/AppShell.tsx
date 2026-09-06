@@ -360,15 +360,17 @@ function NotificationsMenu() {
       <DropdownMenuContent align="end" className="w-80">
         <DropdownMenuLabel className="flex items-center justify-between">
           <span>اعلان‌ها</span>
-          <button
-            onClick={() => {
-              dismissAllNotifications();
-              toast.success("همه اعلان‌ها حذف شد");
-            }}
-            className="text-[11px] text-primary hover:underline"
-          >
-            علامت‌گذاری همه
-          </button>
+          {all.length > 0 && (
+            <button
+              onClick={() => {
+                dismissAllNotifications();
+                toast.success("همه اعلان‌ها حذف شد");
+              }}
+              className="text-[11px] text-primary hover:underline"
+            >
+              علامت‌گذاری همه
+            </button>
+          )}
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
         <div className="max-h-80 overflow-y-auto">
