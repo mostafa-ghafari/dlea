@@ -61,11 +61,7 @@ function NewsDetail() {
           {item.summary}
         </p>
 
-        <div className="mt-6 space-y-4 text-sm leading-8">
-          {item.body.split("\n").filter(Boolean).map((p, i) => (
-            <p key={i}>{p}</p>
-          ))}
-        </div>
+        <div className="mt-6 space-y-4 text-sm leading-8 prose prose-sm prose-p:leading-8 prose-img:rounded-lg prose-img:border prose-img:border-border max-w-none" dangerouslySetInnerHTML={{ __html: item.body }} />
       </article>
     </AppShell>
   );
