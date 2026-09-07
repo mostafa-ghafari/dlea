@@ -13,20 +13,37 @@ export const Route = createFileRoute("/app/trades/$id")({
   head: () => ({
     meta: [
       { title: "جزئیات معامله | Dlea AI" },
-      { name: "description", content: "مشاهده کامل جزئیات معامله فارکس همراه با اسکرین‌شات‌های چارت، سود/زیان، پیپ و R:R." },
+      {
+        name: "description",
+        content:
+          "مشاهده کامل جزئیات معامله فارکس همراه با اسکرین‌شات‌های چارت، سود/زیان، پیپ و R:R.",
+      },
       { property: "og:title", content: "جزئیات معامله" },
-      { property: "og:description", content: "جزئیات کامل معامله و مدیریت اسکرین‌شات‌های چارت." },
+      {
+        property: "og:description",
+        content: "جزئیات کامل معامله و مدیریت اسکرین‌شات‌های چارت.",
+      },
     ],
   }),
   component: TradeDetail,
 });
 
-function Row({ label, value, tone }: { label: string; value: string; tone?: "gain" | "loss" }) {
+function Row({
+  label,
+  value,
+  tone,
+}: {
+  label: string;
+  value: string;
+  tone?: "gain" | "loss";
+}) {
   useSetTitle("معامله پیدا نشد", "شناسه معامله معتبر نیست");
   return (
     <div className="flex items-center justify-between border-b border-border/50 py-2.5 last:border-0">
       <span className="text-sm text-muted-foreground">{label}</span>
-      <span className={`text-sm font-medium tabular ${tone ?? ""}`}>{value}</span>
+      <span className={`text-sm font-medium tabular ${tone ?? ""}`}>
+        {value}
+      </span>
     </div>
   );
 }
@@ -36,7 +53,10 @@ function TradeDetail() {
   const trades = useTrades();
   const trade = trades.find((t) => t.id === id);
 
-  const [shots, setShots] = useLocalState<string[]>(`tj:trade-shots:${id}`, trade?.screenshots ?? []);
+  const [shots, setShots] = useLocalState<string[]>(
+    `tj:trade-shots:${id}`,
+    trade?.screenshots ?? [],
+  );
 
   function saveShots(next: string[]) {
     setShots(next);
@@ -44,19 +64,23 @@ function TradeDetail() {
     updateTradeScreenshots(trade.id, next)
       .then(() => toast.success("اسکرین‌شات‌ها در سرور ذخیره شد"))
       .catch((err) =>
-        toast.error(`ذخیره اسکرین‌شات ناموفق بود: ${err instanceof Error ? err.message : err}`),
+        toast.error(
+          `ذخیره اسکرین‌شات ناموفق بود: ${err instanceof Error ? err.message : err}`,
+        ),
       );
   }
 
   if (!trade) {
     return (
       <div className="card-surface p-8 text-center">
-          <p className="text-sm text-muted-foreground">این معامله در سیستم موجود نیست.</p>
-          <Link to="/app/trades" className="mt-4 inline-block">
-            <Button variant="outline">بازگشت به معاملات</Button>
-          </Link>
-        </div>
-);
+        <p className="text-sm text-muted-foreground">
+          این معامله در سیستم موجود نیست.
+        </p>
+        <Link to="/app/trades" className="mt-4 inline-block">
+          <Button variant="outline">بازگشت به معاملات</Button>
+        </Link>
+      </div>
+    );
   }
 
   return (
@@ -77,21 +101,38 @@ function TradeDetail() {
             <h2 className="text-xl font-bold">{trade.symbol}</h2>
             <Badge
               variant="outline"
-              className={trade.side === "buy" ? "border-primary/40 bg-primary/10 text-primary" : "border-destructive/40 bg-destructive/10 text-destructive"}
+              className={
+                trade.side === "buy"
+                  ? "border-primary/40 bg-primary/10 text-primary"
+                  : "border-destructive/40 bg-destructive/10 text-destructive"
+              }
             >
               {trade.side === "buy" ? "خرید" : "فروش"}
             </Badge>
-            {trade.strategy && <Badge variant="outline">{trade.strategy}</Badge>}
+            {trade.strategy && (
+              <Badge variant="outline">{trade.strategy}</Badge>
+            )}
             <Badge
               variant="outline"
-              className={trade.followedPlan ? "border-primary/40 bg-primary/10 text-primary" : "border-destructive/40 bg-destructive/10 text-destructive"}
+              className={
+                trade.followedPlan
+                  ? "border-primary/40 bg-primary/10 text-primary"
+                  : "border-destructive/40 bg-destructive/10 text-destructive"
+              }
             >
-              {trade.followedPlan ? <CheckCircle2 className="ml-1 h-3 w-3" /> : <XCircle className="ml-1 h-3 w-3" />}
+              {trade.followedPlan ? (
+                <CheckCircle2 className="ml-1 h-3 w-3" />
+              ) : (
+                <XCircle className="ml-1 h-3 w-3" />
+              )}
               {trade.followedPlan ? "طبق پلن" : "خارج از پلن"}
             </Badge>
           </div>
 
-          <div dir="ltr" className={`mt-4 text-3xl font-bold tabular ${trade.pnl >= 0 ? "gain" : "loss"}`}>
+          <div
+            dir="ltr"
+            className={`mt-4 text-3xl font-bold tabular ${trade.pnl >= 0 ? "gain" : "loss"}`}
+          >
             {trade.pnl >= 0 ? "+" : ""}${trade.pnl}
           </div>
 
@@ -102,7 +143,11 @@ function TradeDetail() {
             <Row label="Take Profit" value={String(trade.tp)} />
             <Row label="حجم (Lot)" value={String(trade.volume)} />
             <Row label="R:R" value={String(trade.rr)} />
-            <Row label="پیپ" value={String(trade.pips)} tone={trade.pips >= 0 ? "gain" : "loss"} />
+            <Row
+              label="پیپ"
+              value={String(trade.pips)}
+              tone={trade.pips >= 0 ? "gain" : "loss"}
+            />
             <Row label="کمیسیون" value={`$${trade.commission}`} />
             <Row label="سواپ" value={`$${trade.swap}`} />
             <Row label="مالیات" value={`$${trade.taxes}`} />
@@ -116,7 +161,9 @@ function TradeDetail() {
 
           {trade.comment && (
             <div className="mt-6 rounded-lg border border-border bg-secondary/40 p-4 text-sm">
-              <div className="text-xs text-muted-foreground">کامنت متاتریدر</div>
+              <div className="text-xs text-muted-foreground">
+                کامنت متاتریدر
+              </div>
               <div className="mt-1">{trade.comment}</div>
             </div>
           )}
@@ -128,7 +175,8 @@ function TradeDetail() {
             <h3 className="font-semibold">اسکرین‌شات‌های چارت</h3>
           </div>
           <p className="text-xs text-muted-foreground">
-            هر تعداد تصویر می‌توانی اضافه یا حذف کنی؛ تصاویر به‌صورت خودکار فشرده می‌شوند.
+            هر تعداد تصویر می‌توانی اضافه یا حذف کنی؛ تصاویر به‌صورت خودکار
+            فشرده می‌شوند.
           </p>
           <ImageUploader
             images={shots}

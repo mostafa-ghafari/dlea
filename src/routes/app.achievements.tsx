@@ -2,9 +2,23 @@ import { useSetTitle } from "@/lib/page-context";
 import { AppShell } from "@/components/AppShell";
 import { createFileRoute } from "@tanstack/react-router";
 import {
-  Trophy, Lock, Shield, Flame, Target, TrendingDown, BookOpen,
-  Brain, BarChart3, Heart, Zap, Calendar, DollarSign, Star,
-  Link2, CheckCircle2, Swords,
+  Trophy,
+  Lock,
+  Shield,
+  Flame,
+  Target,
+  TrendingDown,
+  BookOpen,
+  Brain,
+  BarChart3,
+  Heart,
+  Zap,
+  Calendar,
+  DollarSign,
+  Star,
+  Link2,
+  CheckCircle2,
+  Swords,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { useAchievements } from "@/lib/api";
@@ -15,13 +29,16 @@ export const Route = createFileRoute("/app/achievements")({
 });
 
 /** Each achievement gets its own icon + color scheme for visual variety */
-const achievementStyle: Record<string, {
-  icon: typeof Trophy;
-  iconColor: string;
-  bgGradient: string;
-  bgLocked: string;
-  badgeClass: string;
-}> = {
+const achievementStyle: Record<
+  string,
+  {
+    icon: typeof Trophy;
+    iconColor: string;
+    bgGradient: string;
+    bgLocked: string;
+    badgeClass: string;
+  }
+> = {
   "۷ روز پایبند به پلن": {
     icon: Shield,
     iconColor: "text-emerald-500",
@@ -139,7 +156,8 @@ const achievementStyle: Record<string, {
 const defaultStyle = {
   icon: Trophy,
   iconColor: "text-primary",
-  bgGradient: "bg-gradient-to-br from-primary to-primary/60 text-primary-foreground",
+  bgGradient:
+    "bg-gradient-to-br from-primary to-primary/60 text-primary-foreground",
   bgLocked: "bg-secondary text-muted-foreground",
   badgeClass: "border-primary/40 bg-primary/10 text-primary",
 };
@@ -149,7 +167,10 @@ function AchievementsPage() {
   const earned = achievements.filter((a) => a.earned).length;
 
   return (
-    <AppShell title="نشان‌ها" subtitle={`${earned} از ${achievements.length} نشان کسب‌شده`}>
+    <AppShell
+      title="نشان‌ها"
+      subtitle={`${earned} از ${achievements.length} نشان کسب‌شده`}
+    >
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {achievements.map((a) => {
           const style = achievementStyle[a.title] ?? defaultStyle;
@@ -158,14 +179,14 @@ function AchievementsPage() {
             <div
               key={a.id}
               className={`card-surface group p-6 text-center transition-all hover:scale-[1.02] ${
-                a.earned ? "hover:shadow-lg hover:border-primary/30" : "opacity-50 grayscale hover:grayscale-0 hover:opacity-80"
+                a.earned
+                  ? "hover:shadow-lg hover:border-primary/30"
+                  : "opacity-50 grayscale hover:grayscale-0 hover:opacity-80"
               }`}
             >
               <div
                 className={`mx-auto grid h-16 w-16 place-items-center rounded-2xl transition-transform group-hover:scale-110 ${
-                  a.earned
-                    ? `${style.bgGradient} shadow-lg`
-                    : style.bgLocked
+                  a.earned ? `${style.bgGradient} shadow-lg` : style.bgLocked
                 }`}
               >
                 {a.earned ? (
@@ -179,7 +200,9 @@ function AchievementsPage() {
               <Badge
                 variant="outline"
                 className={`mt-4 ${
-                  a.earned ? style.badgeClass : "border-border text-muted-foreground"
+                  a.earned
+                    ? style.badgeClass
+                    : "border-border text-muted-foreground"
                 }`}
               >
                 {a.earned ? "✓ کسب‌شده" : "قفل"}

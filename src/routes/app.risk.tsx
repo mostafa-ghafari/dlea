@@ -21,8 +21,11 @@ const rules = [
 
 function RiskPage() {
   return (
-    <AppShell title="مدیریت ریسک" subtitle="قوانین شخصی خود را تعریف کنید و پایبندی به آن‌ها را بسنجید">
-    <div className="grid gap-6 lg:grid-cols-3">
+    <AppShell
+      title="مدیریت ریسک"
+      subtitle="قوانین شخصی خود را تعریف کنید و پایبندی به آن‌ها را بسنجید"
+    >
+      <div className="grid gap-6 lg:grid-cols-3">
         <div className="card-surface space-y-4 p-6 lg:col-span-2">
           <h3 className="font-semibold">تعریف قوانین</h3>
           <div className="grid gap-4 sm:grid-cols-2">
@@ -40,7 +43,9 @@ function RiskPage() {
               </div>
             ))}
           </div>
-          <Button className="bg-primary text-primary-foreground hover:bg-primary/90">ذخیره قوانین</Button>
+          <Button className="bg-primary text-primary-foreground hover:bg-primary/90">
+            ذخیره قوانین
+          </Button>
         </div>
 
         <div className="card-surface p-6">
@@ -53,16 +58,34 @@ function RiskPage() {
               <div key={r.label}>
                 <div className="flex items-center justify-between text-sm">
                   <span className="text-muted-foreground">{r.label}</span>
-                  <Badge variant="outline" className={r.safe ? "border-primary/40 bg-primary/10 text-primary" : "border-destructive/40 bg-destructive/10 text-destructive"}>
+                  <Badge
+                    variant="outline"
+                    className={
+                      r.safe
+                        ? "border-primary/40 bg-primary/10 text-primary"
+                        : "border-destructive/40 bg-destructive/10 text-destructive"
+                    }
+                  >
                     {r.value}
                   </Badge>
                 </div>
-                <Progress value={r.used} className={`mt-2 h-1.5 ${!r.safe ? "[&>div]:bg-destructive" : ""}`} />
+                <Progress
+                  value={r.used}
+                  className={`mt-2 h-1.5 ${!r.safe ? "[&>div]:bg-destructive" : ""}`}
+                />
                 <div className="mt-1 flex items-center gap-1 text-xs">
                   {r.safe ? (
-                    <><CheckCircle2 className="h-3 w-3 text-primary" /><span className="text-muted-foreground">{r.used}٪ استفاده‌شده</span></>
+                    <>
+                      <CheckCircle2 className="h-3 w-3 text-primary" />
+                      <span className="text-muted-foreground">
+                        {r.used}٪ استفاده‌شده
+                      </span>
+                    </>
                   ) : (
-                    <><AlertTriangle className="h-3 w-3 text-destructive" /><span className="text-destructive">نزدیک به حد مجاز</span></>
+                    <>
+                      <AlertTriangle className="h-3 w-3 text-destructive" />
+                      <span className="text-destructive">نزدیک به حد مجاز</span>
+                    </>
                   )}
                 </div>
               </div>
@@ -71,5 +94,5 @@ function RiskPage() {
         </div>
       </div>
     </AppShell>
-);
+  );
 }

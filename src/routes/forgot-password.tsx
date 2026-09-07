@@ -1,6 +1,13 @@
 import { Link, createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
-import { LineChart, ArrowLeft, Loader2, Mail, KeyRound, Lock } from "lucide-react";
+import {
+  LineChart,
+  ArrowLeft,
+  Loader2,
+  Mail,
+  KeyRound,
+  Lock,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -147,7 +154,10 @@ function ForgotPasswordPage() {
 
   function handleCodePaste(e: React.ClipboardEvent) {
     e.preventDefault();
-    const pasted = e.clipboardData.getData("text").replace(/\D/g, "").slice(0, 6);
+    const pasted = e.clipboardData
+      .getData("text")
+      .replace(/\D/g, "")
+      .slice(0, 6);
     const newCode = pasted.split("").concat(Array(6 - pasted.length).fill(""));
     setCode(newCode);
     // Focus last filled input or first empty
@@ -157,9 +167,21 @@ function ForgotPasswordPage() {
   }
 
   const stepConfig = {
-    email: { icon: Mail, title: "بازیابی رمز عبور", desc: "ایمیل خود را وارد کنید تا کد تایید برایتان ارسال شود." },
-    code: { icon: KeyRound, title: "کد تایید", desc: `کد ۶ رقمی ارسال شده به ${email} را وارد کنید.` },
-    "new-password": { icon: Lock, title: "رمز جدید", desc: "رمز عبور جدید خود را انتخاب کنید." },
+    email: {
+      icon: Mail,
+      title: "بازیابی رمز عبور",
+      desc: "ایمیل خود را وارد کنید تا کد تایید برایتان ارسال شود.",
+    },
+    code: {
+      icon: KeyRound,
+      title: "کد تایید",
+      desc: `کد ۶ رقمی ارسال شده به ${email} را وارد کنید.`,
+    },
+    "new-password": {
+      icon: Lock,
+      title: "رمز جدید",
+      desc: "رمز عبور جدید خود را انتخاب کنید.",
+    },
   };
 
   const { icon: StepIcon, title, desc } = stepConfig[step];
@@ -185,7 +207,7 @@ function ForgotPasswordPage() {
                   className={`flex h-8 w-8 items-center justify-center rounded-full text-xs font-bold transition-colors ${
                     step === s
                       ? "bg-primary text-primary-foreground"
-                      : (["email", "code", "new-password"].indexOf(step) > i)
+                      : ["email", "code", "new-password"].indexOf(step) > i
                         ? "bg-primary/30 text-primary"
                         : "bg-secondary text-muted-foreground"
                   }`}
@@ -193,7 +215,9 @@ function ForgotPasswordPage() {
                   {i + 1}
                 </div>
                 {i < 2 && (
-                  <div className={`h-0.5 w-8 ${(["email", "code", "new-password"].indexOf(step) > i) ? "bg-primary" : "bg-secondary"}`} />
+                  <div
+                    className={`h-0.5 w-8 ${["email", "code", "new-password"].indexOf(step) > i ? "bg-primary" : "bg-secondary"}`}
+                  />
                 )}
               </div>
             ))}
@@ -277,7 +301,9 @@ function ForgotPasswordPage() {
                 className="w-full text-center text-xs text-muted-foreground hover:text-primary"
                 onClick={() => {
                   setCode(["", "", "", "", "", ""]);
-                  handleSendCode(new Event("submit") as any);
+                  handleSendCode(
+                    new Event("submit") as unknown as React.FormEvent,
+                  );
                 }}
               >
                 ارسال مجدد کد

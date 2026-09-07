@@ -167,10 +167,12 @@ class TradeSerializer(serializers.ModelSerializer):
     swap = serializers.FloatField(required=False)
     taxes = serializers.FloatField(required=False)
     strategy = serializers.CharField(required=False, allow_blank=True)
-    # write-only fields used when creating/importing trades
+    # write-only fields used when creating/importing trades.
+    # portfolio_id is required — a trade cannot exist without a portfolio,
+    # and requiring it turns a would-be IntegrityError into a clean 400.
     open_time = serializers.DateTimeField(write_only=True, required=False)
     close_time = serializers.DateTimeField(write_only=True, required=False)
-    portfolio_id = serializers.IntegerField(write_only=True, required=False)
+    portfolio_id = serializers.IntegerField(write_only=True, required=True)
 
     class Meta:
         model = Trade
@@ -211,7 +213,9 @@ class JournalGroupSerializer(serializers.ModelSerializer):
 
 class JournalEntrySerializer(serializers.ModelSerializer):
     id = serializers.CharField(source="pk", read_only=True)
-    tradeId = serializers.CharField(source="trade_id")
+    # tradeId may be empty — the frontend form defaults it to "" (optional link
+    # to a trade ticket), so blank must be allowed or creation fails.
+    tradeId = serializers.CharField(source="trade_id", required=False, allow_blank=True)
     groupId = serializers.SerializerMethodField()
     date = serializers.SerializerMethodField()
     week = serializers.CharField(required=False)

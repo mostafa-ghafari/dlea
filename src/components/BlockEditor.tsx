@@ -1,9 +1,21 @@
-import { Heading2, List, Quote, Type as TypeIcon, Trash2, Plus, ImagePlus } from "lucide-react";
+import {
+  Heading2,
+  List,
+  Quote,
+  Type as TypeIcon,
+  Trash2,
+  Plus,
+  ImagePlus,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import type { JournalBlock } from "@/lib/types";
 
-const TYPES: { type: JournalBlock["type"]; label: string; icon: typeof TypeIcon }[] = [
+const TYPES: {
+  type: JournalBlock["type"];
+  label: string;
+  icon: typeof TypeIcon;
+}[] = [
   { type: "p", label: "متن", icon: TypeIcon },
   { type: "h2", label: "تیتر", icon: Heading2 },
   { type: "list", label: "لیست", icon: List },
@@ -49,7 +61,10 @@ export function BlockEditor({
       )}
 
       {blocks.map((b) => (
-        <div key={b.id} className="rounded-lg border border-border/70 bg-background/50 p-2.5">
+        <div
+          key={b.id}
+          className="rounded-lg border border-border/70 bg-background/50 p-2.5"
+        >
           <div className="mb-2 flex items-center gap-1">
             {TYPES.map((t) => (
               <button
@@ -94,13 +109,24 @@ export function BlockEditor({
 
       <div className="flex flex-wrap gap-2 border-t border-border pt-3">
         {TYPES.map((t) => (
-          <Button key={t.type} type="button" size="sm" variant="outline" onClick={() => add(t.type)}>
+          <Button
+            key={t.type}
+            type="button"
+            size="sm"
+            variant="outline"
+            onClick={() => add(t.type)}
+          >
             <Plus className="ml-1 h-3 w-3" />
             {t.label}
           </Button>
         ))}
         {onAddImage && (
-          <Button type="button" size="sm" variant="outline" onClick={onAddImage}>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            onClick={onAddImage}
+          >
             <ImagePlus className="ml-1 h-3 w-3" />
             تصویر
           </Button>
@@ -114,22 +140,40 @@ export function BlockRenderer({ blocks }: { blocks: JournalBlock[] }) {
   return (
     <div className="space-y-3 text-sm">
       {blocks.map((b) => {
-        if (b.type === "h2") return <h4 key={b.id} className="font-semibold">{b.text}</h4>;
+        if (b.type === "h2")
+          return (
+            <h4 key={b.id} className="font-semibold">
+              {b.text}
+            </h4>
+          );
         if (b.type === "quote")
           return (
-            <blockquote key={b.id} className="border-r-2 border-primary/50 pr-3 text-muted-foreground italic">
+            <blockquote
+              key={b.id}
+              className="border-r-2 border-primary/50 pr-3 text-muted-foreground italic"
+            >
               {b.text}
             </blockquote>
           );
         if (b.type === "list")
           return (
-            <ul key={b.id} className="list-inside list-disc space-y-1 text-foreground/90">
-              {b.text.split("\n").filter(Boolean).map((line, i) => (
-                <li key={i}>{line}</li>
-              ))}
+            <ul
+              key={b.id}
+              className="list-inside list-disc space-y-1 text-foreground/90"
+            >
+              {b.text
+                .split("\n")
+                .filter(Boolean)
+                .map((line, i) => (
+                  <li key={i}>{line}</li>
+                ))}
             </ul>
           );
-        return <p key={b.id} className="text-foreground/90">{b.text}</p>;
+        return (
+          <p key={b.id} className="text-foreground/90">
+            {b.text}
+          </p>
+        );
       })}
     </div>
   );

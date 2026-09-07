@@ -1,0 +1,4 @@
+# Dev / QA dependencies (not needed at runtime)
+-r requirements.txt
+coverage>=7.4
+faker>=25.0

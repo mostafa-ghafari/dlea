@@ -20,7 +20,8 @@ function notifIcon(kind: string) {
 }
 
 export function NotificationsMenu() {
-  const { notifications, dismissNotification, dismissAllNotifications } = usePlatform();
+  const { notifications, dismissNotification, dismissAllNotifications } =
+    usePlatform();
   const navigate = useNavigate();
   const all = notifications;
   const unread = all.filter((n) => !n.read).length;
@@ -28,7 +29,12 @@ export function NotificationsMenu() {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="outline" size="icon" className="relative h-10 w-10 border-border bg-secondary/60" aria-label="اعلان‌ها">
+        <Button
+          variant="outline"
+          size="icon"
+          className="relative h-10 w-10 border-border bg-secondary/60"
+          aria-label="اعلان‌ها"
+        >
           <Bell className="h-4 w-4" />
           {unread > 0 && (
             <span className="absolute -top-1 -right-1 grid h-4 w-4 place-items-center rounded-full bg-destructive text-[9px] font-bold text-destructive-foreground">
@@ -82,11 +88,17 @@ export function NotificationsMenu() {
                 </div>
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
-                    <span className="truncate text-sm font-medium">{n.title}</span>
-                    {!n.read && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-primary" />}
+                    <span className="truncate text-sm font-medium">
+                      {n.title}
+                    </span>
+                    {!n.read && (
+                      <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-primary" />
+                    )}
                   </div>
                   <div className="text-xs text-muted-foreground">{n.desc}</div>
-                  <div className="mt-1 text-[10px] text-muted-foreground/70">{n.time}</div>
+                  <div className="mt-1 text-[10px] text-muted-foreground/70">
+                    {n.time}
+                  </div>
                 </div>
               </DropdownMenuItem>
             );

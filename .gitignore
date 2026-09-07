@@ -34,3 +34,16 @@ Thumbs.db
 
 # Dev tools
 .freebuff/
+
+# Coverage
+.coverage
+htmlcov/
+coverage.xml
+
+# E2E
+backend/e2e.sqlite3
+test-results/
+playwright-report/
+
+# Recorded smoke-test videos (delivery artifact — attach manually)
+smoke-test/

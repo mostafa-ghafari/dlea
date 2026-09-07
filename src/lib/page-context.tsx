@@ -1,4 +1,10 @@
-import { createContext, useContext, useState, useCallback, type ReactNode } from "react";
+import {
+  createContext,
+  useContext,
+  useState,
+  useCallback,
+  type ReactNode,
+} from "react";
 
 interface PageMeta {
   title: string;
@@ -30,7 +36,11 @@ export function usePageMeta() {
   return useContext(PageContext);
 }
 
-export function useSetTitle(title: string, subtitle?: string, actions?: ReactNode) {
+export function useSetTitle(
+  title: string,
+  subtitle?: string,
+  actions?: ReactNode,
+) {
   const { setMeta } = usePageMeta();
   setMeta({ title, subtitle, actions });
 }

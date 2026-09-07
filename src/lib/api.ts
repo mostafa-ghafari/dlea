@@ -222,34 +222,39 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const fetchPromise = fetch(`${API_BASE}/${path.replace(/^\//, "")}`, {
     headers,
     ...init,
-  })
-    .then(async (res) => {
-      if (!res.ok) {
-        let detail = `API ${res.status}: ${path}`;
-        try {
-          const body = (await res.json()) as { detail?: string };
-          if (body?.detail) detail = body.detail;
-        } catch {
-          /* non-JSON error body */
-        }
-        throw new Error(detail);
+  }).then(async (res) => {
+    if (!res.ok) {
+      let detail = `API ${res.status}: ${path}`;
+      try {
+        const body = (await res.json()) as { detail?: string };
+        if (body?.detail) detail = body.detail;
+      } catch {
+        /* non-JSON error body */
       }
-      if (res.status === 204) {
-        return undefined as T;
+      throw new Error(detail);
+    }
+    if (res.status === 204) {
+      return undefined as T;
+    }
+    const text = await res.text();
+    if (!text) return undefined as T;
+    const data = JSON.parse(text) as unknown;
+    // DRF pagination wrapper: { count, next, previous, results }
+    if (
+      data &&
+      typeof data === "object" &&
+      Array.isArray((data as { results?: unknown }).results)
+    ) {
+      const keys = Object.keys(data as object);
+      const isStandardDRF = keys.every((k) =>
+        ["count", "next", "previous", "results"].includes(k),
+      );
+      if (isStandardDRF) {
+        return (data as { results: T }).results;
       }
-      const text = await res.text();
-      if (!text) return undefined as T;
-      const data = JSON.parse(text) as unknown;
-      // DRF pagination wrapper: { count, next, previous, results }
-      if (data && typeof data === "object" && Array.isArray((data as { results?: unknown }).results)) {
-        const keys = Object.keys(data as object);
-        const isStandardDRF = keys.every((k) => ["count", "next", "previous", "results"].includes(k));
-        if (isStandardDRF) {
-          return (data as { results: T }).results;
-        }
-      }
-      return data as T;
-    });
+    }
+    return data as T;
+  });
 
   // Track in-flight GETs for deduplication
   if (method === "GET") {
@@ -280,11 +285,17 @@ export function get<T>(path: string) {
 }
 
 export function post<T>(path: string, body?: unknown) {
-  return request<T>(path, { method: "POST", body: body == null ? undefined : JSON.stringify(body) });
+  return request<T>(path, {
+    method: "POST",
+    body: body == null ? undefined : JSON.stringify(body),
+  });
 }
 
 export function patch<T>(path: string, body?: unknown) {
-  return request<T>(path, { method: "PATCH", body: body == null ? undefined : JSON.stringify(body) });
+  return request<T>(path, {
+    method: "PATCH",
+    body: body == null ? undefined : JSON.stringify(body),
+  });
 }
 
 export function del<T>(path: string) {
@@ -292,7 +303,10 @@ export function del<T>(path: string) {
 }
 
 export function put<T>(path: string, body?: unknown) {
-  return request<T>(path, { method: "PUT", body: body == null ? undefined : JSON.stringify(body) });
+  return request<T>(path, {
+    method: "PUT",
+    body: body == null ? undefined : JSON.stringify(body),
+  });
 }
 
 /** POST with raw body (e.g. FormData for file uploads) — no Content-Type header. */
@@ -304,19 +318,32 @@ export function postRaw<T>(path: string, body: FormData) {
 /* Fetchers                                                            */
 /* ------------------------------------------------------------------ */
 
-export const fetchDashboard = (portfolioId?: string) => get<DashboardPayload>(portfolioId ? `dashboard/?portfolio=${portfolioId}` : "dashboard/");
-export const fetchTrades = (portfolioId?: string) => get<Trade[]>(portfolioId ? `trades/?portfolio=${portfolioId}` : "trades/");
+export const fetchDashboard = (portfolioId?: string) =>
+  get<DashboardPayload>(
+    portfolioId ? `dashboard/?portfolio=${portfolioId}` : "dashboard/",
+  );
+export const fetchTrades = (portfolioId?: string) =>
+  get<Trade[]>(portfolioId ? `trades/?portfolio=${portfolioId}` : "trades/");
 export const fetchPortfolios = () => get<Portfolio[]>("portfolios/");
-export const activatePortfolio = (id: string) => post<Portfolio>(`portfolios/${id}/activate/`, {});
+export const activatePortfolio = (id: string) =>
+  post<Portfolio>(`portfolios/${id}/activate/`, {});
 export const fetchJournalGroups = () => get<JournalGroup[]>("journal/groups/");
-export const fetchJournalEntries = () => get<JournalEntry[]>("journal/entries/");
+export const fetchJournalEntries = () =>
+  get<JournalEntry[]>("journal/entries/");
 export const fetchGoals = () => get<Goal[]>("goals/");
 export const fetchAchievements = () => get<Achievement[]>("achievements/");
-export const fetchAchievementHistory = () => get<AchievementHistoryItem[]>("achievement-history/");
+export const fetchAchievementHistory = () =>
+  get<AchievementHistoryItem[]>("achievement-history/");
 export const fetchRoleTiers = () => get<RoleTier[]>("role-tiers/");
 export const fetchCalendarDays = () => get<CalendarDay[]>("calendar/");
 export const fetchPlans = () => get<Plan[]>("plans/");
-export type AdminStats = { total_users: number; active_subscriptions: number; monthly_revenue: number; total_trades: number; ai_calls: number };
+export type AdminStats = {
+  total_users: number;
+  active_subscriptions: number;
+  monthly_revenue: number;
+  total_trades: number;
+  ai_calls: number;
+};
 export const fetchAdminStats = () => get<AdminStats>("admin/stats/");
 export type AdminCharts = {
   user_growth: { month: string; users: number }[];
@@ -324,34 +351,67 @@ export type AdminCharts = {
   plan_distribution: { name: string; value: number; color: string }[];
 };
 export const fetchAdminCharts = () => get<AdminCharts>("admin/charts/");
-export type AiApiInfo = { name: string; endpoint: string; requests: number; tokens_in: number; tokens_out: number };
+export type AiApiInfo = {
+  name: string;
+  endpoint: string;
+  requests: number;
+  tokens_in: number;
+  tokens_out: number;
+};
 export type AdminAiApis = { apis: AiApiInfo[]; gemini_configured: boolean };
 export const fetchAdminAiApis = () => get<AdminAiApis>("admin/ai-apis/");
-export type UsersPage = { count: number; page: number; page_size: number; results: PlatformUser[] };
+export type UsersPage = {
+  count: number;
+  page: number;
+  page_size: number;
+  results: PlatformUser[];
+};
 export const fetchUsers = (page = 1, pageSize = 20, search = "") =>
-  get<UsersPage>(`admin/users/?page=${page}&page_size=${pageSize}${search ? `&search=${encodeURIComponent(search)}` : ""}`);
+  get<UsersPage>(
+    `admin/users/?page=${page}&page_size=${pageSize}${search ? `&search=${encodeURIComponent(search)}` : ""}`,
+  );
 export const fetchPayments = () => get<Payment[]>("admin/payments/");
 export const fetchReferralLinks = () => get<ReferralLink[]>("admin/referrals/");
 export const fetchSubscription = async (): Promise<Subscription | null> => {
   const list = await get<Subscription[]>("subscription/");
   return list[0] ?? null;
 };
-export const fetchAiInsights = (portfolioId?: string) => get<AiInsights>(portfolioId ? `coach/insights/?portfolio=${portfolioId}` : "coach/insights/");
-export const fetchCoachPeriods = (portfolioId?: string) => get<CoachPeriod[]>(portfolioId ? `coach/periods/?portfolio=${portfolioId}` : "coach/periods/");
+export const fetchAiInsights = (portfolioId?: string) =>
+  get<AiInsights>(
+    portfolioId
+      ? `coach/insights/?portfolio=${portfolioId}`
+      : "coach/insights/",
+  );
+export const fetchCoachPeriods = (portfolioId?: string) =>
+  get<CoachPeriod[]>(
+    portfolioId ? `coach/periods/?portfolio=${portfolioId}` : "coach/periods/",
+  );
 
 export type GeneratedCoachReport = CoachPeriod & { _generated?: boolean };
 
-export function generateCoachReport(scope: CoachScope, model?: string, portfolioId?: string) {
-  return post<GeneratedCoachReport>("coach/generate/", { scope, model, portfolio: portfolioId });
+export function generateCoachReport(
+  scope: CoachScope,
+  model?: string,
+  portfolioId?: string,
+) {
+  return post<GeneratedCoachReport>("coach/generate/", {
+    scope,
+    model,
+    portfolio: portfolioId,
+  });
 }
-export const fetchArchivedReports = () => get<ArchivedReport[]>("coach/archive/");
-export const fetchEconomicEvents = () => get<EconomicEvent[]>("economic-events/");
-export const fetchForexSymbols = () => get<{ code: string }[]>("forex-symbols/");
+export const fetchArchivedReports = () =>
+  get<ArchivedReport[]>("coach/archive/");
+export const fetchEconomicEvents = () =>
+  get<EconomicEvent[]>("economic-events/");
+export const fetchForexSymbols = () =>
+  get<{ code: string }[]>("forex-symbols/");
 export const fetchStrategies = () => get<{ name: string }[]>("strategies/");
 export const fetchTradeColumns = () => get<TradeColumn[]>("trade-columns/");
 export const fetchNews = () => get<NewsItem[]>("news/");
 export const fetchTickets = () => get<Ticket[]>("tickets/");
-export const fetchNotifications = () => get<AppNotification[]>("notifications/");
+export const fetchNotifications = () =>
+  get<AppNotification[]>("notifications/");
 export const fetchAudit = () => get<AuditEntry[]>("audit/");
 export type AdminLogEntry = { id: string; t: string; l: string; m: string };
 export const fetchLogs = () => get<AdminLogEntry[]>("admin/logs/");
@@ -418,10 +478,11 @@ export function createTrade(input: TradeInput) {
 }
 
 export function bulkImportTrades(items: TradeInput[]) {
-  return post<{ created: number; total: number; errors?: { index: number; detail: unknown }[] }>(
-    "trades/import/",
-    items,
-  );
+  return post<{
+    created: number;
+    total: number;
+    errors?: { index: number; detail: unknown }[];
+  }>("trades/import/", items);
 }
 
 export function updateTrade(id: string, changes: Partial<TradeInput>) {
@@ -432,7 +493,10 @@ export function updateTradeScreenshots(id: string, screenshots: string[]) {
   return updateTrade(id, { screenshots });
 }
 
-export function updateUser(id: string, changes: Partial<Pick<PlatformUser, "plan" | "email" | "status" | "role">>) {
+export function updateUser(
+  id: string,
+  changes: Partial<Pick<PlatformUser, "plan" | "email" | "status" | "role">>,
+) {
   return patch<PlatformUser>(`admin/users/${id}/`, changes);
 }
 
@@ -460,7 +524,10 @@ export function createJournalGroup(input: JournalGroupInput) {
   return post<JournalGroup>("journal/groups/", input);
 }
 
-export function renameJournalGroup(id: string, changes: Partial<JournalGroupInput>) {
+export function renameJournalGroup(
+  id: string,
+  changes: Partial<JournalGroupInput>,
+) {
   return patch<JournalGroup>(`journal/groups/${id}/`, changes);
 }
 
@@ -487,7 +554,10 @@ export function createJournalEntry(input: JournalEntryInput) {
   return post<JournalEntry>("journal/entries/", input);
 }
 
-export function updateJournalEntry(id: string, changes: Partial<JournalEntryInput>) {
+export function updateJournalEntry(
+  id: string,
+  changes: Partial<JournalEntryInput>,
+) {
   return patch<JournalEntry>(`journal/entries/${id}/`, changes);
 }
 
@@ -514,12 +584,15 @@ export type UserProfile = {
 
 export const fetchProfile = () => get<UserProfile>("profile/");
 
-export async function updateProfile(data: Partial<UserProfile> & { avatarFile?: File }) {
+export async function updateProfile(
+  data: Partial<UserProfile> & { avatarFile?: File },
+) {
   const { avatarFile, ...rest } = data;
   if (avatarFile) {
     // Use FormData for file upload
     const formData = new FormData();
-    if (rest.firstName !== undefined) formData.append("firstName", rest.firstName);
+    if (rest.firstName !== undefined)
+      formData.append("firstName", rest.firstName);
     if (rest.lastName !== undefined) formData.append("lastName", rest.lastName);
     if (rest.phone !== undefined) formData.append("phone", rest.phone);
     formData.append("avatar", avatarFile);
@@ -532,7 +605,10 @@ export async function updateProfile(data: Partial<UserProfile> & { avatarFile?: 
 /* useApi hook                                                         */
 /* ------------------------------------------------------------------ */
 
-export function useApi<T>(loader: () => Promise<T>, deps: readonly unknown[] = []) {
+export function useApi<T>(
+  loader: () => Promise<T>,
+  deps: readonly unknown[] = [],
+) {
   const [data, setData] = useState<T | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -712,11 +788,20 @@ export function useAudit(): AuditEntry[] {
 }
 
 /** Role tier lookup — pure, data-driven (no module-level constants). */
-export function tierFor(earned: number, total: number, tiers: RoleTier[]): RoleTier {
+export function tierFor(
+  earned: number,
+  total: number,
+  tiers: RoleTier[],
+): RoleTier {
   const pct = total ? (earned / total) * 100 : 0;
   return (
     tiers.find((t) => pct >= t.minPct && pct < t.maxPct) ??
-    tiers[tiers.length - 1] ?? { level: 1, minPct: 0, maxPct: 100, name: "تریدر" }
+    tiers[tiers.length - 1] ?? {
+      level: 1,
+      minPct: 0,
+      maxPct: 100,
+      name: "تریدر",
+    }
   );
 }
 
@@ -752,7 +837,19 @@ const FREE_LIMITS: PlanLimits = {
   slug: "free",
   maxPortfolios: 1,
   maxTradesPerMonth: 50,
-  features: ["portfolios", "trades", "journal", "calendar", "goals", "achievements", "news", "support", "settings", "ai-coach", "risk"],
+  features: [
+    "portfolios",
+    "trades",
+    "journal",
+    "calendar",
+    "goals",
+    "achievements",
+    "news",
+    "support",
+    "settings",
+    "ai-coach",
+    "risk",
+  ],
 };
 
 /** Permissive fallback for paid plans when plans API is unavailable. */
@@ -760,7 +857,22 @@ const PAID_LIMITS: PlanLimits = {
   slug: "paid",
   maxPortfolios: -1,
   maxTradesPerMonth: -1,
-  features: ["portfolios", "trades", "journal", "calendar", "goals", "achievements", "news", "support", "settings", "ai-coach", "risk", "mt-connection", "reports", "psychology"],
+  features: [
+    "portfolios",
+    "trades",
+    "journal",
+    "calendar",
+    "goals",
+    "achievements",
+    "news",
+    "support",
+    "settings",
+    "ai-coach",
+    "risk",
+    "mt-connection",
+    "reports",
+    "psychology",
+  ],
 };
 
 /** Fetch plan limits from the backend API. */
@@ -769,7 +881,11 @@ export const fetchPlanLimits = () => get<PlanLimits[]>("plans/limits/");
 /** Return the limits for the current subscription. Falls back to "free" or permissive for paid plans. */
 export function usePlanLimits(): PlanLimits {
   const sub = useSubscription();
-  const slug = sub?.plan?.toLowerCase().replace(/\s+/g, "").replace(/[^a-z0-9-]/g, "") ?? "free";
+  const slug =
+    sub?.plan
+      ?.toLowerCase()
+      .replace(/\s+/g, "")
+      .replace(/[^a-z0-9-]/g, "") ?? "free";
   const plans = useApi(fetchPlanLimits).data;
   if (plans && plans.length > 0) {
     return plans.find((p) => p.slug === slug) ?? FREE_LIMITS;

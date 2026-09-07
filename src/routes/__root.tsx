@@ -19,7 +19,9 @@ function NotFoundComponent() {
     <div className="dark flex min-h-screen items-center justify-center bg-background px-4">
       <div className="max-w-md text-center">
         <h1 className="text-7xl font-bold text-foreground">۴۰۴</h1>
-        <h2 className="mt-4 text-xl font-semibold text-foreground">صفحه پیدا نشد</h2>
+        <h2 className="mt-4 text-xl font-semibold text-foreground">
+          صفحه پیدا نشد
+        </h2>
         <p className="mt-2 text-sm text-muted-foreground">
           صفحه‌ای که دنبال آن هستید وجود ندارد یا جابه‌جا شده است.
         </p>
@@ -70,49 +72,68 @@ function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
   );
 }
 
-export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()({
-  head: () => ({
-    meta: [
-      { charSet: "utf-8" },
-      { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "Dlea AI — ژورنال هوشمند معامله‌گران" },
-      {
-        name: "description",
-        content:
-          "پلتفرم حرفه‌ای ژورنال‌نویسی معامله‌گران بازارهای مالی با تحلیل هوش مصنوعی، مدیریت ریسک و اتصال مستقیم به متاتریدر.",
-      },
-      { property: "og:title", content: "Dlea AI — ژورنال هوشمند معامله‌گران" },
-      {
-        property: "og:description",
-        content: "ژورنال‌نویسی، تحلیل عملکرد و مربی هوشمند معامله‌گری در یک پلتفرم.",
-      },
-      { property: "og:type", content: "website" },
-      { name: "twitter:card", content: "summary_large_image" },
-    ],
-    links: [
-      { rel: "stylesheet", href: appCss },
-      { rel: "icon", href: "/favicon.png", type: "image/png" },
-      { rel: "preconnect", href: "https://fonts.googleapis.com" },
-      { rel: "preconnect", href: "https://fonts.gstatic.com", crossOrigin: "anonymous" },
-      {
-        rel: "stylesheet",
-        href: "https://fonts.googleapis.com/css2?family=Vazirmatn:wght@300;400;500;600;700;800;900&display=swap",
-      },
-    ],
-  }),
-  shellComponent: RootShell,
-  component: RootComponent,
-  notFoundComponent: NotFoundComponent,
-  errorComponent: ErrorComponent,
-});
+export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
+  {
+    head: () => ({
+      meta: [
+        { charSet: "utf-8" },
+        { name: "viewport", content: "width=device-width, initial-scale=1" },
+        { title: "Dlea AI — ژورنال هوشمند معامله‌گران" },
+        {
+          name: "description",
+          content:
+            "پلتفرم حرفه‌ای ژورنال‌نویسی معامله‌گران بازارهای مالی با تحلیل هوش مصنوعی، مدیریت ریسک و اتصال مستقیم به متاتریدر.",
+        },
+        {
+          property: "og:title",
+          content: "Dlea AI — ژورنال هوشمند معامله‌گران",
+        },
+        {
+          property: "og:description",
+          content:
+            "ژورنال‌نویسی، تحلیل عملکرد و مربی هوشمند معامله‌گری در یک پلتفرم.",
+        },
+        { property: "og:type", content: "website" },
+        { name: "twitter:card", content: "summary_large_image" },
+      ],
+      links: [
+        { rel: "stylesheet", href: appCss },
+        { rel: "icon", href: "/favicon.png", type: "image/png" },
+        { rel: "preconnect", href: "https://fonts.googleapis.com" },
+        {
+          rel: "preconnect",
+          href: "https://fonts.gstatic.com",
+          crossOrigin: "anonymous",
+        },
+        {
+          rel: "stylesheet",
+          href: "https://fonts.googleapis.com/css2?family=Vazirmatn:wght@300;400;500;600;700;800;900&display=swap",
+        },
+      ],
+    }),
+    shellComponent: RootShell,
+    component: RootComponent,
+    notFoundComponent: NotFoundComponent,
+    errorComponent: ErrorComponent,
+  },
+);
 
 function RootShell({ children }: { children: ReactNode }) {
   return (
-    <html lang="fa" dir="rtl" className="dark" suppressHydrationWarning style={{overflowX:"hidden",maxWidth:"100vw",width:"100%"}}>
+    <html
+      lang="fa"
+      dir="rtl"
+      className="dark"
+      suppressHydrationWarning
+      style={{ overflowX: "hidden", maxWidth: "100vw", width: "100%" }}
+    >
       <head>
         <HeadContent />
       </head>
-      <body className="bg-background text-foreground antialiased" style={{overflowX:"hidden",maxWidth:"100vw",width:"100%"}}>
+      <body
+        className="bg-background text-foreground antialiased"
+        style={{ overflowX: "hidden", maxWidth: "100vw", width: "100%" }}
+      >
         {children}
         <Scripts />
       </body>
@@ -125,7 +146,9 @@ function RootFallback() {
     <div className="dark flex min-h-screen items-center justify-center bg-background">
       <div className="flex flex-col items-center gap-3">
         <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-        <span className="text-sm text-muted-foreground">در حال بارگذاری...</span>
+        <span className="text-sm text-muted-foreground">
+          در حال بارگذاری...
+        </span>
       </div>
     </div>
   );

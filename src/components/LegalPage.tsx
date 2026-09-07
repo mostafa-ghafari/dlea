@@ -39,7 +39,9 @@ export function LegalPage({
 
       <main className="mx-auto max-w-4xl px-4 py-14 md:px-8">
         <h1 className="text-3xl font-bold md:text-4xl">{title}</h1>
-        <p className="mt-4 max-w-2xl leading-relaxed text-muted-foreground">{intro}</p>
+        <p className="mt-4 max-w-2xl leading-relaxed text-muted-foreground">
+          {intro}
+        </p>
         <div className="mt-10 space-y-4">{children}</div>
       </main>
 
@@ -54,7 +56,9 @@ export function LegalSection({ title, body }: { title: string; body: string }) {
   return (
     <section className="card-surface p-6">
       <h2 className="text-lg font-semibold">{title}</h2>
-      <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{body}</p>
+      <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+        {body}
+      </p>
     </section>
   );
 }

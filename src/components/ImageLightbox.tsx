@@ -1,5 +1,12 @@
 import { useEffect, useRef, useState, useCallback } from "react";
-import { X, ChevronLeft, ChevronRight, ZoomIn, ZoomOut, RotateCcw } from "lucide-react";
+import {
+  X,
+  ChevronLeft,
+  ChevronRight,
+  ZoomIn,
+  ZoomOut,
+  RotateCcw,
+} from "lucide-react";
 
 /**
  * Full-screen image lightbox with:
@@ -48,7 +55,9 @@ export function ImageLightbox({
   // Prevent body scroll while lightbox is open
   useEffect(() => {
     document.body.style.overflow = "hidden";
-    return () => { document.body.style.overflow = ""; };
+    return () => {
+      document.body.style.overflow = "";
+    };
   }, []);
 
   const goNext = useCallback(() => {
@@ -110,7 +119,12 @@ export function ImageLightbox({
     if (e.touches.length === 1) {
       const t = e.touches[0];
       touchStart.current = { x: t.clientX, y: t.clientY, time: Date.now() };
-      dragStart.current = { x: t.clientX, y: t.clientY, ox: offset.x, oy: offset.y };
+      dragStart.current = {
+        x: t.clientX,
+        y: t.clientY,
+        ox: offset.x,
+        oy: offset.y,
+      };
       if (scale > 1) setDragging(true);
     }
   }
@@ -152,7 +166,12 @@ export function ImageLightbox({
   function handleMouseDown(e: React.MouseEvent) {
     if (scale > 1) {
       setDragging(true);
-      dragStart.current = { x: e.clientX, y: e.clientY, ox: offset.x, oy: offset.y };
+      dragStart.current = {
+        x: e.clientX,
+        y: e.clientY,
+        ox: offset.x,
+        oy: offset.y,
+      };
     }
   }
 

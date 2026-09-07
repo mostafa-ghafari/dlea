@@ -8,9 +8,16 @@ export const Route = createFileRoute("/app/news/")({
   head: () => ({
     meta: [
       { title: "اخبار و اطلاعیه‌ها | Dlea AI" },
-      { name: "description", content: "آخرین اخبار، تخفیف‌ها، آپدیت‌های پلتفرم و اطلاعیه‌های تیم Dlea AI." },
+      {
+        name: "description",
+        content:
+          "آخرین اخبار، تخفیف‌ها، آپدیت‌های پلتفرم و اطلاعیه‌های تیم Dlea AI.",
+      },
       { property: "og:title", content: "اخبار و اطلاعیه‌ها" },
-      { property: "og:description", content: "تخفیف‌ها، آپدیت‌ها و اطلاعیه‌های پلتفرم ژورنال معاملاتی." },
+      {
+        property: "og:description",
+        content: "تخفیف‌ها، آپدیت‌ها و اطلاعیه‌های پلتفرم ژورنال معاملاتی.",
+      },
     ],
   }),
   component: NewsPage,
@@ -26,8 +33,11 @@ function NewsPage() {
   const { news } = usePlatform();
 
   return (
-    <AppShell title="اخبار و اطلاعیه‌ها" subtitle="آخرین تخفیف‌ها، آپدیت‌ها و اطلاعیه‌های پلتفرم">
-    <div className="grid gap-4">
+    <AppShell
+      title="اخبار و اطلاعیه‌ها"
+      subtitle="آخرین تخفیف‌ها، آپدیت‌ها و اطلاعیه‌های پلتفرم"
+    >
+      <div className="grid gap-4">
         {news.map((n) => (
           <Link
             key={n.id}
@@ -40,21 +50,32 @@ function NewsPage() {
                 <Megaphone className="h-4 w-4" />
               </div>
               <h2 className="text-base font-semibold">{n.title}</h2>
-              <Badge variant="outline" className={categoryClass(n.category)}>{n.category}</Badge>
+              <Badge variant="outline" className={categoryClass(n.category)}>
+                {n.category}
+              </Badge>
               {n.pinned && (
-                <Badge variant="outline" className="border-primary/40 bg-primary/10 text-primary">
+                <Badge
+                  variant="outline"
+                  className="border-primary/40 bg-primary/10 text-primary"
+                >
                   <Pin className="ml-1 h-3 w-3" /> مهم
                 </Badge>
               )}
-              <span className="mr-auto text-xs text-muted-foreground tabular">{n.date}</span>
+              <span className="mr-auto text-xs text-muted-foreground tabular">
+                {n.date}
+              </span>
             </div>
-            <p className="mt-3 text-sm leading-relaxed text-muted-foreground">{n.summary}</p>
+            <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
+              {n.summary}
+            </p>
           </Link>
         ))}
         {news.length === 0 && (
-          <div className="card-surface p-10 text-center text-sm text-muted-foreground">خبری منتشر نشده است.</div>
+          <div className="card-surface p-10 text-center text-sm text-muted-foreground">
+            خبری منتشر نشده است.
+          </div>
         )}
       </div>
     </AppShell>
-);
+  );
 }

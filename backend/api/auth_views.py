@@ -328,11 +328,20 @@ def google_callback(request):
     first_name = parts[0] if len(parts) > 0 else ""
     last_name = parts[1] if len(parts) > 1 else ""
 
-    # Find or create user
+    # Find or create user. The username prefix may already be taken by a
+    # different account (e.g. ali@x.com registered via OTP), so uniquify it
+    # the same way verify_otp_register does.
+    username = google_email.split("@")[0]
+    base = username
+    counter = 1
+    while User.objects.filter(username=username).exists():
+        username = f"{base}{counter}"
+        counter += 1
+
     user, created = User.objects.get_or_create(
         email=google_email,
         defaults={
-            "username": google_email.split("@")[0],
+            "username": username,
             "first_name": first_name,
             "last_name": last_name,
         },

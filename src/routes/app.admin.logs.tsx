@@ -36,13 +36,23 @@ function AdminLogsPage() {
       </div>
       <div className="mt-4 space-y-2 font-mono text-xs">
         {paged.map((log, i) => (
-          <div key={log.id ?? i} className="flex items-center gap-3 rounded border border-border bg-background/50 p-2.5">
+          <div
+            key={log.id ?? i}
+            className="flex items-center gap-3 rounded border border-border bg-background/50 p-2.5"
+          >
             <span className="text-muted-foreground tabular">{log.t}</span>
-            <Badge variant="outline" className={
-              log.l === "ERROR" ? "border-destructive/40 bg-destructive/10 text-destructive" :
-              log.l === "WARN" ? "border-accent/40 bg-accent/10 text-accent" :
-              "border-primary/40 bg-primary/10 text-primary"
-            }>{log.l}</Badge>
+            <Badge
+              variant="outline"
+              className={
+                log.l === "ERROR"
+                  ? "border-destructive/40 bg-destructive/10 text-destructive"
+                  : log.l === "WARN"
+                    ? "border-accent/40 bg-accent/10 text-accent"
+                    : "border-primary/40 bg-primary/10 text-primary"
+              }
+            >
+              {log.l}
+            </Badge>
             <span className="flex-1 truncate">{log.m}</span>
             <Activity className="h-3 w-3 text-muted-foreground" />
           </div>

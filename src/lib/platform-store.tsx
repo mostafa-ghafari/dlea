@@ -1,5 +1,22 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
-import { del, fetchAudit, fetchNews, fetchNotifications, fetchTickets, invalidateCache, patch, post } from "@/lib/api";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from "react";
+import {
+  del,
+  fetchAudit,
+  fetchNews,
+  fetchNotifications,
+  fetchTickets,
+  invalidateCache,
+  patch,
+  post,
+} from "@/lib/api";
 import { fullName, getCurrentUser } from "@/lib/app-state";
 
 /* ------------------------------------------------------------------ */
@@ -72,20 +89,31 @@ type Store = {
   audit: AuditEntry[];
   saveNews: (item: NewsItem) => void;
   deleteNews: (id: string) => void;
-  createTicket: (input: { subject: string; topic: TicketTopic; body: string; attachments: string[] }) => string;
-  replyTicket: (id: string, input: { author: "user" | "admin"; body: string; attachments: string[] }) => void;
+  createTicket: (input: {
+    subject: string;
+    topic: TicketTopic;
+    body: string;
+    attachments: string[];
+  }) => string;
+  replyTicket: (
+    id: string,
+    input: { author: "user" | "admin"; body: string; attachments: string[] },
+  ) => void;
   setTicketStatus: (id: string, status: TicketStatus) => void;
   markAllRead: () => void;
   markRead: (id: string) => void;
   dismissNotification: (id: string) => void;
   dismissAllNotifications: () => void;
-  pushNotification: (n: Omit<AppNotification, "id" | "read" | "time"> & { time?: string }) => void;
+  pushNotification: (
+    n: Omit<AppNotification, "id" | "read" | "time"> & { time?: string },
+  ) => void;
   logAudit: (entry: Omit<AuditEntry, "id" | "time">) => void;
 };
 
 const PlatformContext = createContext<Store | null>(null);
 
-const fa = (n: number) => String(n).replace(/\d/g, (d) => "۰۱۲۳۴۵۶۷۸۹"[Number(d)]!);
+const fa = (n: number) =>
+  String(n).replace(/\d/g, (d) => "۰۱۲۳۴۵۶۷۸۹"[Number(d)]!);
 
 function nowStamp() {
   const d = new Date();
@@ -106,11 +134,29 @@ export function PlatformProvider({ children }: { children: ReactNode }) {
   // doesn't prevent the others from loading.
   useEffect(() => {
     let alive = true;
-    fetchNews().then((n) => { if (alive) setNews(n); }).catch(() => {});
-    fetchTickets().then((t) => { if (alive) setTickets(t); }).catch(() => {});
-    fetchNotifications().then((n) => { if (alive) setNotifications(n); }).catch(() => {});
-    fetchAudit().then((a) => { if (alive) setAudit(a); }).catch(() => {});
-    return () => { alive = false; };
+    fetchNews()
+      .then((n) => {
+        if (alive) setNews(n);
+      })
+      .catch(() => {});
+    fetchTickets()
+      .then((t) => {
+        if (alive) setTickets(t);
+      })
+      .catch(() => {});
+    fetchNotifications()
+      .then((n) => {
+        if (alive) setNotifications(n);
+      })
+      .catch(() => {});
+    fetchAudit()
+      .then((a) => {
+        if (alive) setAudit(a);
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
   }, []);
 
   // Poll tickets + notifications every 20 s so data created by other users
@@ -120,9 +166,15 @@ export function PlatformProvider({ children }: { children: ReactNode }) {
       invalidateCache("tickets");
       invalidateCache("notifications/");
       invalidateCache("news/");
-      fetchTickets().then((t) => setTickets(t)).catch(() => {});
-      fetchNotifications().then((n) => setNotifications(n)).catch(() => {});
-      fetchNews().then((n) => setNews(n)).catch(() => {});
+      fetchTickets()
+        .then((t) => setTickets(t))
+        .catch(() => {});
+      fetchNotifications()
+        .then((n) => setNotifications(n))
+        .catch(() => {});
+      fetchNews()
+        .then((n) => setNews(n))
+        .catch(() => {});
     }, 20_000);
     return () => clearInterval(id);
   }, []);
@@ -142,16 +194,21 @@ export function PlatformProvider({ children }: { children: ReactNode }) {
       time: isoDate(),
       link: item.link ?? "",
       read: false,
-    }).then(() => {
-      // Invalidate so the next poll picks up the server-assigned id
-      invalidateCache("notifications/");
-    }).catch(() => {
-      /* optimistic write failed — keep local copy */
-    });
+    })
+      .then(() => {
+        // Invalidate so the next poll picks up the server-assigned id
+        invalidateCache("notifications/");
+      })
+      .catch(() => {
+        /* optimistic write failed — keep local copy */
+      });
   }, []);
 
   const logAudit = useCallback<Store["logAudit"]>((entry) => {
-    setAudit((list) => [{ id: `A-${Date.now()}`, time: nowStamp(), ...entry }, ...list]);
+    setAudit((list) => [
+      { id: `A-${Date.now()}`, time: nowStamp(), ...entry },
+      ...list,
+    ]);
     void post<AuditEntry>("audit/", entry).catch(() => {
       /* optimistic write failed */
     });
@@ -165,7 +222,9 @@ export function PlatformProvider({ children }: { children: ReactNode }) {
       audit,
       saveNews: (item) => {
         setNews((list) =>
-          list.some((n) => n.id === item.id) ? list.map((n) => (n.id === item.id ? item : n)) : [item, ...list],
+          list.some((n) => n.id === item.id)
+            ? list.map((n) => (n.id === item.id ? item : n))
+            : [item, ...list],
         );
         void post<NewsItem>("news/", {
           title: item.title,
@@ -198,7 +257,16 @@ export function PlatformProvider({ children }: { children: ReactNode }) {
           email: current?.email ?? "",
           createdAt: stamp,
           updatedAt: stamp,
-          messages: [{ id: `M-${Date.now()}`, author: "user", authorName, body, time: stamp, attachments }],
+          messages: [
+            {
+              id: `M-${Date.now()}`,
+              author: "user",
+              authorName,
+              body,
+              time: stamp,
+              attachments,
+            },
+          ],
         };
         setTickets((list) => [ticket, ...list]);
         void post<Ticket>("tickets/", {
@@ -215,12 +283,18 @@ export function PlatformProvider({ children }: { children: ReactNode }) {
               const backendId = String(created.id);
               if (backendId !== localId) {
                 setTickets((list) =>
-                  list.map((t) => (t.id === localId ? { ...t, id: backendId } : t)),
+                  list.map((t) =>
+                    t.id === localId ? { ...t, id: backendId } : t,
+                  ),
                 );
               }
               // Invalidate tickets list cache so fresh data is available
               invalidateCache("tickets");
-              void post(`tickets/${backendId}/reply/`, { author: "user", body, attachments }).catch(() => {});
+              void post(`tickets/${backendId}/reply/`, {
+                author: "user",
+                body,
+                attachments,
+              }).catch(() => {});
             }
           })
           .catch(() => {
@@ -236,13 +310,21 @@ export function PlatformProvider({ children }: { children: ReactNode }) {
               ? {
                   ...t,
                   updatedAt: stamp,
-                  status: author === "admin" ? "پاسخ داده شد" : t.status === "بسته" ? "باز" : t.status,
+                  status:
+                    author === "admin"
+                      ? "پاسخ داده شد"
+                      : t.status === "بسته"
+                        ? "باز"
+                        : t.status,
                   messages: [
                     ...t.messages,
                     {
                       id: `M-${Date.now()}`,
                       author,
-                      authorName: author === "admin" ? "پشتیبانی" : fullName(getCurrentUser()),
+                      authorName:
+                        author === "admin"
+                          ? "پشتیبانی"
+                          : fullName(getCurrentUser()),
                       body,
                       time: stamp,
                       attachments,
@@ -265,7 +347,11 @@ export function PlatformProvider({ children }: { children: ReactNode }) {
           });
       },
       setTicketStatus: (id, status) => {
-        setTickets((list) => list.map((t) => (t.id === id ? { ...t, status, updatedAt: nowStamp() } : t)));
+        setTickets((list) =>
+          list.map((t) =>
+            t.id === id ? { ...t, status, updatedAt: nowStamp() } : t,
+          ),
+        );
         void post(`tickets/${id}/set_status/`, { status }).catch(() => {
           /* optimistic write failed */
         });
@@ -277,7 +363,9 @@ export function PlatformProvider({ children }: { children: ReactNode }) {
         });
       },
       markRead: (id) => {
-        setNotifications((list) => list.map((n) => (n.id === id ? { ...n, read: true } : n)));
+        setNotifications((list) =>
+          list.map((n) => (n.id === id ? { ...n, read: true } : n)),
+        );
         void patch(`notifications/${id}/`, { read: true }).catch(() => {
           /* optimistic write failed */
         });
@@ -300,7 +388,11 @@ export function PlatformProvider({ children }: { children: ReactNode }) {
     [news, tickets, notifications, audit, pushNotification, logAudit],
   );
 
-  return <PlatformContext.Provider value={value}>{children}</PlatformContext.Provider>;
+  return (
+    <PlatformContext.Provider value={value}>
+      {children}
+    </PlatformContext.Provider>
+  );
 }
 
 export function usePlatform() {

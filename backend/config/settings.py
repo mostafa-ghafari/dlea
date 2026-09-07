@@ -73,7 +73,8 @@ if os.environ.get("USE_SQLITE", "0") == "1":
     DATABASES = {
         "default": {
             "ENGINE": "django.db.backends.sqlite3",
-            "NAME": BASE_DIR / "db.sqlite3",
+            # SQLITE_DB_NAME lets tests / E2E use a dedicated DB file
+            "NAME": os.environ.get("SQLITE_DB_NAME", BASE_DIR / "db.sqlite3"),
         }
     }
 else:

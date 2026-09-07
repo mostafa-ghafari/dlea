@@ -78,7 +78,9 @@ export function ImageUploader({
       results.push(await optimize(file));
     }
     onChange([...images, ...results]);
-    toast.success(`${results.length} تصویر آپلود شد و به حدود ۲۰۰ کیلوبایت بهینه‌سازی شد`);
+    toast.success(
+      `${results.length} تصویر آپلود شد و به حدود ۲۰۰ کیلوبایت بهینه‌سازی شد`,
+    );
   }
 
   return (
@@ -107,7 +109,10 @@ export function ImageUploader({
       {images.length > 0 && (
         <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
           {images.map((src, i) => (
-            <div key={i} className="group relative overflow-hidden rounded-lg border border-border">
+            <div
+              key={i}
+              className="group relative overflow-hidden rounded-lg border border-border"
+            >
               <img
                 src={src}
                 alt={`اسکرین‌شات ${i + 1}`}
@@ -117,7 +122,10 @@ export function ImageUploader({
               />
               <button
                 type="button"
-                onClick={(e) => { e.stopPropagation(); onChange(images.filter((_, idx) => idx !== i)); }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onChange(images.filter((_, idx) => idx !== i));
+                }}
                 className="absolute left-1 top-1 grid h-6 w-6 place-items-center rounded-md bg-background/85 text-destructive opacity-0 transition-opacity group-hover:opacity-100"
                 aria-label="حذف تصویر"
               >

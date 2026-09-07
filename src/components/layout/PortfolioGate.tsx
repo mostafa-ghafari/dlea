@@ -12,8 +12,8 @@ export function PortfolioGate() {
         </div>
         <h2 className="mt-5 text-xl font-bold">اول یک پرتفولیو بساز</h2>
         <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
-          برای شروع کار با ژورنال، ساخت اولین پرتفولیو الزامی است. تا زمانی که پرتفولیو نسازی،
-          بقیه بخش‌ها در دسترس نیستند.
+          برای شروع کار با ژورنال، ساخت اولین پرتفولیو الزامی است. تا زمانی که
+          پرتفولیو نسازی، بقیه بخش‌ها در دسترس نیستند.
         </p>
         <Link to="/app/portfolios" className="mt-6 inline-block">
           <Button className="bg-primary text-primary-foreground hover:bg-primary/90">

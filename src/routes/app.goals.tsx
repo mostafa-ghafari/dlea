@@ -16,8 +16,20 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { createGoal, deleteGoal, fetchGoals, updateGoal, type Goal } from "@/lib/api";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  createGoal,
+  deleteGoal,
+  fetchGoals,
+  updateGoal,
+  type Goal,
+} from "@/lib/api";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/app/goals")({
@@ -55,7 +67,9 @@ function GoalsPage() {
       setGoals((g) => [...g, created]);
       toast.success(`هدف «${created.title}» اضافه شد`);
     } catch (err) {
-      toast.error(`ثبت هدف ناموفق بود: ${err instanceof Error ? err.message : err}`);
+      toast.error(
+        `ثبت هدف ناموفق بود: ${err instanceof Error ? err.message : err}`,
+      );
       return;
     }
     setTitle("");
@@ -64,52 +78,89 @@ function GoalsPage() {
   }
 
   return (
-    <AppShell title="اهداف" subtitle="تعیین و پیگیری اهداف معاملاتی" actions={
-      <Button className="bg-primary text-primary-foreground hover:bg-primary/90" onClick={() => setOpen(true)}>
-        <Plus className="ml-1 h-4 w-4" />هدف جدید
-      </Button>
-    }>
+    <AppShell
+      title="اهداف"
+      subtitle="تعیین و پیگیری اهداف معاملاتی"
+      actions={
+        <Button
+          className="bg-primary text-primary-foreground hover:bg-primary/90"
+          onClick={() => setOpen(true)}
+        >
+          <Plus className="ml-1 h-4 w-4" />
+          هدف جدید
+        </Button>
+      }
+    >
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent>
-            <form onSubmit={submit}>
-              <DialogHeader>
-                <DialogTitle>هدف معاملاتی جدید</DialogTitle>
-                <DialogDescription>یک هدف قابل اندازه‌گیری تعریف کن تا پیشرفتت را دنبال کنیم.</DialogDescription>
-              </DialogHeader>
-              <div className="mt-4 space-y-4">
+          <form onSubmit={submit}>
+            <DialogHeader>
+              <DialogTitle>هدف معاملاتی جدید</DialogTitle>
+              <DialogDescription>
+                یک هدف قابل اندازه‌گیری تعریف کن تا پیشرفتت را دنبال کنیم.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="mt-4 space-y-4">
+              <div className="space-y-2">
+                <Label>عنوان هدف</Label>
+                <Input
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                  placeholder="مثلاً: ۱۵٪ سود ماهانه"
+                  className="bg-secondary/60"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>نوع هدف</Label>
+                <Select value={type} onValueChange={setType}>
+                  <SelectTrigger className="bg-secondary/60">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {["سود", "ریسک", "نظم", "یادگیری"].map((t) => (
+                      <SelectItem key={t} value={t}>
+                        {t}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-2">
-                  <Label>عنوان هدف</Label>
-                  <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="مثلاً: ۱۵٪ سود ماهانه" className="bg-secondary/60" />
+                  <Label>مقدار هدف</Label>
+                  <Input
+                    type="number"
+                    placeholder="۱۵"
+                    className="bg-secondary/60 tabular"
+                  />
                 </div>
                 <div className="space-y-2">
-                  <Label>نوع هدف</Label>
-                  <Select value={type} onValueChange={setType}>
-                    <SelectTrigger className="bg-secondary/60"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      {["سود", "ریسک", "نظم", "یادگیری"].map((t) => (
-                        <SelectItem key={t} value={t}>{t}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-2">
-                    <Label>مقدار هدف</Label>
-                    <Input type="number" placeholder="۱۵" className="bg-secondary/60 tabular" />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>مهلت (روز)</Label>
-                    <Input type="number" min={1} placeholder="۳۰" className="bg-secondary/60 tabular" />
-                  </div>
+                  <Label>مهلت (روز)</Label>
+                  <Input
+                    type="number"
+                    min={1}
+                    placeholder="۳۰"
+                    className="bg-secondary/60 tabular"
+                  />
                 </div>
               </div>
-              <DialogFooter className="mt-6">
-                <DialogClose asChild><Button type="button" variant="outline">انصراف</Button></DialogClose>
-                <Button type="submit" className="bg-primary text-primary-foreground hover:bg-primary/90">ثبت هدف</Button>
-              </DialogFooter>
-            </form>
-          </DialogContent>
-        </Dialog>
+            </div>
+            <DialogFooter className="mt-6">
+              <DialogClose asChild>
+                <Button type="button" variant="outline">
+                  انصراف
+                </Button>
+              </DialogClose>
+              <Button
+                type="submit"
+                className="bg-primary text-primary-foreground hover:bg-primary/90"
+              >
+                ثبت هدف
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
       <div className="grid gap-4 md:grid-cols-2">
         {goals.map((g) => (
           <div key={g.id} className="card-surface p-6">
@@ -145,7 +196,9 @@ function GoalsPage() {
                           setGoals((list) => list.filter((x) => x.id !== g.id));
                           toast.success(`هدف «${g.title}» حذف شد`);
                         } catch (err) {
-                          toast.error(`حذف هدف ناموفق بود: ${err instanceof Error ? err.message : err}`);
+                          toast.error(
+                            `حذف هدف ناموفق بود: ${err instanceof Error ? err.message : err}`,
+                          );
                         }
                       }}
                     >
@@ -169,16 +222,25 @@ function GoalsPage() {
         )}
       </div>
 
-      <Dialog open={editId !== null} onOpenChange={(o) => !o && setEditId(null)}>
+      <Dialog
+        open={editId !== null}
+        onOpenChange={(o) => !o && setEditId(null)}
+      >
         <DialogContent>
           <DialogHeader>
             <DialogTitle>ویرایش هدف</DialogTitle>
-            <DialogDescription>عنوان و درصد پیشرفت هدف را به‌روزرسانی کن.</DialogDescription>
+            <DialogDescription>
+              عنوان و درصد پیشرفت هدف را به‌روزرسانی کن.
+            </DialogDescription>
           </DialogHeader>
           <div className="mt-4 space-y-4">
             <div className="space-y-2">
               <Label>عنوان هدف</Label>
-              <Input value={editTitle} onChange={(e) => setEditTitle(e.target.value)} className="bg-secondary/60" />
+              <Input
+                value={editTitle}
+                onChange={(e) => setEditTitle(e.target.value)}
+                className="bg-secondary/60"
+              />
             </div>
             <div className="space-y-2">
               <Label>پیشرفت (٪)</Label>
@@ -187,14 +249,20 @@ function GoalsPage() {
                 min={0}
                 max={100}
                 value={editProgress}
-                onChange={(e) => setEditProgress(Math.max(0, Math.min(100, Number(e.target.value) || 0)))}
+                onChange={(e) =>
+                  setEditProgress(
+                    Math.max(0, Math.min(100, Number(e.target.value) || 0)),
+                  )
+                }
                 className="bg-secondary/60 tabular"
               />
             </div>
           </div>
           <DialogFooter className="mt-6">
             <DialogClose asChild>
-              <Button type="button" variant="outline">انصراف</Button>
+              <Button type="button" variant="outline">
+                انصراف
+              </Button>
             </DialogClose>
             <Button
               className="bg-primary text-primary-foreground hover:bg-primary/90"
@@ -204,11 +272,18 @@ function GoalsPage() {
                   return;
                 }
                 try {
-                  const updated = await updateGoal(editId, { title: editTitle.trim(), progress: editProgress });
-                  setGoals((list) => list.map((x) => (x.id === editId ? updated : x)));
+                  const updated = await updateGoal(editId, {
+                    title: editTitle.trim(),
+                    progress: editProgress,
+                  });
+                  setGoals((list) =>
+                    list.map((x) => (x.id === editId ? updated : x)),
+                  );
                   toast.success("هدف به‌روزرسانی شد");
                 } catch (err) {
-                  toast.error(`ویرایش هدف ناموفق بود: ${err instanceof Error ? err.message : err}`);
+                  toast.error(
+                    `ویرایش هدف ناموفق بود: ${err instanceof Error ? err.message : err}`,
+                  );
                   return;
                 }
                 setEditId(null);
@@ -220,5 +295,5 @@ function GoalsPage() {
         </DialogContent>
       </Dialog>
     </AppShell>
-);
+  );
 }

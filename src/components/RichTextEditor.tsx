@@ -75,18 +75,46 @@ export function RichTextEditor({
       { icon: Bold, label: "توپر", run: () => exec("bold") },
       { icon: Italic, label: "ایتالیک", run: () => exec("italic") },
       { icon: Underline, label: "زیرخط", run: () => exec("underline") },
-      { icon: Strikethrough, label: "خط‌خورده", run: () => exec("strikeThrough") },
+      {
+        icon: Strikethrough,
+        label: "خط‌خورده",
+        run: () => exec("strikeThrough"),
+      },
     ],
     [
-      { icon: Heading1, label: "تیتر ۱", run: () => exec("formatBlock", "<h2>") },
-      { icon: Heading2, label: "تیتر ۲", run: () => exec("formatBlock", "<h3>") },
-      { icon: Heading3, label: "تیتر ۳", run: () => exec("formatBlock", "<h4>") },
-      { icon: Quote, label: "نقل‌قول", run: () => exec("formatBlock", "<blockquote>") },
+      {
+        icon: Heading1,
+        label: "تیتر ۱",
+        run: () => exec("formatBlock", "<h2>"),
+      },
+      {
+        icon: Heading2,
+        label: "تیتر ۲",
+        run: () => exec("formatBlock", "<h3>"),
+      },
+      {
+        icon: Heading3,
+        label: "تیتر ۳",
+        run: () => exec("formatBlock", "<h4>"),
+      },
+      {
+        icon: Quote,
+        label: "نقل‌قول",
+        run: () => exec("formatBlock", "<blockquote>"),
+      },
       { icon: Code2, label: "کد", run: () => exec("formatBlock", "<pre>") },
     ],
     [
-      { icon: List, label: "لیست نامرتب", run: () => exec("insertUnorderedList") },
-      { icon: ListOrdered, label: "لیست شماره‌دار", run: () => exec("insertOrderedList") },
+      {
+        icon: List,
+        label: "لیست نامرتب",
+        run: () => exec("insertUnorderedList"),
+      },
+      {
+        icon: ListOrdered,
+        label: "لیست شماره‌دار",
+        run: () => exec("insertOrderedList"),
+      },
       { icon: Minus, label: "خط جداکننده", run: () => insertHtml("<hr />") },
     ],
     [
@@ -103,7 +131,11 @@ export function RichTextEditor({
           if (url) exec("createLink", url);
         },
       },
-      { icon: ImagePlus, label: "تصویر داخل متن", run: () => fileRef.current?.click() },
+      {
+        icon: ImagePlus,
+        label: "تصویر داخل متن",
+        run: () => fileRef.current?.click(),
+      },
     ],
     [
       { icon: Undo2, label: "بازگردانی", run: () => exec("undo") },
@@ -164,7 +196,9 @@ export function RichTextEditor({
           if (!file) return;
           const fr = new FileReader();
           fr.onload = () =>
-            insertHtml(`<img src="${String(fr.result)}" alt="تصویر ژورنال" style="max-width:100%;border-radius:8px" />`);
+            insertHtml(
+              `<img src="${String(fr.result)}" alt="تصویر ژورنال" style="max-width:100%;border-radius:8px" />`,
+            );
           fr.readAsDataURL(file);
         }}
       />
@@ -191,7 +225,13 @@ export function RichTextEditor({
 }
 
 /** Read-only renderer for stored journal HTML. */
-export function RichTextView({ html, className = "" }: { html: string; className?: string }) {
+export function RichTextView({
+  html,
+  className = "",
+}: {
+  html: string;
+  className?: string;
+}) {
   return (
     <div
       className={`rte-content text-sm leading-relaxed ${className}`}

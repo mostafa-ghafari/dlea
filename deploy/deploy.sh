@@ -22,6 +22,9 @@ python3 -m venv .venv 2>/dev/null || true
 .venv/bin/pip install --upgrade pip -q 2>/dev/null || true
 .venv/bin/pip install -r requirements.txt -q
 
+echo "Running backend tests before deploy (abort on failure)..."
+USE_SQLITE=1 .venv/bin/python manage.py test api --settings config.settings_test
+
 echo "Running migrations..."
 .venv/bin/python manage.py migrate --noinput
 

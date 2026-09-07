@@ -69,7 +69,10 @@ export const ONBOARDING_KEY = "tj:has-portfolio:v2";
 
 /** Onboarding gate: a trader must create a portfolio before anything else. */
 export function useHasPortfolio(): [boolean, (v: boolean) => void, boolean] {
-  const [manual, setManual, lsReady] = useLocalState<boolean>(ONBOARDING_KEY, false);
+  const [manual, setManual, lsReady] = useLocalState<boolean>(
+    ONBOARDING_KEY,
+    false,
+  );
   // Seeded portfolios unlock the app too — the gate follows the API, not just
   // the localStorage flag that gets set when a portfolio is created in the UI.
   const { data, loading } = useApi(fetchPortfolios, []);
@@ -96,11 +99,17 @@ export function setActivePortfolioId(id: string | null) {
 }
 
 /** React hook for the active portfolio ID. */
-export function useActivePortfolioId(): [string | null, (id: string | null) => void] {
+export function useActivePortfolioId(): [
+  string | null,
+  (id: string | null) => void,
+] {
   const [id, setId] = useLocalState<string | null>(ACTIVE_PORTFOLIO_KEY, null);
-  const set = useCallback((next: string | null) => {
-    setId(next);
-    setActivePortfolioId(next);
-  }, [setId]);
+  const set = useCallback(
+    (next: string | null) => {
+      setId(next);
+      setActivePortfolioId(next);
+    },
+    [setId],
+  );
   return [id, set];
 }

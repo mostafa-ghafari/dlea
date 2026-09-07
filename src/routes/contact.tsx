@@ -12,9 +12,15 @@ export const Route = createFileRoute("/contact")({
   head: () => ({
     meta: [
       { title: "تماس با ما | Dlea AI" },
-      { name: "description", content: "ارتباط با تیم Dlea AI برای سوالات فنی، اشتراک و همکاری." },
+      {
+        name: "description",
+        content: "ارتباط با تیم Dlea AI برای سوالات فنی، اشتراک و همکاری.",
+      },
       { property: "og:title", content: "تماس با ما" },
-      { property: "og:description", content: "سوال، پیشنهاد یا مشکل فنی داری؟ با تیم Dlea AI در تماس باش." },
+      {
+        property: "og:description",
+        content: "سوال، پیشنهاد یا مشکل فنی داری؟ با تیم Dlea AI در تماس باش.",
+      },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
     ],
@@ -76,16 +82,35 @@ function ContactPage() {
         <div className="relative mt-6 space-y-6" dir="rtl">
           <div className="absolute right-3 top-2 bottom-2 w-px bg-border" />
           {[
-            { year: "۲۰۱۲", text: "شروع فعالیت با دامنه Deas در حوزه آموزش و سرمایه‌گذاری مالی" },
-            { year: "۲۰۲۰", text: "ورود به بازار فارکس و تمرکز بر معاملات ارزی" },
-            { year: "۲۰۲۱", text: "آموزش، مشاوره و سیگنالدهی با عنوان تاپ سیگنال فارکس (topsignal_forex)" },
-            { year: "۲۰۲۵", text: "راه‌اندازی پلتفرم Dlea (دلیا) برای ژورنال‌نویسی حرفه‌ای تریدران" },
+            {
+              year: "۲۰۱۲",
+              text: "شروع فعالیت با دامنه Deas در حوزه آموزش و سرمایه‌گذاری مالی",
+            },
+            {
+              year: "۲۰۲۰",
+              text: "ورود به بازار فارکس و تمرکز بر معاملات ارزی",
+            },
+            {
+              year: "۲۰۲۱",
+              text: "آموزش، مشاوره و سیگنالدهی با عنوان تاپ سیگنال فارکس (topsignal_forex)",
+            },
+            {
+              year: "۲۰۲۵",
+              text: "راه‌اندازی پلتفرم Dlea (دلیا) برای ژورنال‌نویسی حرفه‌ای تریدران",
+            },
           ].map((item) => (
-            <div key={item.year} className="relative flex items-start gap-4 pr-8">
+            <div
+              key={item.year}
+              className="relative flex items-start gap-4 pr-8"
+            >
               <div className="absolute right-0 top-1 h-6 w-6 rounded-full border-2 border-primary bg-background" />
               <div>
-                <div className="text-sm font-bold text-primary tabular">{item.year}</div>
-                <div className="mt-1 text-sm text-muted-foreground">{item.text}</div>
+                <div className="text-sm font-bold text-primary tabular">
+                  {item.year}
+                </div>
+                <div className="mt-1 text-sm text-muted-foreground">
+                  {item.text}
+                </div>
               </div>
             </div>
           ))}
@@ -100,7 +125,10 @@ function ContactPage() {
         </div>
         <div className="mt-5 grid gap-4 sm:grid-cols-2">
           {teamMembers.map((m) => (
-            <div key={m.name} className="rounded-lg border border-border bg-secondary/40 p-4">
+            <div
+              key={m.name}
+              className="rounded-lg border border-border bg-secondary/40 p-4"
+            >
               <div className="flex items-center gap-3">
                 <div className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-primary/15 text-sm font-bold text-primary">
                   {m.name.split(" ").filter(Boolean).slice(-1)[0]?.[0] ?? ""}
@@ -118,13 +146,18 @@ function ContactPage() {
                   </div>
                 )}
                 {m.phones.map((p) => (
-                  <div key={p} className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <div
+                    key={p}
+                    className="flex items-center gap-2 text-xs text-muted-foreground"
+                  >
                     <Phone className="h-3.5 w-3.5 text-primary" />
                     <span dir="ltr">{p}</span>
                   </div>
                 ))}
                 {!m.email && m.phones.length === 0 && (
-                  <div className="text-xs text-muted-foreground/50 italic">اطلاعات تماس به‌زودی اضافه می‌شود</div>
+                  <div className="text-xs text-muted-foreground/50 italic">
+                    اطلاعات تماس به‌زودی اضافه می‌شود
+                  </div>
                 )}
               </div>
             </div>
@@ -161,12 +194,15 @@ function ContactPage() {
           <Textarea
             rows={5}
             value={form.message}
-              onChange={(e) => setForm({ ...form, message: e.target.value })}
+            onChange={(e) => setForm({ ...form, message: e.target.value })}
             placeholder="متن پیام..."
             className="bg-secondary/60"
           />
         </div>
-        <Button type="submit" className="bg-primary text-primary-foreground hover:bg-primary/90">
+        <Button
+          type="submit"
+          className="bg-primary text-primary-foreground hover:bg-primary/90"
+        >
           <Send className="ml-1 h-4 w-4" /> ارسال پیام
         </Button>
       </form>

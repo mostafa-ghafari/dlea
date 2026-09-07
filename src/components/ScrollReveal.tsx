@@ -6,7 +6,9 @@ import { useEffect } from "react";
  */
 export function ScrollReveal() {
   useEffect(() => {
-    const nodes = Array.from(document.querySelectorAll<HTMLElement>("[data-reveal]"));
+    const nodes = Array.from(
+      document.querySelectorAll<HTMLElement>("[data-reveal]"),
+    );
     if (nodes.length === 0) return;
 
     if (!("IntersectionObserver" in window)) {

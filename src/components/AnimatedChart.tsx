@@ -17,22 +17,22 @@ export function AnimatedChart() {
     { x: 0.08, y: 0.58 },
     { x: 0.12, y: 0.62 },
     { x: 0.16, y: 0.46 },
-    { x: 0.20, y: 0.50 },
+    { x: 0.2, y: 0.5 },
     { x: 0.24, y: 0.33 },
     { x: 0.28, y: 0.37 },
     { x: 0.32, y: 0.25 },
     { x: 0.36, y: 0.29 },
-    { x: 0.40, y: 0.18 },
+    { x: 0.4, y: 0.18 },
     { x: 0.44, y: 0.22 },
     { x: 0.48, y: 0.15 },
     { x: 0.52, y: 0.12 },
     { x: 0.56, y: 0.18 },
-    { x: 0.60, y: 0.10 },
+    { x: 0.6, y: 0.1 },
     { x: 0.64, y: 0.08 },
     { x: 0.68, y: 0.14 },
     { x: 0.72, y: 0.06 },
     { x: 0.76, y: 0.09 },
-    { x: 0.80, y: 0.04 },
+    { x: 0.8, y: 0.04 },
     { x: 0.84, y: 0.07 },
     { x: 0.88, y: 0.03 },
     { x: 0.92, y: 0.05 },
@@ -77,7 +77,10 @@ export function AnimatedChart() {
     if (!visible) return;
     if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) {
       setProgress(1);
-      setDotPos({ x: scaleX(points[points.length - 1]!.x), y: scaleY(points[points.length - 1]!.y) });
+      setDotPos({
+        x: scaleX(points[points.length - 1]!.x),
+        y: scaleY(points[points.length - 1]!.y),
+      });
       return;
     }
     const duration = 2000;
@@ -87,7 +90,10 @@ export function AnimatedChart() {
       const eased = 1 - Math.pow(1 - p, 3);
       setProgress(eased);
       // Find dot position along the path
-      const idx = Math.min(Math.floor(eased * (points.length - 1)), points.length - 1);
+      const idx = Math.min(
+        Math.floor(eased * (points.length - 1)),
+        points.length - 1,
+      );
       const pt = points[idx]!;
       setDotPos({ x: scaleX(pt.x), y: scaleY(pt.y) });
       if (p < 1) requestAnimationFrame(tick);
@@ -117,8 +123,16 @@ export function AnimatedChart() {
       >
         <defs>
           <linearGradient id="chartGrad" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="var(--color-primary)" stopOpacity={0.5} />
-            <stop offset="100%" stopColor="var(--color-primary)" stopOpacity={0} />
+            <stop
+              offset="0%"
+              stopColor="var(--color-primary)"
+              stopOpacity={0.5}
+            />
+            <stop
+              offset="100%"
+              stopColor="var(--color-primary)"
+              stopOpacity={0}
+            />
           </linearGradient>
           <filter id="glow">
             <feGaussianBlur stdDeviation="3" result="blur" />
@@ -128,8 +142,16 @@ export function AnimatedChart() {
             </feMerge>
           </filter>
           <linearGradient id="dotGlow" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="var(--color-primary)" stopOpacity={0.8} />
-            <stop offset="100%" stopColor="var(--color-primary)" stopOpacity={0} />
+            <stop
+              offset="0%"
+              stopColor="var(--color-primary)"
+              stopOpacity={0.8}
+            />
+            <stop
+              offset="100%"
+              stopColor="var(--color-primary)"
+              stopOpacity={0}
+            />
           </linearGradient>
         </defs>
 
@@ -209,13 +231,31 @@ export function AnimatedChart() {
         )}
 
         {/* Y-axis labels */}
-        <text x={4} y={scaleY(0.25) - 4} fill="var(--color-muted-foreground)" fontSize={9} opacity={progress > 0.2 ? 0.6 : 0}>
+        <text
+          x={4}
+          y={scaleY(0.25) - 4}
+          fill="var(--color-muted-foreground)"
+          fontSize={9}
+          opacity={progress > 0.2 ? 0.6 : 0}
+        >
           +24.8%
         </text>
-        <text x={4} y={scaleY(0.5) - 4} fill="var(--color-muted-foreground)" fontSize={9} opacity={progress > 0.3 ? 0.6 : 0}>
+        <text
+          x={4}
+          y={scaleY(0.5) - 4}
+          fill="var(--color-muted-foreground)"
+          fontSize={9}
+          opacity={progress > 0.3 ? 0.6 : 0}
+        >
           +12%
         </text>
-        <text x={4} y={scaleY(0.75) - 4} fill="var(--color-muted-foreground)" fontSize={9} opacity={progress > 0.1 ? 0.6 : 0}>
+        <text
+          x={4}
+          y={scaleY(0.75) - 4}
+          fill="var(--color-muted-foreground)"
+          fontSize={9}
+          opacity={progress > 0.1 ? 0.6 : 0}
+        >
           شروع
         </text>
       </svg>

@@ -26,7 +26,11 @@ declare global {
             client_id: string;
             callback: (response: { credential: string }) => void;
           }) => void;
-          prompt: (callback?: (notification: { isNotDisplayed: () => boolean }) => void) => void;
+          prompt: (
+            callback?: (notification: {
+              isNotDisplayed: () => boolean;
+            }) => void,
+          ) => void;
         };
       };
     };
@@ -138,7 +142,9 @@ function LoginPage() {
 
   function handleGoogleLogin() {
     if (!GOOGLE_CLIENT_ID) {
-      toast.error("ورود با گوگل تنظیم نشده است. لطفاً GOOGLE_CLIENT_ID را در فایل env تنظیم کنید.");
+      toast.error(
+        "ورود با گوگل تنظیم نشده است. لطفاً GOOGLE_CLIENT_ID را در فایل env تنظیم کنید.",
+      );
       return;
     }
     if (window.google) {
@@ -150,7 +156,9 @@ function LoginPage() {
         }
       });
     } else {
-      toast.error("سرویس گوگل هنوز بارگذاری نشده است. لطفاً صفحه را رفرش کنید.");
+      toast.error(
+        "سرویس گوگل هنوز بارگذاری نشده است. لطفاً صفحه را رفرش کنید.",
+      );
     }
   }
 
@@ -209,7 +217,11 @@ function LoginPage() {
                   onClick={() => setShowPassword(!showPassword)}
                   className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
                 >
-                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  {showPassword ? (
+                    <EyeOff className="h-4 w-4" />
+                  ) : (
+                    <Eye className="h-4 w-4" />
+                  )}
                 </button>
               </div>
             </div>

@@ -1,24 +1,52 @@
 import { AppShell } from "@/components/AppShell";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { FileSpreadsheet, Link2, UploadCloud, CheckCircle2, Loader2, Download, Check, Copy } from "lucide-react";
+import {
+  FileSpreadsheet,
+  Link2,
+  UploadCloud,
+  CheckCircle2,
+  Loader2,
+  Download,
+  Check,
+  Copy,
+} from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import * as XLSX from "xlsx";
-import { bulkImportTrades, get, post, usePortfolios, type TradeInput } from "@/lib/api";
+import {
+  bulkImportTrades,
+  get,
+  post,
+  usePortfolios,
+  type TradeInput,
+} from "@/lib/api";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/app/trades/new")({
   head: () => ({
     meta: [
       { title: "افزودن معامله — ایمپورت یا اتصال متاتریدر" },
-      { name: "description", content: "معاملات را از فایل گزارش متاتریدر ایمپورت کن یا حساب MT4/MT5 را متصل کن تا معاملات خودکار جمع‌آوری شوند." },
+      {
+        name: "description",
+        content:
+          "معاملات را از فایل گزارش متاتریدر ایمپورت کن یا حساب MT4/MT5 را متصل کن تا معاملات خودکار جمع‌آوری شوند.",
+      },
       { property: "og:title", content: "افزودن معامله" },
-      { property: "og:description", content: "ایمپورت گزارش متاتریدر یا اتصال خودکار حساب معاملاتی." },
+      {
+        property: "og:description",
+        content: "ایمپورت گزارش متاتریدر یا اتصال خودکار حساب معاملاتی.",
+      },
     ],
   }),
   component: NewTrade,
@@ -75,7 +103,10 @@ function parseStatement(text: string, isHtml: boolean): ParsedTrade[] {
     const trs = text.match(/<tr[\s\S]*?<\/tr>/gi) ?? [];
     trs.forEach((tr) => {
       const cells = (tr.match(/<t[dh][\s\S]*?<\/t[dh]>/gi) ?? []).map((c) =>
-        c.replace(/<[^>]+>/g, "").replace(/&nbsp;/g, " ").trim(),
+        c
+          .replace(/<[^>]+>/g, "")
+          .replace(/&nbsp;/g, " ")
+          .trim(),
       );
       if (cells.length >= 6) rows.push(cells);
     });
@@ -86,21 +117,30 @@ function parseStatement(text: string, isHtml: boolean): ParsedTrade[] {
       .forEach((l) => rows.push(splitCsvLine(l)));
   }
 
-  const num = (v: string) => Number(String(v).replace(/[^\d.\-]/g, ""));
+  const num = (v: string) => Number(String(v).replace(/[^\d.-]/g, ""));
   const trades: ParsedTrade[] = [];
 
   rows.forEach((c) => {
-    const symbolIdx = c.findIndex((v) => /^[A-Za-z]{6}(\.[a-z]+)?$|^(XAUUSD|XAGUSD|US30|NAS100)/i.test(v.trim()));
+    const symbolIdx = c.findIndex((v) =>
+      /^[A-Za-z]{6}(\.[a-z]+)?$|^(XAUUSD|XAGUSD|US30|NAS100)/i.test(v.trim()),
+    );
     const sideIdx = c.findIndex((v) => /^(buy|sell)$/i.test(v.trim()));
     if (symbolIdx === -1 || sideIdx === -1) return;
 
     const ticket = c.find((v) => /^\d{6,}$/.test(v.trim())) ?? "-";
-    const times = c.filter((v) => /\d{4}[./-]\d{2}[./-]\d{2}[ T]\d{2}:\d{2}/.test(v));
+    const times = c.filter((v) =>
+      /\d{4}[./-]\d{2}[./-]\d{2}[ T]\d{2}:\d{2}/.test(v),
+    );
     // Only import closed positions (require both open and close times)
     if (times.length < 2) return;
-    const numbers = c.filter((v) => /^-?[\d\s,]*\.?\d+$/.test(v.trim()) && v.trim() !== ticket);
+    const numbers = c.filter(
+      (v) => /^-?[\d\s,]*\.?\d+$/.test(v.trim()) && v.trim() !== ticket,
+    );
     const profitRaw = numbers.length ? numbers[numbers.length - 1]! : "0";
-    const volumeRaw = c[sideIdx + 1] && num(c[sideIdx + 1]!) ? c[sideIdx + 1]! : (numbers[0] ?? "0");
+    const volumeRaw =
+      c[sideIdx + 1] && num(c[sideIdx + 1]!)
+        ? c[sideIdx + 1]!
+        : (numbers[0] ?? "0");
 
     trades.push({
       ticket,
@@ -132,25 +172,34 @@ function parseXlsx(buffer: ArrayBuffer): ParsedTrade[] {
   const ws = wb.Sheets[wb.SheetNames[0]];
   const raw = XLSX.utils.sheet_to_json(ws, { header: 1, defval: "" });
   // Convert all cell values to strings (XLSX can return numbers)
-  const rows: string[][] = raw
-    .map((r: unknown[]) => r.map((v) => v == null ? "" : String(v)))
+  const rows: string[][] = (raw as unknown[][])
+    .map((r) => r.map((v) => (v == null ? "" : String(v))))
     .filter((r: string[]) => r.length >= 6);
-  const num = (v: string) => Number(String(v).replace(/[^\d.\-]/g, ""));
+  const num = (v: string) => Number(String(v).replace(/[^\d.-]/g, ""));
   const trades: ParsedTrade[] = [];
 
   rows.forEach((c) => {
-    const symbolIdx = c.findIndex((v) => /^[A-Za-z]{6}(\.[a-z]+)?$|^(XAUUSD|XAGUSD|US30|NAS100)/i.test(v.trim()));
+    const symbolIdx = c.findIndex((v) =>
+      /^[A-Za-z]{6}(\.[a-z]+)?$|^(XAUUSD|XAGUSD|US30|NAS100)/i.test(v.trim()),
+    );
     const sideIdx = c.findIndex((v) => /^(buy|sell)$/i.test(v.trim()));
     if (symbolIdx === -1 || sideIdx === -1) return;
 
     const ticket = c.find((v) => /^\d{6,}$/.test(v.trim())) || "-";
-    const times = c.filter((v) => /\d{4}[./-]\d{2}[./-]\d{2}[ T]\d{2}:\d{2}/.test(v));
+    const times = c.filter((v) =>
+      /\d{4}[./-]\d{2}[./-]\d{2}[ T]\d{2}:\d{2}/.test(v),
+    );
     // Only import closed positions (require both open and close times)
     if (times.length < 2) return;
-    const numbers = c.filter((v) => /^-?[\d\s,]*\.?\d+$/.test(v.trim()) && v.trim() !== ticket);
+    const numbers = c.filter(
+      (v) => /^-?[\d\s,]*\.?\d+$/.test(v.trim()) && v.trim() !== ticket,
+    );
 
     const profitRaw = numbers.length ? numbers[numbers.length - 1]! : "0";
-    const volumeRaw = c[sideIdx + 1] && num(c[sideIdx + 1]!) ? c[sideIdx + 1]! : (numbers[0] || "0");
+    const volumeRaw =
+      c[sideIdx + 1] && num(c[sideIdx + 1]!)
+        ? c[sideIdx + 1]!
+        : numbers[0] || "0";
 
     trades.push({
       ticket,
@@ -191,7 +240,9 @@ function ImportPanel() {
         const rows = parseStatement(text, /\.html?$/i.test(f.name));
         setParsed(rows);
         if (rows.length === 0) {
-          toast.warning("معامله‌ای در فایل شناسایی نشد — ساختار گزارش را بررسی کن");
+          toast.warning(
+            "معامله‌ای در فایل شناسایی نشد — ساختار گزارش را بررسی کن",
+          );
         } else {
           toast.success(`${rows.length} معامله در فایل «${f.name}» شناسایی شد`);
         }
@@ -204,12 +255,17 @@ function ImportPanel() {
         const rows = parseXlsx(buffer);
         setParsed(rows);
         if (rows.length === 0) {
-          toast.warning("معامله‌ای در فایل شناسایی نشد — ساختار گزارش را بررسی کن");
+          toast.warning(
+            "معامله‌ای در فایل شناسایی نشد — ساختار گزارش را بررسی کن",
+          );
         } else {
           toast.success(`${rows.length} معامله در فایل «${f.name}» شناسایی شد`);
         }
-} catch (err) {
-        toast.error("خواندن فایل XLSX ناموفق بود: " + (err instanceof Error ? err.message : String(err)));
+      } catch (err) {
+        toast.error(
+          "خواندن فایل XLSX ناموفق بود: " +
+            (err instanceof Error ? err.message : String(err)),
+        );
       }
     }
   }
@@ -229,7 +285,10 @@ function ImportPanel() {
     }
     const pid = Number(portfolioId);
     const items: TradeInput[] = parsed.map((t) => ({
-      ticket: t.ticket === "-" ? `IMP-${Date.now().toString(36)}-${Math.floor(Math.random() * 1000)}` : t.ticket,
+      ticket:
+        t.ticket === "-"
+          ? `IMP-${Date.now().toString(36)}-${Math.floor(Math.random() * 1000)}`
+          : t.ticket,
       symbol: t.symbol,
       side: t.side === "خرید" ? "buy" : "sell",
       volume: Number(t.volume) || 0,
@@ -266,10 +325,11 @@ function ImportPanel() {
       navigate({ to: "/app/trades" });
     } catch (err) {
       setBusy(false);
-      toast.error(`ایمپورت ناموفق بود: ${err instanceof Error ? err.message : err}`);
+      toast.error(
+        `ایمپورت ناموفق بود: ${err instanceof Error ? err.message : err}`,
+      );
     }
   }
-
 
   return (
     <div className="grid gap-4 lg:grid-cols-3">
@@ -279,8 +339,10 @@ function ImportPanel() {
           <h3 className="font-semibold">ایمپورت گزارش معاملات</h3>
         </div>
         <p className="text-sm text-muted-foreground">
-          از متاتریدر خروجی <span className="font-medium">History / Report</span> بگیر و فایل را اینجا بارگذاری کن.
-          تمام فیلدها (Ticket، Symbol، Volume، Swap، Commission و ...) به‌صورت خودکار خوانده می‌شود.
+          از متاتریدر خروجی{" "}
+          <span className="font-medium">History / Report</span> بگیر و فایل را
+          اینجا بارگذاری کن. تمام فیلدها (Ticket، Symbol، Volume، Swap،
+          Commission و ...) به‌صورت خودکار خوانده می‌شود.
         </p>
 
         <div
@@ -296,7 +358,9 @@ function ImportPanel() {
           }}
           onClick={() => inputRef.current?.click()}
           className={`flex cursor-pointer items-center justify-center rounded-xl border-2 border-dashed p-10 text-center transition-colors ${
-            dragging ? "border-primary bg-primary/5" : "border-border bg-secondary/30 hover:bg-secondary/50"
+            dragging
+              ? "border-primary bg-primary/5"
+              : "border-border bg-secondary/30 hover:bg-secondary/50"
           }`}
         >
           <div>
@@ -304,7 +368,9 @@ function ImportPanel() {
             <p className="mt-3 text-sm">
               {file ? file.name : "فایل را بکش و رها کن یا کلیک کن"}
             </p>
-            <p className="mt-1 text-xs text-muted-foreground">CSV, HTML, XLSX — حداکثر ۱۰ مگابایت</p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              CSV, HTML, XLSX — حداکثر ۱۰ مگابایت
+            </p>
           </div>
         </div>
         <input
@@ -318,8 +384,13 @@ function ImportPanel() {
         {parsed.length > 0 && (
           <div className="rounded-xl border border-border bg-secondary/30 p-3">
             <div className="mb-2 flex items-center justify-between">
-              <div className="text-sm font-medium">پیش‌نمایش معاملات شناسایی‌شده</div>
-              <Badge variant="outline" className="border-primary/40 bg-primary/10 text-primary tabular">
+              <div className="text-sm font-medium">
+                پیش‌نمایش معاملات شناسایی‌شده
+              </div>
+              <Badge
+                variant="outline"
+                className="border-primary/40 bg-primary/10 text-primary tabular"
+              >
                 {parsed.length} معامله
               </Badge>
             </div>
@@ -337,13 +408,24 @@ function ImportPanel() {
                 </thead>
                 <tbody>
                   {parsed.slice(0, 50).map((t, i) => (
-                    <tr key={`${t.ticket}-${i}`} className="border-b border-border/40 last:border-0">
-                      <td className="py-2 text-xs tabular text-muted-foreground">{t.ticket}</td>
+                    <tr
+                      key={`${t.ticket}-${i}`}
+                      className="border-b border-border/40 last:border-0"
+                    >
+                      <td className="py-2 text-xs tabular text-muted-foreground">
+                        {t.ticket}
+                      </td>
                       <td className="py-2 font-medium">{t.symbol}</td>
                       <td className="py-2">{t.side}</td>
                       <td className="py-2 tabular">{t.volume}</td>
-                      <td className="py-2 text-xs tabular text-muted-foreground">{t.openTime}</td>
-                      <td className={`py-2 tabular ${Number(t.profit) >= 0 ? "gain" : "loss"}`}>{t.profit}</td>
+                      <td className="py-2 text-xs tabular text-muted-foreground">
+                        {t.openTime}
+                      </td>
+                      <td
+                        className={`py-2 tabular ${Number(t.profit) >= 0 ? "gain" : "loss"}`}
+                      >
+                        {t.profit}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -352,18 +434,23 @@ function ImportPanel() {
           </div>
         )}
 
-
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="space-y-2">
             <Label>پرتفولیو مقصد</Label>
             <Select value={portfolioId} onValueChange={setPortfolioId}>
-              <SelectTrigger className="bg-secondary/60"><SelectValue placeholder="انتخاب پرتفولیو" /></SelectTrigger>
+              <SelectTrigger className="bg-secondary/60">
+                <SelectValue placeholder="انتخاب پرتفولیو" />
+              </SelectTrigger>
               <SelectContent>
                 {portfolios.length === 0 && (
-                  <SelectItem value="none" disabled>اول یک پرتفولیو بساز</SelectItem>
+                  <SelectItem value="none" disabled>
+                    اول یک پرتفولیو بساز
+                  </SelectItem>
                 )}
                 {portfolios.map((p) => (
-                  <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                  <SelectItem key={p.id} value={p.id}>
+                    {p.name}
+                  </SelectItem>
                 ))}
               </SelectContent>
             </Select>
@@ -371,7 +458,9 @@ function ImportPanel() {
           <div className="space-y-2">
             <Label>نسخه متاتریدر</Label>
             <Select defaultValue="mt5">
-              <SelectTrigger className="bg-secondary/60"><SelectValue /></SelectTrigger>
+              <SelectTrigger className="bg-secondary/60">
+                <SelectValue />
+              </SelectTrigger>
               <SelectContent>
                 <SelectItem value="mt4">MT4</SelectItem>
                 <SelectItem value="mt5">MT5</SelectItem>
@@ -386,10 +475,22 @@ function ImportPanel() {
             disabled={busy}
             className="bg-primary text-primary-foreground hover:bg-primary/90"
           >
-            {busy ? <Loader2 className="ml-1 h-4 w-4 animate-spin" /> : <UploadCloud className="ml-1 h-4 w-4" />}
+            {busy ? (
+              <Loader2 className="ml-1 h-4 w-4 animate-spin" />
+            ) : (
+              <UploadCloud className="ml-1 h-4 w-4" />
+            )}
             شروع ایمپورت
           </Button>
-          <Button variant="outline" onClick={() => { setFile(null); setParsed([]); }}>پاک کردن</Button>
+          <Button
+            variant="outline"
+            onClick={() => {
+              setFile(null);
+              setParsed([]);
+            }}
+          >
+            پاک کردن
+          </Button>
         </div>
       </div>
 
@@ -414,8 +515,6 @@ function ImportPanel() {
     </div>
   );
 }
-
-
 
 function ConnectPanel() {
   const portfolios = usePortfolios();
@@ -504,7 +603,9 @@ function ConnectPanel() {
           <div className="space-y-2">
             <Label>نسخه</Label>
             <Select value={platform} onValueChange={setPlatform}>
-              <SelectTrigger className="bg-secondary/60"><SelectValue /></SelectTrigger>
+              <SelectTrigger className="bg-secondary/60">
+                <SelectValue />
+              </SelectTrigger>
               <SelectContent>
                 <SelectItem value="mt5">MT5</SelectItem>
                 <SelectItem value="mt4">MT4</SelectItem>
@@ -513,35 +614,64 @@ function ConnectPanel() {
           </div>
           <div className="space-y-2">
             <Label>بروکر</Label>
-            <Input value={broker} onChange={(e) => setBroker(e.target.value)} placeholder="IC Markets" className="bg-secondary/60" />
+            <Input
+              value={broker}
+              onChange={(e) => setBroker(e.target.value)}
+              placeholder="IC Markets"
+              className="bg-secondary/60"
+            />
           </div>
           <div className="space-y-2">
             <Label>سرور</Label>
-            <Input value={server} onChange={(e) => setServer(e.target.value)} placeholder="ICMarkets-Live01" className="bg-secondary/60" />
+            <Input
+              value={server}
+              onChange={(e) => setServer(e.target.value)}
+              placeholder="ICMarkets-Live01"
+              className="bg-secondary/60"
+            />
           </div>
           <div className="space-y-2">
             <Label>شماره حساب</Label>
-            <Input value={account} onChange={(e) => setAccount(e.target.value)} placeholder="12345678" className="bg-secondary/60 tabular" />
+            <Input
+              value={account}
+              onChange={(e) => setAccount(e.target.value)}
+              placeholder="12345678"
+              className="bg-secondary/60 tabular"
+            />
           </div>
           <div className="space-y-2 sm:col-span-2">
             <Label>پرتفولیوی مقصد</Label>
             <Select value={portfolioId} onValueChange={setPortfolioId}>
-              <SelectTrigger className="bg-secondary/60"><SelectValue placeholder="انتخاب پرتفولیو" /></SelectTrigger>
+              <SelectTrigger className="bg-secondary/60">
+                <SelectValue placeholder="انتخاب پرتفولیو" />
+              </SelectTrigger>
               <SelectContent>
                 {portfolios.map((p) => (
-                  <SelectItem key={p.id} value={String(p.id)}>{p.name} — {p.broker}</SelectItem>
+                  <SelectItem key={p.id} value={String(p.id)}>
+                    {p.name} — {p.broker}
+                  </SelectItem>
                 ))}
               </SelectContent>
             </Select>
             {portfolios.length === 0 && (
-              <p className="text-xs text-amber-500">اول از بخش پرتفولیوها یک پرتفولیو بساز.</p>
+              <p className="text-xs text-amber-500">
+                اول از بخش پرتفولیوها یک پرتفولیو بساز.
+              </p>
             )}
           </div>
         </div>
 
         <div className="mt-6">
-          <Button disabled={saving || portfolios.length === 0} className="bg-primary text-primary-foreground hover:bg-primary/90" onClick={handleConnect}>
-            {saving ? <Loader2 className="ml-1 h-4 w-4 animate-spin" /> : <Link2 className="ml-1 h-4 w-4" />}
+          <Button
+            disabled={saving || portfolios.length === 0}
+            className="bg-primary text-primary-foreground hover:bg-primary/90"
+            onClick={handleConnect}
+          >
+            {saving ? (
+              <Loader2 className="ml-1 h-4 w-4 animate-spin" />
+            ) : (
+              <Link2 className="ml-1 h-4 w-4" />
+            )}
             {connected ? "به‌روزرسانی اتصال" : "اتصال"}
           </Button>
         </div>
@@ -556,31 +686,68 @@ function ConnectPanel() {
               <Badge className="bg-primary/15 text-primary">فعال</Badge>
             </div>
             <dl className="mt-4 space-y-2 text-sm">
-              <div className="flex justify-between"><dt className="text-muted-foreground">حساب</dt><dd className="tabular">{mt?.account}</dd></div>
-              <div className="flex justify-between"><dt className="text-muted-foreground">سرور</dt><dd>{mt?.server || "—"}</dd></div>
-              <div className="flex justify-between"><dt className="text-muted-foreground">نسخه</dt><dd>{mt?.platform?.toUpperCase()}</dd></div>
+              <div className="flex justify-between">
+                <dt className="text-muted-foreground">حساب</dt>
+                <dd className="tabular">{mt?.account}</dd>
+              </div>
+              <div className="flex justify-between">
+                <dt className="text-muted-foreground">سرور</dt>
+                <dd>{mt?.server || "—"}</dd>
+              </div>
+              <div className="flex justify-between">
+                <dt className="text-muted-foreground">نسخه</dt>
+                <dd>{mt?.platform?.toUpperCase()}</dd>
+              </div>
             </dl>
           </div>
 
           <div className="card-surface p-6">
             <h3 className="font-semibold">توکن و آدرس وب‌هوک</h3>
-            <p className="mt-1 text-xs text-muted-foreground">این دو مقدار را هنگام نصب EA وارد کن.</p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              این دو مقدار را هنگام نصب EA وارد کن.
+            </p>
             <div className="mt-4 space-y-3">
               <div>
                 <Label>آدرس وب‌هوک</Label>
                 <div className="mt-1 flex items-center gap-2">
-                  <Input readOnly value={mt?.webhookUrl ?? ""} dir="ltr" className="bg-secondary/60 font-mono text-xs" />
-                  <Button size="icon" variant="outline" onClick={() => copy(mt?.webhookUrl ?? "", "url")}>
-                    {copied === "url" ? <Check className="h-4 w-4 text-primary" /> : <Copy className="h-4 w-4" />}
+                  <Input
+                    readOnly
+                    value={mt?.webhookUrl ?? ""}
+                    dir="ltr"
+                    className="bg-secondary/60 font-mono text-xs"
+                  />
+                  <Button
+                    size="icon"
+                    variant="outline"
+                    onClick={() => copy(mt?.webhookUrl ?? "", "url")}
+                  >
+                    {copied === "url" ? (
+                      <Check className="h-4 w-4 text-primary" />
+                    ) : (
+                      <Copy className="h-4 w-4" />
+                    )}
                   </Button>
                 </div>
               </div>
               <div>
                 <Label>توکن</Label>
                 <div className="mt-1 flex items-center gap-2">
-                  <Input readOnly value={mt?.token ?? ""} dir="ltr" className="bg-secondary/60 font-mono text-xs" />
-                  <Button size="icon" variant="outline" onClick={() => copy(mt?.token ?? "", "token")}>
-                    {copied === "token" ? <Check className="h-4 w-4 text-primary" /> : <Copy className="h-4 w-4" />}
+                  <Input
+                    readOnly
+                    value={mt?.token ?? ""}
+                    dir="ltr"
+                    className="bg-secondary/60 font-mono text-xs"
+                  />
+                  <Button
+                    size="icon"
+                    variant="outline"
+                    onClick={() => copy(mt?.token ?? "", "token")}
+                  >
+                    {copied === "token" ? (
+                      <Check className="h-4 w-4 text-primary" />
+                    ) : (
+                      <Copy className="h-4 w-4" />
+                    )}
                   </Button>
                 </div>
               </div>
@@ -590,11 +757,29 @@ function ConnectPanel() {
           <div className="card-surface p-6">
             <h3 className="font-semibold">نصب EA (اکسپرت)</h3>
             <ol className="mt-3 list-inside list-decimal space-y-1.5 text-sm text-muted-foreground">
-              <li>فایل <span dir="ltr" className="font-mono">DleaSync.ex5</span> را دانلود کن.</li>
+              <li>
+                فایل{" "}
+                <span dir="ltr" className="font-mono">
+                  DleaSync.ex5
+                </span>{" "}
+                را دانلود کن.
+              </li>
               <li>در MT5: File → Open Data Folder → پوشه MQL5/Experts.</li>
-              <li>فایل را در پوشه <span dir="ltr" className="font-mono">MQL5/Experts</span> متاتریدر کپی کن.</li>
-              <li>در MT5: Tools → Options → Expert Advisors → «Allow WebRequest» را تیک بزن و آدرس وب‌هوک را اضافه کن.</li>
-              <li>EA را روی چارت بکش، توکن و آدرس وب‌هوک را وارد کن و Algo Trading را فعال کن.</li>
+              <li>
+                فایل را در پوشه{" "}
+                <span dir="ltr" className="font-mono">
+                  MQL5/Experts
+                </span>{" "}
+                متاتریدر کپی کن.
+              </li>
+              <li>
+                در MT5: Tools → Options → Expert Advisors → «Allow WebRequest»
+                را تیک بزن و آدرس وب‌هوک را اضافه کن.
+              </li>
+              <li>
+                EA را روی چارت بکش، توکن و آدرس وب‌هوک را وارد کن و Algo Trading
+                را فعال کن.
+              </li>
             </ol>
             <a href="/mt/DleaSync.ex5" download className="mt-4 inline-block">
               <Button variant="outline" className="gap-2">
@@ -620,14 +805,24 @@ function ConnectPanel() {
 function NewTrade() {
   return (
     <AppShell title="افزودن معامله" subtitle="ایمپورت فایل یا اتصال متاتریدر">
-    <Tabs defaultValue="import" dir="rtl">
+      <Tabs defaultValue="import" dir="rtl">
         <TabsList>
-          <TabsTrigger value="import"><FileSpreadsheet className="ml-1 h-4 w-4" />ایمپورت فایل</TabsTrigger>
-          <TabsTrigger value="connect"><Link2 className="ml-1 h-4 w-4" />اتصال متاتریدر</TabsTrigger>
+          <TabsTrigger value="import">
+            <FileSpreadsheet className="ml-1 h-4 w-4" />
+            ایمپورت فایل
+          </TabsTrigger>
+          <TabsTrigger value="connect">
+            <Link2 className="ml-1 h-4 w-4" />
+            اتصال متاتریدر
+          </TabsTrigger>
         </TabsList>
-        <TabsContent value="import" className="mt-6"><ImportPanel /></TabsContent>
-        <TabsContent value="connect" className="mt-6"><ConnectPanel /></TabsContent>
+        <TabsContent value="import" className="mt-6">
+          <ImportPanel />
+        </TabsContent>
+        <TabsContent value="connect" className="mt-6">
+          <ConnectPanel />
+        </TabsContent>
       </Tabs>
     </AppShell>
-);
+  );
 }

@@ -9,8 +9,9 @@ from zoneinfo import ZoneInfo
 from django.contrib.auth import get_user_model
 from django.db.models import Q, Sum
 User = get_user_model()
-from rest_framework import parsers, viewsets
+from rest_framework import parsers, serializers, viewsets
 from rest_framework.decorators import action
+from rest_framework.permissions import BasePermission, IsAuthenticated, SAFE_METHODS
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -143,6 +144,27 @@ class TradeViewSet(viewsets.ModelViewSet):
             qs = qs.filter(portfolio__id=portfolio)
         return qs
 
+    def perform_create(self, serializer):
+        """Scope new trades to a portfolio the caller actually owns.
+
+        Without this a user could attach trades to another user's portfolio
+        by passing an arbitrary portfolio_id (the list view filters by owner,
+        but create did not).
+        """
+        user = self.request.user if self.request.user.is_authenticated else None
+        portfolio_id = serializer.validated_data.get("portfolio_id")
+        if portfolio_id is not None:
+            owned = Portfolio.objects.filter(pk=portfolio_id)
+            if user is not None:
+                owned = owned.filter(user=user)
+            else:
+                owned = owned.filter(user__isnull=True)
+            if not owned.exists():
+                raise serializers.ValidationError(
+                    {"portfolio_id": "پرتفولیوی نامعتبر است"}
+                )
+        serializer.save()
+
     @action(detail=False, methods=["post"], url_path="import")
     def bulk_import(self, request):
         """Create many trades at once (MetaTrader statement import).
@@ -231,8 +253,21 @@ class SubscriptionViewSet(UserScopedMixin, viewsets.ReadOnlyModelViewSet):
     serializer_class = SubscriptionSerializer
 
 
+class IsAdminUserPermission(BasePermission):
+    """Allow only admin-level users (is_staff or admin profile role).
+
+    Mirrors the UI gate (`effective === "admin"`): admins are users whose
+    profile role is in the admin set, or Django staff members.
+    """
+
+    def has_permission(self, request, view):
+        return _is_admin_user(request.user)
+
+
 class AdminStatsView(APIView):
     """Return real-time KPI stats for the admin dashboard."""
+    permission_classes = [IsAdminUserPermission]
+
     def get(self, request):
         from .models import Payment, Trade, AiApiCall
         total_users = User.objects.count()
@@ -257,6 +292,8 @@ class AdminStatsView(APIView):
 
 class AdminAiApisView(APIView):
     """Return real AI API usage grouped by model_name."""
+    permission_classes = [IsAdminUserPermission]
+
     def get(self, request):
         from .models import AiApiCall
         from django.db.models import Sum
@@ -287,6 +324,8 @@ class AdminAiApisView(APIView):
 
 class AdminChartsView(APIView):
     """Return chart data from real database records."""
+    permission_classes = [IsAdminUserPermission]
+
     def get(self, request):
         from .models import Payment, UserProfile
         from collections import Counter
@@ -336,6 +375,7 @@ class AdminChartsView(APIView):
 class PlatformUserViewSet(viewsets.ModelViewSet):
     """Admin users endpoint backed by real Django users."""
     serializer_class = PlatformUserSerializer
+    permission_classes = [IsAdminUserPermission]
     pagination_class = None  # Custom pagination in list()
 
     def get_queryset(self):
@@ -454,11 +494,13 @@ class PlatformUserViewSet(viewsets.ModelViewSet):
 class PaymentViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = Payment.objects.all()
     serializer_class = PaymentSerializer
+    permission_classes = [IsAdminUserPermission]
 
 
 class ReferralLinkViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = ReferralLink.objects.all()
     serializer_class = ReferralLinkSerializer
+    permission_classes = [IsAdminUserPermission]
 
 
 class NewsItemViewSet(viewsets.ModelViewSet):
@@ -496,12 +538,16 @@ def _is_admin_user(user):
 
 
 def _admin_queryset():
-    """Return a User queryset of all admin-level users (is_staff or admin role)."""
+    """Return a User queryset of all admin-level users (is_staff or admin role).
+
+    Queried from User (not UserProfile) so staff users who haven't logged in
+    yet (no profile row) are still included.
+    """
     from django.db.models import Q
-    admin_profiles = UserProfile.objects.filter(
-        Q(user__is_staff=True) | Q(role__in={"admin", "vip", "trader-vip", "professional-vip", "master-vip"})
-    ).values_list("user_id", flat=True)
-    return User.objects.filter(id__in=admin_profiles)
+    return User.objects.filter(
+        Q(is_staff=True)
+        | Q(profile__role__in={"admin", "vip", "trader-vip", "professional-vip", "master-vip"})
+    )
 
 
 class TicketViewSet(viewsets.ModelViewSet):
@@ -633,10 +679,18 @@ class AuditEntryViewSet(viewsets.ModelViewSet):
     queryset = AuditEntry.objects.all()
     serializer_class = AuditEntrySerializer
 
+    def get_permissions(self):
+        # Reading the audit log is admin-only; any authenticated user may
+        # push entries (the frontend store does this optimistically).
+        if self.request.method in SAFE_METHODS:
+            return [IsAdminUserPermission()]
+        return [IsAuthenticated()]
+
 
 class LogEntryViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = LogEntry.objects.all()
     serializer_class = LogEntrySerializer
+    permission_classes = [IsAdminUserPermission]
 
 
 class EconomicEventViewSet(viewsets.ReadOnlyModelViewSet):
@@ -1165,6 +1219,8 @@ def _effective_role(auto_role: str, admin_role: str) -> str:
 class RoleView(APIView):
     """GET user's effective role. Admin can PUT to override."""
 
+    permission_classes = [IsAuthenticated]
+
     def get(self, request):
         profile, _ = UserProfile.objects.get_or_create(user=request.user)
         auto_role = _compute_auto_role(request.user)
@@ -1194,6 +1250,7 @@ class RoleView(APIView):
 
 class ProfileView(APIView):
     """GET/PUT user profile (avatar URL, phone, name, role)."""
+    permission_classes = [IsAuthenticated]
     parser_classes = [parsers.JSONParser, parsers.MultiPartParser, parsers.FormParser]
 
     def get(self, request):
