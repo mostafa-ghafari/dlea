@@ -28,7 +28,8 @@ rm -rf "$WHEELS_DIR"
 mkdir -p "$WHEELS_DIR"
 python3 -m venv /tmp/dlea-wheel-env 2>/dev/null || true
 /tmp/dlea-wheel-env/bin/pip install --upgrade pip -q 2>/dev/null || true
-/tmp/dlea-wheel-env/bin/pip wheel -r backend/requirements.txt -w "$WHEELS_DIR" -q
+/tmp/dlea-wheel-env/bin/pip wheel -r backend/requirements.txt typing-extensions -w "$WHEELS_DIR" -q || \
+  /tmp/dlea-wheel-env/bin/pip wheel -r backend/requirements.txt typing-extensions -w "$WHEELS_DIR" -q -i https://mirrors.aliyun.com/pypi/simple/
 echo "Built $(ls "$WHEELS_DIR"/*.whl 2>/dev/null | wc -l) wheels"
 
 echo ""
@@ -36,7 +37,6 @@ echo "Step 3: Creating deployment archive..."
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
 tar czf /tmp/dlea-deploy-$TIMESTAMP.tar.gz \
   --exclude='node_modules' \
-  --exclude='.output' \
   --exclude='.tanstack' \
   --exclude='backend/.venv' \
   --exclude='backend/__pycache__' \

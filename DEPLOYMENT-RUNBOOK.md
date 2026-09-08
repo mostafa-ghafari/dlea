@@ -171,7 +171,6 @@ npm run build
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
 tar czf /tmp/dlea-deploy-$TIMESTAMP.tar.gz \
   --exclude='node_modules' \
-  --exclude='.output' \
   --exclude='.tanstack' \
   --exclude='backend/.venv' \
   --exclude='backend/__pycache__' \
