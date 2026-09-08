@@ -11,6 +11,52 @@ from api.tests.common import BaseTestCase
 class JournalGroupTests(BaseTestCase):
     def setUp(self):
         self.user = self.auth(self.make_user(username="trader"))
+        self.p1 = self.make_portfolio(user=self.user, name="اصلی")
+        self.p2 = self.make_portfolio(user=self.user, name="دوم", is_active=False)
+
+    def test_create_assigns_active_portfolio(self):
+        r = self.client.post(
+            "/api/journal/groups/", {"name": "گروه فعال"}, format="json"
+        )
+        self.assertEqual(r.status_code, 201)
+        g = JournalGroup.objects.get(pk=r.data["id"])
+        self.assertEqual(g.portfolio_id, self.p1.pk)
+
+    def test_create_with_explicit_portfolio(self):
+        r = self.client.post(
+            "/api/journal/groups/",
+            {"name": "گروه دوم", "portfolio_id": self.p2.pk},
+            format="json",
+        )
+        self.assertEqual(r.status_code, 201)
+        g = JournalGroup.objects.get(pk=r.data["id"])
+        self.assertEqual(g.portfolio_id, self.p2.pk)
+
+    def test_create_rejects_foreign_portfolio(self):
+        foreign = self.make_portfolio(user=self.make_user(username="other"))
+        r = self.client.post(
+            "/api/journal/groups/",
+            {"name": "x", "portfolio_id": foreign.pk},
+            format="json",
+        )
+        self.assertEqual(r.status_code, 400)
+
+    def test_create_requires_portfolio(self):
+        self.auth(self.make_user(username="noport"))
+        r = self.client.post(
+            "/api/journal/groups/", {"name": "x"}, format="json"
+        )
+        self.assertEqual(r.status_code, 400)
+
+    def test_portfolio_filter(self):
+        self.make_journal_group(user=self.user, name="در پورت اول", portfolio=self.p1)
+        self.make_journal_group(user=self.user, name="در پورت دوم", portfolio=self.p2)
+        names = [
+            g["name"]
+            for g in self.get_list("/api/journal/groups/", portfolio=self.p1.pk)
+        ]
+        self.assertIn("در پورت اول", names)
+        self.assertNotIn("در پورت دوم", names)
 
     def test_crud_roundtrip(self):
         r = self.client.post(
@@ -42,7 +88,65 @@ class JournalGroupTests(BaseTestCase):
 class JournalEntryTests(BaseTestCase):
     def setUp(self):
         self.user = self.auth(self.make_user(username="trader"))
-        self.group = self.make_journal_group(user=self.user)
+        self.p1 = self.make_portfolio(user=self.user, name="اصلی")
+        self.p2 = self.make_portfolio(user=self.user, name="دوم", is_active=False)
+        self.group = self.make_journal_group(user=self.user, portfolio=self.p1)
+
+    def test_create_defaults_to_active_portfolio(self):
+        r = self.client.post(
+            "/api/journal/entries/", self._payload(), format="json"
+        )
+        self.assertEqual(r.status_code, 201)
+        entry = JournalEntry.objects.get(pk=r.data["id"])
+        self.assertEqual(entry.portfolio_id, self.p1.pk)
+
+    def test_create_with_explicit_portfolio(self):
+        r = self.client.post(
+            "/api/journal/entries/",
+            self._payload(portfolio_id=self.p2.pk),
+            format="json",
+        )
+        self.assertEqual(r.status_code, 201)
+        entry = JournalEntry.objects.get(pk=r.data["id"])
+        self.assertEqual(entry.portfolio_id, self.p2.pk)
+
+    def test_create_rejects_foreign_portfolio(self):
+        foreign = self.make_portfolio(user=self.make_user(username="other"))
+        r = self.client.post(
+            "/api/journal/entries/",
+            self._payload(portfolio_id=foreign.pk),
+            format="json",
+        )
+        self.assertEqual(r.status_code, 400)
+
+    def test_create_rejects_group_from_another_portfolio(self):
+        other_group = self.make_journal_group(
+            user=self.user, name="گروه پورت دوم", portfolio=self.p2
+        )
+        r = self.client.post(
+            "/api/journal/entries/",
+            self._payload(
+                group_id=other_group.pk, portfolio_id=self.p1.pk
+            ),
+            format="json",
+        )
+        self.assertEqual(r.status_code, 400)
+
+    def test_portfolio_filter(self):
+        self.make_journal_entry(
+            user=self.user, title="در پورت اول", portfolio=self.p1
+        )
+        self.make_journal_entry(
+            user=self.user, title="در پورت دوم", portfolio=self.p2
+        )
+        titles = [
+            e["title"]
+            for e in self.get_list(
+                "/api/journal/entries/", portfolio=self.p1.pk
+            )
+        ]
+        self.assertIn("در پورت اول", titles)
+        self.assertNotIn("در پورت دوم", titles)
 
     def _payload(self, **extra):
         payload = {

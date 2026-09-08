@@ -52,6 +52,7 @@ import {
   type JournalEntryInput,
 } from "@/lib/api";
 import type { JournalEntry, JournalGroup } from "@/lib/types";
+import { useActivePortfolioId } from "@/lib/app-state";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/app/journal")({
@@ -105,12 +106,16 @@ const emptyDraft: Draft = {
 };
 
 function JournalPage() {
+  const [portfolioId] = useActivePortfolioId();
   const [entries, setEntries] = useState<JournalEntry[]>([]);
   const [groups, setGroups] = useState<JournalGroup[]>([]);
 
   useEffect(() => {
     let alive = true;
-    Promise.all([fetchJournalGroups(), fetchJournalEntries()])
+    Promise.all([
+      fetchJournalGroups(portfolioId ?? undefined),
+      fetchJournalEntries(portfolioId ?? undefined),
+    ])
       .then(([g, e]) => {
         if (!alive) return;
         setGroups(g);
@@ -120,7 +125,7 @@ function JournalPage() {
     return () => {
       alive = false;
     };
-  }, []);
+  }, [portfolioId]);
 
   const [editorOpen, setEditorOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -255,6 +260,7 @@ function JournalPage() {
       group_id: draft.groupId,
       html: draft.html,
       images: draft.images,
+      portfolio_id: portfolioId ?? undefined,
     };
 
     try {
@@ -290,6 +296,7 @@ function JournalPage() {
       const created = await createJournalGroup({
         name: newGroup.trim(),
         color: "primary",
+        portfolio_id: portfolioId ?? undefined,
       });
       setGroups((g) => [...g, created]);
       setNewGroup("");

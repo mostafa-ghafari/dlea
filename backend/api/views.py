@@ -197,19 +197,123 @@ class TradeViewSet(viewsets.ModelViewSet):
         return Response(payload, status=status)
 
 
+def _user_portfolios(user):
+    """Portfolios owned by `user`; `None`/anonymous maps to shared demo rows."""
+    if user is None or not user.is_authenticated:
+        return Portfolio.objects.filter(user__isnull=True)
+    return Portfolio.objects.filter(user=user)
+
+
+def _owned_portfolio(user, portfolio_id):
+    """Return a portfolio owned by the caller for the given id, else None."""
+    if portfolio_id is None:
+        return None
+    return _user_portfolios(user).filter(pk=portfolio_id).first()
+
+
+def _resolve_portfolio(user, portfolio_id=None, group=None):
+    """Pick the portfolio a new journal/goal row belongs to.
+
+    Resolution order:
+    1. explicit `portfolio_id` — must be owned by the caller, else 400;
+    2. the group the row is attached to (entries only);
+    3. the user's active portfolio;
+    4. the user's first portfolio;
+    When the user has no portfolio at all, creating such rows is rejected so
+    no row can ever end up outside a portfolio (mirrors the trades API).
+    """
+    if portfolio_id is not None:
+        portfolio = _owned_portfolio(user, portfolio_id)
+        if portfolio is None:
+            raise serializers.ValidationError(
+                {"portfolio_id": "پرتفولیوی نامعتبر است"}
+            )
+        return portfolio
+    if group is not None and group.portfolio_id is not None:
+        return group.portfolio
+    portfolio = _user_portfolios(user).filter(is_active=True).first()
+    if portfolio is None:
+        portfolio = _user_portfolios(user).first()
+    if portfolio is None:
+        raise serializers.ValidationError(
+            {"portfolio_id": "ابتدا یک پورتفولیو بسازید"}
+        )
+    return portfolio
+
+
 class JournalGroupViewSet(UserScopedMixin, viewsets.ModelViewSet):
     queryset = JournalGroup.objects.all()
     serializer_class = JournalGroupSerializer
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        portfolio = self.request.query_params.get("portfolio")
+        if portfolio:
+            qs = qs.filter(portfolio_id=portfolio)
+        return qs
+
+    def perform_create(self, serializer):
+        user = self.request.user if self.request.user.is_authenticated else None
+        portfolio = _resolve_portfolio(user, self.request.data.get("portfolio_id"))
+        serializer.save(user=user, portfolio=portfolio)
 
 
 class JournalEntryViewSet(UserScopedMixin, viewsets.ModelViewSet):
     queryset = JournalEntry.objects.select_related("group").all()
     serializer_class = JournalEntrySerializer
 
+    def get_queryset(self):
+        qs = super().get_queryset()
+        portfolio = self.request.query_params.get("portfolio")
+        if portfolio:
+            qs = qs.filter(portfolio_id=portfolio)
+        return qs
+
+    def perform_create(self, serializer):
+        user = self.request.user if self.request.user.is_authenticated else None
+        group = None
+        group_id = serializer.validated_data.get("group_id")
+        if group_id is not None:
+            group_qs = JournalGroup.objects.all()
+            group_qs = (
+                group_qs.filter(user=user)
+                if user is not None
+                else group_qs.filter(user__isnull=True)
+            )
+            group = group_qs.filter(pk=group_id).first()
+            if group is None:
+                raise serializers.ValidationError(
+                    {"group_id": "گروه نامعتبر است"}
+                )
+        portfolio = _resolve_portfolio(
+            user, self.request.data.get("portfolio_id"), group
+        )
+        if (
+            group is not None
+            and group.portfolio_id is not None
+            and group.portfolio_id != portfolio.pk
+        ):
+            raise serializers.ValidationError(
+                {"group_id": "گروه متعلق به این پورتفولیو نیست"}
+            )
+        serializer.save(user=user, portfolio=portfolio)
+
 
 class GoalViewSet(UserScopedMixin, viewsets.ModelViewSet):
     queryset = Goal.objects.all()
     serializer_class = GoalSerializer
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        portfolio = self.request.query_params.get("portfolio")
+        if portfolio:
+            qs = qs.filter(portfolio_id=portfolio)
+        return qs
+
+    def perform_create(self, serializer):
+        user = self.request.user if self.request.user.is_authenticated else None
+        portfolio = _resolve_portfolio(user, self.request.data.get("portfolio_id"))
+        serializer.save(user=user, portfolio=portfolio)
 
 
 class AchievementViewSet(viewsets.ReadOnlyModelViewSet):

@@ -327,10 +327,20 @@ export const fetchTrades = (portfolioId?: string) =>
 export const fetchPortfolios = () => get<Portfolio[]>("portfolios/");
 export const activatePortfolio = (id: string) =>
   post<Portfolio>(`portfolios/${id}/activate/`, {});
-export const fetchJournalGroups = () => get<JournalGroup[]>("journal/groups/");
-export const fetchJournalEntries = () =>
-  get<JournalEntry[]>("journal/entries/");
-export const fetchGoals = () => get<Goal[]>("goals/");
+export const fetchJournalGroups = (portfolioId?: string) =>
+  get<JournalGroup[]>(
+    portfolioId
+      ? `journal/groups/?portfolio=${portfolioId}`
+      : "journal/groups/",
+  );
+export const fetchJournalEntries = (portfolioId?: string) =>
+  get<JournalEntry[]>(
+    portfolioId
+      ? `journal/entries/?portfolio=${portfolioId}`
+      : "journal/entries/",
+  );
+export const fetchGoals = (portfolioId?: string) =>
+  get<Goal[]>(portfolioId ? `goals/?portfolio=${portfolioId}` : "goals/");
 export const fetchAchievements = () => get<Achievement[]>("achievements/");
 export const fetchAchievementHistory = () =>
   get<AchievementHistoryItem[]>("achievement-history/");
@@ -504,7 +514,11 @@ export function deleteUser(id: string) {
   return del<{ ok: boolean }>(`admin/users/${id}/`);
 }
 
-export type GoalInput = { title: string; progress?: number };
+export type GoalInput = {
+  title: string;
+  progress?: number;
+  portfolio_id?: number | string;
+};
 
 export function createGoal(input: GoalInput) {
   return post<Goal>("goals/", input);
@@ -518,7 +532,11 @@ export function deleteGoal(id: string) {
   return del<{ ok: boolean }>(`goals/${id}/`);
 }
 
-export type JournalGroupInput = { name: string; color?: string };
+export type JournalGroupInput = {
+  name: string;
+  color?: string;
+  portfolio_id?: number | string;
+};
 
 export function createJournalGroup(input: JournalGroupInput) {
   return post<JournalGroup>("journal/groups/", input);
@@ -548,6 +566,7 @@ export type JournalEntryInput = {
   html?: string;
   images?: string[];
   entryDate?: string;
+  portfolio_id?: number | string;
 };
 
 export function createJournalEntry(input: JournalEntryInput) {
@@ -655,15 +674,18 @@ export function usePortfolios(): Portfolio[] {
 }
 
 export function useJournalGroups(): JournalGroup[] {
-  return useApi(fetchJournalGroups).data ?? [];
+  const [pid] = useActivePortfolioId();
+  return useApi(() => fetchJournalGroups(pid ?? undefined), [pid]).data ?? [];
 }
 
 export function useJournalEntries(): JournalEntry[] {
-  return useApi(fetchJournalEntries).data ?? [];
+  const [pid] = useActivePortfolioId();
+  return useApi(() => fetchJournalEntries(pid ?? undefined), [pid]).data ?? [];
 }
 
 export function useGoals(): Goal[] {
-  return useApi(fetchGoals).data ?? [];
+  const [pid] = useActivePortfolioId();
+  return useApi(() => fetchGoals(pid ?? undefined), [pid]).data ?? [];
 }
 
 export function useAchievements(): Achievement[] {

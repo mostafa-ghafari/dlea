@@ -133,8 +133,10 @@ class BaseTestCase(APITestCase):
             level=level, min_pct=min_pct, max_pct=max_pct, name=name
         )
 
-    def make_journal_group(self, user=None, name="گروه من", color="primary"):
-        return JournalGroup.objects.create(user=user, name=name, color=color)
+    def make_journal_group(self, user=None, name="گروه من", color="primary", portfolio=None):
+        return JournalGroup.objects.create(
+            user=user, portfolio=portfolio, name=name, color=color
+        )
 
     def make_journal_entry(self, user=None, group=None, title="یادداشت", **extra):
         defaults = {

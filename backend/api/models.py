@@ -137,6 +137,7 @@ class Trade(Timestamped):
 
 class JournalGroup(models.Model):
     user = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.CASCADE, related_name="+")
+    portfolio = models.ForeignKey(Portfolio, null=True, blank=True, on_delete=models.SET_NULL, related_name="+")
     name = models.CharField(max_length=64)
     color = models.CharField(max_length=32, default="primary")
 
@@ -146,6 +147,7 @@ class JournalGroup(models.Model):
 
 class JournalEntry(Timestamped):
     user = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.CASCADE, related_name="+")
+    portfolio = models.ForeignKey(Portfolio, null=True, blank=True, on_delete=models.SET_NULL, related_name="+")
     date = models.DateField()
     week = models.CharField(max_length=32)
     month = models.CharField(max_length=32)
@@ -171,6 +173,7 @@ class JournalEntry(Timestamped):
 
 class Goal(Timestamped):
     user = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.CASCADE, related_name="+")
+    portfolio = models.ForeignKey(Portfolio, null=True, blank=True, on_delete=models.SET_NULL, related_name="+")
     title = models.CharField(max_length=160)
     progress = models.PositiveIntegerField(default=0)
 

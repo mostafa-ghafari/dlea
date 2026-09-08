@@ -30,6 +30,7 @@ import {
   updateGoal,
   type Goal,
 } from "@/lib/api";
+import { useActivePortfolioId } from "@/lib/app-state";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/app/goals")({
@@ -38,6 +39,7 @@ export const Route = createFileRoute("/app/goals")({
 });
 
 function GoalsPage() {
+  const [portfolioId] = useActivePortfolioId();
   const [goals, setGoals] = useState<Goal[]>([]);
   const [open, setOpen] = useState(false);
   const [title, setTitle] = useState("");
@@ -48,13 +50,13 @@ function GoalsPage() {
 
   useEffect(() => {
     let alive = true;
-    fetchGoals()
+    fetchGoals(portfolioId ?? undefined)
       .then((list) => alive && setGoals(list))
       .catch(() => alive && toast.error("دریافت اهداف از سرور ممکن نشد"));
     return () => {
       alive = false;
     };
-  }, []);
+  }, [portfolioId]);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -63,7 +65,11 @@ function GoalsPage() {
       return;
     }
     try {
-      const created = await createGoal({ title: title.trim(), progress: 0 });
+      const created = await createGoal({
+        title: title.trim(),
+        progress: 0,
+        portfolio_id: portfolioId ?? undefined,
+      });
       setGoals((g) => [...g, created]);
       toast.success(`هدف «${created.title}» اضافه شد`);
     } catch (err) {
