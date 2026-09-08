@@ -16,6 +16,7 @@
     "pretest:e2e": "npm run build -- --mode e2e",
     "record:smoke": "node e2e/record-smoke.mjs",
     "lint": "eslint .",
+    "lint:workflows": "node scripts/actionlint-lite.cjs",
     "format": "prettier --write ."
   },
   "engines": {
