@@ -22,7 +22,17 @@ echo "Frontend built successfully!"
 
 # Step 2: Create deployment archive
 echo ""
-echo "Step 2: Creating deployment archive..."
+echo "Step 2: Building pip wheels for offline install..."
+WHEELS_DIR="/tmp/pip-wheels"
+rm -rf "$WHEELS_DIR"
+mkdir -p "$WHEELS_DIR"
+python3 -m venv /tmp/dlea-wheel-env 2>/dev/null || true
+/tmp/dlea-wheel-env/bin/pip install --upgrade pip -q 2>/dev/null || true
+/tmp/dlea-wheel-env/bin/pip wheel -r backend/requirements.txt -w "$WHEELS_DIR" -q
+echo "Built $(ls "$WHEELS_DIR"/*.whl 2>/dev/null | wc -l) wheels"
+
+echo ""
+echo "Step 3: Creating deployment archive..."
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
 tar czf /tmp/dlea-deploy-$TIMESTAMP.tar.gz \
   --exclude='node_modules' \
@@ -34,18 +44,20 @@ tar czf /tmp/dlea-deploy-$TIMESTAMP.tar.gz \
   --exclude='backend/db.sqlite3' \
   --exclude='.git' \
   --exclude='.freebuff' \
+  -C /tmp pip-wheels \
   .
 echo "Archive created: /tmp/dlea-deploy-$TIMESTAMP.tar.gz"
+rm -rf "$WHEELS_DIR" /tmp/dlea-wheel-env
 
 # Step 3: Upload to server
 echo ""
-echo "Step 3: Uploading to server..."
+echo "Step 4: Uploading to server..."
 scp /tmp/dlea-deploy-$TIMESTAMP.tar.gz $SERVER:/tmp/
 echo "Upload complete!"
 
 # Step 4: Deploy on server
 echo ""
-echo "Step 4: Deploying on server..."
+echo "Step 5: Deploying on server..."
 ssh $SERVER << 'SERVEREOF'
 set -e
 DEPLOY_DIR="/opt/dlea"
@@ -72,7 +84,13 @@ echo "Setting up backend..."
 cd backend
 python3 -m venv .venv 2>/dev/null || true
 .venv/bin/pip install --upgrade pip -q 2>/dev/null || true
-.venv/bin/pip install -r requirements.txt -q
+if [ -d "../pip-wheels" ] && ls ../pip-wheels/*.whl >/dev/null 2>&1; then
+  echo "Installing from local wheels (offline)..."
+  .venv/bin/pip install --no-index --find-links ../pip-wheels -r requirements.txt -q
+else
+  echo "No local wheels found, falling back to PyPI..."
+  .venv/bin/pip install -r requirements.txt -q
+fi
 
 # Migrations
 echo "Running migrations..."

@@ -20,7 +20,13 @@ echo "Setting up backend..."
 cd backend
 python3 -m venv .venv 2>/dev/null || true
 .venv/bin/pip install --upgrade pip -q 2>/dev/null || true
-.venv/bin/pip install -r requirements.txt -q
+if [ -d "../pip-wheels" ] && ls ../pip-wheels/*.whl >/dev/null 2>&1; then
+  echo "Installing from local wheels (offline)..."
+  .venv/bin/pip install --no-index --find-links ../pip-wheels -r requirements.txt -q
+else
+  echo "No local wheels found, falling back to PyPI..."
+  .venv/bin/pip install -r requirements.txt -q
+fi
 
 echo "Running backend tests before deploy (abort on failure)..."
 USE_SQLITE=1 .venv/bin/python manage.py test api --settings config.settings_test
