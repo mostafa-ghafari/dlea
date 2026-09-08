@@ -13,30 +13,37 @@ if %errorlevel% neq 0 (
 )
 echo Build OK!
 
-rem Step 2: Build pip wheels for offline install
+rem Step 2: Download pip packages for Linux target
 echo.
-echo Step 2: Building pip wheels for offline install...
+echo Step 2: Downloading pip packages for Linux target...
 set WHEEL_ENV=%TEMP%\dlea-wheel-env
 if exist "%WHEEL_ENV%" rmdir /s /q "%WHEEL_ENV%"
 python -m venv "%WHEEL_ENV%" 2>nul || python3 -m venv "%WHEEL_ENV%" 2>nul
 "%WHEEL_ENV%\Scripts\pip.exe" install --upgrade pip -q 2>nul
-"%WHEEL_ENV%\Scripts\pip.exe" wheel -r backend\requirements.txt -w pip-wheels -q
-if %errorlevel% neq 0 (
-    echo Warning: Could not build wheels, will fall back to PyPI on server
-)
+
+rem Download Linux binary wheels for platform-specific packages
+"%WHEEL_ENV%\Scripts\pip.exe" download -r backend\requirements.txt -d pip-wheels --platform manylinux2014_x86_64 --platform linux_x86_64 --python-version 312 --only-binary=:all: -q 2>nul
+
+rem Also download any-platform wheels (pure Python packages)
+"%WHEEL_ENV%\Scripts\pip.exe" download -r backend\requirements.txt -d pip-wheels --python-version 312 --no-deps -q 2>nul
+
+rem Download remaining dependencies
+"%WHEEL_ENV%\Scripts\pip.exe" download -r backend\requirements.txt -d pip-wheels -q 2>nul
+
 set WHEEL_COUNT=0
 for %%f in (pip-wheels\*.whl) do set /a WHEEL_COUNT+=1
-if %WHEEL_COUNT% gtr 0 echo Built %WHEEL_COUNT% wheels
+for %%f in (pip-wheels\*.tar.gz) do set /a WHEEL_COUNT+=1
+if %WHEEL_COUNT% gtr 0 echo Downloaded %WHEEL_COUNT% packages
 rem Cleanup temp venv
 rmdir /s /q "%WHEEL_ENV%" 2>nul
 
 rem Step 3: Create archive
 echo.
 echo Step 3: Creating deployment archive...
-tar czf %TEMP%\dlea-deploy.tar.gz --exclude=node_modules --exclude=.tanstack --exclude=.git --exclude=.freebuff --exclude=*.log --exclude=backend/.venv --exclude=backend/__pycache__ --exclude=*.pyc --exclude=backend/db.sqlite3 --exclude=test-results --exclude=smoke-test .
+tar czf %TEMP%\dlea-deploy.tar.gz --exclude=node_modules --exclude=.output --exclude=.tanstack --exclude=.git --exclude=.freebuff --exclude=*.log --exclude=backend/.venv --exclude=backend/__pycache__ --exclude=*.pyc --exclude=backend/db.sqlite3 --exclude=test-results --exclude=smoke-test .
 echo Archive created!
 rem Cleanup pip-wheels
-del /q pip-wheels\*.whl 2>nul
+del /q pip-wheels\*.* 2>nul
 rmdir /s /q pip-wheels 2>nul
 
 rem Step 4: Upload to server

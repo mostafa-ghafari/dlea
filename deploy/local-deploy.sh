@@ -84,11 +84,11 @@ echo "Setting up backend..."
 cd backend
 python3 -m venv .venv 2>/dev/null || true
 .venv/bin/pip install --upgrade pip -q 2>/dev/null || true
-if [ -d "../pip-wheels" ] && ls ../pip-wheels/*.whl >/dev/null 2>&1; then
-  echo "Installing from local wheels (offline)..."
+if [ -d "../pip-wheels" ] && (ls ../pip-wheels/*.whl >/dev/null 2>&1 || ls ../pip-wheels/*.tar.gz >/dev/null 2>&1); then
+  echo "Installing from local packages (offline)..."
   .venv/bin/pip install --no-index --find-links ../pip-wheels -r requirements.txt -q
 else
-  echo "No local wheels found, falling back to PyPI..."
+  echo "No local packages found, falling back to PyPI..."
   .venv/bin/pip install -r requirements.txt -q
 fi
 
