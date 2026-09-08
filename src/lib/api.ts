@@ -341,7 +341,12 @@ export const fetchJournalEntries = (portfolioId?: string) =>
   );
 export const fetchGoals = (portfolioId?: string) =>
   get<Goal[]>(portfolioId ? `goals/?portfolio=${portfolioId}` : "goals/");
-export const fetchAchievements = () => get<Achievement[]>("achievements/");
+export const fetchAchievements = (portfolioId?: string) =>
+  get<Achievement[]>(
+    portfolioId
+      ? `achievements/?portfolio=${portfolioId}`
+      : "achievements/",
+  );
 export const fetchAchievementHistory = () =>
   get<AchievementHistoryItem[]>("achievement-history/");
 export const fetchRoleTiers = () => get<RoleTier[]>("role-tiers/");
@@ -689,7 +694,8 @@ export function useGoals(): Goal[] {
 }
 
 export function useAchievements(): Achievement[] {
-  return useApi(fetchAchievements).data ?? [];
+  const [pid] = useActivePortfolioId();
+  return useApi(() => fetchAchievements(pid ?? undefined), [pid]).data ?? [];
 }
 
 export function useAchievementHistory(): AchievementHistoryItem[] {

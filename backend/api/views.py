@@ -320,6 +320,13 @@ class AchievementViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = Achievement.objects.all()
     serializer_class = AchievementSerializer
 
+    def get_serializer_context(self):
+        ctx = super().get_serializer_context()
+        portfolio = self.request.query_params.get("portfolio")
+        if portfolio:
+            ctx["portfolio_id"] = portfolio
+        return ctx
+
 
 class AchievementHistoryViewSet(UserScopedMixin, viewsets.ReadOnlyModelViewSet):
     queryset = AchievementHistory.objects.all()
@@ -813,10 +820,13 @@ class CalendarDayViewSet(viewsets.ViewSet):
     def list(self, request):
         import jdatetime
 
+        portfolio_id = request.query_params.get("portfolio")
         if request.user.is_authenticated:
             trades = Trade.objects.filter(portfolio__user=request.user).order_by("close_time")
         else:
             trades = Trade.objects.filter(portfolio__user__isnull=True).order_by("close_time")
+        if portfolio_id:
+            trades = trades.filter(portfolio__id=portfolio_id)
 
         # Determine current Jalali year/month from latest trade, or now
         now_j = jdatetime.datetime.now()

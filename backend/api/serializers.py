@@ -272,6 +272,9 @@ class AchievementSerializer(serializers.ModelSerializer):
         user = request.user
         from .models import Trade, Portfolio
         trades = Trade.objects.filter(portfolio__user=user)
+        portfolio_id = self.context.get("portfolio_id")
+        if portfolio_id:
+            trades = trades.filter(portfolio__id=portfolio_id)
         count = trades.count()
         if count == 0:
             return False

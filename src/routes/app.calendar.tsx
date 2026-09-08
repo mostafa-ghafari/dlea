@@ -4,6 +4,7 @@ import { ChevronRight, ChevronLeft } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { get, useApi } from "@/lib/api";
+import { useActivePortfolioId } from "@/lib/app-state";
 
 export const Route = createFileRoute("/app/calendar")({
   head: () => ({ meta: [{ title: "تقویم معاملاتی" }] }),
@@ -47,10 +48,10 @@ function useDefaultJalali() {
 
 type CalDay = { id: string; day: number | null; pnl: number; trades: number };
 
-function useCalendar(year: number, month: number) {
+function useCalendar(year: number, month: number, portfolioId?: string | null) {
   return useApi<CalDay[]>(
-    () => get<CalDay[]>(`calendar/?year=${year}&month=${month}`),
-    [year, month],
+    () => get<CalDay[]>(`calendar/?year=${year}&month=${month}${portfolioId ? `&portfolio=${portfolioId}` : ""}`),
+    [year, month, portfolioId],
   );
 }
 
@@ -58,7 +59,8 @@ function CalendarPage() {
   const def = useDefaultJalali();
   const [year, setYear] = useState(def.year);
   const [month, setMonth] = useState(def.month);
-  const { data: calDays } = useCalendar(year, month);
+  const [portfolioId] = useActivePortfolioId();
+  const { data: calDays } = useCalendar(year, month, portfolioId);
   const days = calDays ?? [];
   const totalPnl = days.reduce((s, d) => s + d.pnl, 0);
   const winDays = days.filter((d) => d.day && d.pnl > 0).length;
