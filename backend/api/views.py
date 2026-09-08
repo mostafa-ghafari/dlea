@@ -871,11 +871,15 @@ class CalendarDayViewSet(viewsets.ViewSet):
             days_in_month = 30
         else:
             days_in_month = 29  # simplified; leap handled below
-        # Check for Esfand leap year
+        # Check for Esfand leap year — ask jdatetime, the same authority the
+        # trade grouping above uses (Larizan approximations disagree with it
+        # for years such as 1405, which must have a 29-day Esfand).
         if j_month == 12:
-            # Larizan leap check: years 4,8,12,...,128 in 33-year cycle
-            leap = ((j_year + 19) % 33) * 4 < 33
-            days_in_month = 30 if leap else 29
+            try:
+                jdatetime.date(j_year, 12, 30)
+                days_in_month = 30
+            except ValueError:
+                days_in_month = 29
 
         total_cells = sat_based_offset + days_in_month
         # Round up to multiple of 7

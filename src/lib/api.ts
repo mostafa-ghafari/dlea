@@ -343,9 +343,7 @@ export const fetchGoals = (portfolioId?: string) =>
   get<Goal[]>(portfolioId ? `goals/?portfolio=${portfolioId}` : "goals/");
 export const fetchAchievements = (portfolioId?: string) =>
   get<Achievement[]>(
-    portfolioId
-      ? `achievements/?portfolio=${portfolioId}`
-      : "achievements/",
+    portfolioId ? `achievements/?portfolio=${portfolioId}` : "achievements/",
   );
 export const fetchAchievementHistory = () =>
   get<AchievementHistoryItem[]>("achievement-history/");

@@ -5,6 +5,11 @@ import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { get, useApi } from "@/lib/api";
 import { useActivePortfolioId } from "@/lib/app-state";
+import {
+  buildJalaliMonthGrid,
+  jalaliMonthName,
+  todayJalali,
+} from "@/lib/persian-calendar";
 
 export const Route = createFileRoute("/app/calendar")({
   head: () => ({ meta: [{ title: "تقویم معاملاتی" }] }),
@@ -13,58 +18,64 @@ export const Route = createFileRoute("/app/calendar")({
 
 const weekdays = ["ش", "ی", "د", "س", "چ", "پ", "ج"];
 
-const JALALI_MONTHS = [
-  "",
-  "فروردین",
-  "اردیبهشت",
-  "خرداد",
-  "تیر",
-  "مرداد",
-  "شهریور",
-  "مهر",
-  "آبان",
-  "آذر",
-  "دی",
-  "بهمن",
-  "اسفند",
-];
-
-// Get current Jalali year/month as default
-function useDefaultJalali() {
-  return useMemo(() => {
-    // Approximate: today Aug 2026 ≈ 1405/05/28
-    const now = new Date();
-    // Simple approximate conversion
-    const gY = now.getFullYear();
-    const gM = now.getMonth() + 1;
-    const gD = now.getDate();
-    const jD = gY > 2000 ? 0 : 1;
-    const jd = Math.floor(gY + (gM > 2 ? 0 : -1) + (gD > 21 ? 1 : 0) - 621);
-    // Use a quick approximation for month
-    const jm = Math.max(1, Math.min(12, gM <= 3 ? gM + 9 : gM - 3));
-    return { year: jd, month: jm };
-  }, []);
-}
-
 type CalDay = { id: string; day: number | null; pnl: number; trades: number };
 
 function useCalendar(year: number, month: number, portfolioId?: string | null) {
   return useApi<CalDay[]>(
-    () => get<CalDay[]>(`calendar/?year=${year}&month=${month}${portfolioId ? `&portfolio=${portfolioId}` : ""}`),
+    () =>
+      get<CalDay[]>(
+        `calendar/?year=${year}&month=${month}${portfolioId ? `&portfolio=${portfolioId}` : ""}`,
+      ),
     [year, month, portfolioId],
   );
 }
 
 function CalendarPage() {
-  const def = useDefaultJalali();
+  const def = useMemo(() => {
+    const today = todayJalali();
+    return { year: today.year, month: today.month };
+  }, []);
   const [year, setYear] = useState(def.year);
   const [month, setMonth] = useState(def.month);
   const [portfolioId] = useActivePortfolioId();
-  const { data: calDays } = useCalendar(year, month, portfolioId);
-  const days = calDays ?? [];
-  const totalPnl = days.reduce((s, d) => s + d.pnl, 0);
-  const winDays = days.filter((d) => d.day && d.pnl > 0).length;
-  const loseDays = days.filter((d) => d.day && d.pnl < 0).length;
+  const {
+    data: calDays,
+    loading,
+    error,
+    reload,
+  } = useCalendar(year, month, portfolioId);
+
+  // The month frame is always drawn client-side from the Jalali calendar, so
+  // it never disappears when a portfolio has no trades (or while loading /
+  // after an error). Server data only fills cells for the *current* request:
+  // stale cells from a previously-selected portfolio are never shown.
+  const grid = useMemo(() => buildJalaliMonthGrid(year, month), [year, month]);
+
+  const overlay = useMemo(() => {
+    if (loading || error || !calDays || calDays.length === 0) return null;
+    const byDay = new Map<number, { pnl: number; trades: number }>();
+    for (const c of calDays) {
+      if (c.day) byDay.set(c.day, { pnl: c.pnl, trades: c.trades });
+    }
+    return byDay;
+  }, [calDays, loading, error]);
+
+  const stats = useMemo(() => {
+    if (!overlay) {
+      return { totalPnl: 0, winDays: 0, loseDays: 0, bestDay: 0 };
+    }
+    let totalPnl = 0;
+    let winDays = 0;
+    let loseDays = 0;
+    let bestDay = 0;
+    for (const { pnl } of overlay.values()) {
+      totalPnl += pnl;
+      if (pnl > 0) winDays += 1;
+      else if (pnl < 0) loseDays += 1;
+      if (pnl > bestDay) bestDay = pnl;
+    }
+    return { totalPnl, winDays, loseDays, bestDay };
+  }, [overlay]);
 
   function prevMonth() {
     if (month === 1) {
@@ -82,14 +93,14 @@ function CalendarPage() {
   return (
     <AppShell
       title="تقویم معاملاتی"
-      subtitle={`${JALALI_MONTHS[month]} ${year}`}
+      subtitle={`${jalaliMonthName(month)} ${year}`}
       actions={
         <div className="flex items-center gap-2">
           <Button variant="outline" size="icon" onClick={prevMonth}>
             <ChevronRight className="h-4 w-4" />
           </Button>
           <div className="min-w-32 text-center font-medium">
-            {JALALI_MONTHS[month]} {year}
+            {jalaliMonthName(month)} {year}
           </div>
           <Button variant="outline" size="icon" onClick={nextMonth}>
             <ChevronLeft className="h-4 w-4" />
@@ -101,24 +112,27 @@ function CalendarPage() {
         <div className="card-surface p-4">
           <div className="text-xs text-muted-foreground">مجموع ماه</div>
           <div
-            className={`mt-2 text-2xl font-bold tabular ${totalPnl >= 0 ? "gain" : "loss"}`}
+            className={`mt-2 text-2xl font-bold tabular ${stats.totalPnl >= 0 ? "gain" : "loss"}`}
           >
-            {totalPnl >= 0 ? "+" : ""}${totalPnl.toFixed(0)}
+            {stats.totalPnl >= 0 ? "+" : ""}${stats.totalPnl.toFixed(0)}
           </div>
         </div>
         <div className="card-surface p-4">
           <div className="text-xs text-muted-foreground">روزهای سودده</div>
-          <div className="mt-2 text-2xl font-bold tabular gain">{winDays}</div>
+          <div className="mt-2 text-2xl font-bold tabular gain">
+            {stats.winDays}
+          </div>
         </div>
         <div className="card-surface p-4">
           <div className="text-xs text-muted-foreground">روزهای زیان‌ده</div>
-          <div className="mt-2 text-2xl font-bold tabular loss">{loseDays}</div>
+          <div className="mt-2 text-2xl font-bold tabular loss">
+            {stats.loseDays}
+          </div>
         </div>
         <div className="card-surface p-4">
           <div className="text-xs text-muted-foreground">بهترین روز</div>
           <div className="mt-2 text-2xl font-bold tabular gain">
-            +$
-            {days.length ? Math.max(...days.map((d) => d.pnl)).toFixed(0) : "0"}
+            {stats.bestDay > 0 ? "+" : ""}${stats.bestDay.toFixed(0)}
           </div>
         </div>
       </div>
@@ -133,41 +147,44 @@ function CalendarPage() {
               {w}
             </div>
           ))}
-          {days.map((c, i) => {
-            if (!c.day) return <div key={i} className="aspect-square" />;
-            const intensity = Math.min(Math.abs(c.pnl) / 800, 1);
+          {grid.map((dayNumber, i) => {
+            if (!dayNumber) return <div key={i} className="aspect-square" />;
+            const info = overlay?.get(dayNumber);
+            const pnl = info?.pnl ?? 0;
+            const trades = info?.trades ?? 0;
+            const intensity = Math.min(Math.abs(pnl) / 800, 1);
             const bg =
-              c.pnl > 0
+              pnl > 0
                 ? `oklch(0.55 ${0.1 * intensity + 0.05} 155 / ${0.18 + intensity * 0.4})`
-                : c.pnl < 0
+                : pnl < 0
                   ? `oklch(0.55 ${0.15 * intensity + 0.05} 25 / ${0.18 + intensity * 0.4})`
                   : "transparent";
             return (
               <div
                 key={i}
                 title={
-                  c.pnl !== 0
-                    ? `${c.pnl > 0 ? "+" : ""}$${c.pnl} — ${c.trades} معامله`
+                  pnl !== 0
+                    ? `${pnl > 0 ? "+" : ""}$${pnl} — ${trades} معامله`
                     : undefined
                 }
                 className="flex aspect-square min-w-0 flex-col justify-between overflow-hidden rounded-md border border-border p-1 transition-all hover:border-primary/50 sm:rounded-lg sm:p-2 sm:hover:scale-105"
                 style={{ background: bg }}
               >
                 <div className="text-[10px] leading-none text-foreground/80 tabular sm:text-xs">
-                  {c.day}
+                  {dayNumber}
                 </div>
-                {c.pnl !== 0 && (
+                {pnl !== 0 && (
                   <div className="min-w-0">
                     <div
-                      className={`truncate text-[9px] font-bold leading-tight tabular sm:text-xs ${c.pnl > 0 ? "gain" : "loss"}`}
+                      className={`truncate text-[9px] font-bold leading-tight tabular sm:text-xs ${pnl > 0 ? "gain" : "loss"}`}
                     >
-                      {c.pnl > 0 ? "+" : ""}$
-                      {Math.abs(c.pnl) >= 1000
-                        ? `${(c.pnl / 1000).toFixed(1)}k`
-                        : c.pnl}
+                      {pnl > 0 ? "+" : ""}$
+                      {Math.abs(pnl) >= 1000
+                        ? `${(pnl / 1000).toFixed(1)}k`
+                        : pnl}
                     </div>
                     <div className="mt-0.5 hidden text-[10px] text-muted-foreground sm:block">
-                      {c.trades} معامله
+                      {trades} معامله
                     </div>
                   </div>
                 )}
@@ -175,6 +192,17 @@ function CalendarPage() {
             );
           })}
         </div>
+        {error && (
+          <div className="mt-4 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border bg-secondary/40 px-3 py-2 text-sm text-muted-foreground">
+            <span>
+              داده‌های معاملاتی این ماه دریافت نشد — تقویم خالی نمایش داده
+              می‌شود.
+            </span>
+            <Button variant="outline" size="sm" onClick={reload}>
+              تلاش دوباره
+            </Button>
+          </div>
+        )}
       </div>
     </AppShell>
   );

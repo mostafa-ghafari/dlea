@@ -21,23 +21,40 @@ const fs = require("node:fs");
 const path = require("node:path");
 
 const VALID_RUNNERS = new Set([
-  "ubuntu-latest", "ubuntu-22.04", "ubuntu-20.04",
-  "windows-latest", "windows-2022", "windows-2019",
-  "macos-latest", "macos-14", "macos-13",
+  "ubuntu-latest",
+  "ubuntu-22.04",
+  "ubuntu-20.04",
+  "windows-latest",
+  "windows-2022",
+  "windows-2019",
+  "macos-latest",
+  "macos-14",
+  "macos-13",
   "self-hosted",
 ]);
 
 const VALID_EVENTS = new Set([
-  "push", "pull_request", "pull_request_target", "workflow_dispatch",
-  "workflow_run", "schedule", "release", "issues", "issue_comment",
-  "repository_dispatch", "workflow_call", "merge_group", "pull_request_review",
+  "push",
+  "pull_request",
+  "pull_request_target",
+  "workflow_dispatch",
+  "workflow_run",
+  "schedule",
+  "release",
+  "issues",
+  "issue_comment",
+  "repository_dispatch",
+  "workflow_call",
+  "merge_group",
+  "pull_request_review",
 ]);
 
 // Discover workflow files
 const wfDir = path.join(process.cwd(), ".github", "workflows");
 let files;
 try {
-  files = fs.readdirSync(wfDir)
+  files = fs
+    .readdirSync(wfDir)
     .filter((f) => f.endsWith(".yml") || f.endsWith(".yaml"))
     .map((f) => path.join(".github", "workflows", f));
 } catch {
@@ -94,7 +111,7 @@ for (const file of files) {
   const openCount = (content.match(/\$\{\{/g) || []).length;
   const closeCount = (content.match(/\}\}/g) || []).length;
   if (openCount !== closeCount) {
-    errors.push(`Unbalanced ${{ }}: ${openCount} opens vs ${closeCount} closes`);
+    errors.push(`Unbalanced ${{}}: ${openCount} opens vs ${closeCount} closes`);
   }
 
   // 5. Validate on: triggers
@@ -129,16 +146,20 @@ for (const file of files) {
 
     // Duplicate job names
     const nameCount = {};
-    jobStarts.forEach((j) => { nameCount[j.name] = (nameCount[j.name] || 0) + 1; });
+    jobStarts.forEach((j) => {
+      nameCount[j.name] = (nameCount[j.name] || 0) + 1;
+    });
     for (const [name, count] of Object.entries(nameCount)) {
-      if (count > 1) errors.push(`Duplicate job name: "${name}" (${count} times)`);
+      if (count > 1)
+        errors.push(`Duplicate job name: "${name}" (${count} times)`);
     }
 
     const jobNames = jobStarts.map((j) => j.name);
 
     for (let ji = 0; ji < jobStarts.length; ji++) {
       const { name: jobName, line: startIdx } = jobStarts[ji];
-      const endIdx = ji + 1 < jobStarts.length ? jobStarts[ji + 1].line : jobsEndIdx;
+      const endIdx =
+        ji + 1 < jobStarts.length ? jobStarts[ji + 1].line : jobsEndIdx;
       const jobBlock = lines.slice(startIdx, endIdx).join("\n");
 
       // runs-on
@@ -147,7 +168,11 @@ for (const file of files) {
         errors.push(`Job "${jobName}": missing "runs-on"`);
       } else {
         const val = runsOnMatch[1].trim();
-        if (!val.startsWith("${{") && !val.startsWith("[") && !VALID_RUNNERS.has(val)) {
+        if (
+          !val.startsWith("${{") &&
+          !val.startsWith("[") &&
+          !VALID_RUNNERS.has(val)
+        ) {
           errors.push(`Job "${jobName}": unusual runs-on "${val}"`);
         }
       }
@@ -163,26 +188,40 @@ for (const file of files) {
       if (hasSteps) {
         const stepBlock = jobBlock.slice(jobBlock.indexOf("steps:"));
         const stepLines = stepBlock.split("\n");
-        let inStep = false, stepHasRun = false, stepHasUses = false, stepCount = 0;
+        let inStep = false,
+          stepHasRun = false,
+          stepHasUses = false,
+          stepCount = 0;
         for (const sl of stepLines) {
           if (/ {6}- /.test(sl)) {
             if (inStep && !stepHasRun && !stepHasUses) {
-              errors.push(`Job "${jobName}": step ${stepCount} missing "run:" or "uses:"`);
+              errors.push(
+                `Job "${jobName}": step ${stepCount} missing "run:" or "uses:"`,
+              );
             }
-            inStep = true; stepHasRun = false; stepHasUses = false; stepCount++;
+            inStep = true;
+            stepHasRun = false;
+            stepHasUses = false;
+            stepCount++;
           }
           if (/ {8}run:\s*/.test(sl)) stepHasRun = true;
           if (/ {8}uses:\s*/.test(sl)) stepHasUses = true;
         }
         if (inStep && !stepHasRun && !stepHasUses) {
-          errors.push(`Job "${jobName}": step ${stepCount} missing "run:" or "uses:"`);
+          errors.push(
+            `Job "${jobName}": step ${stepCount} missing "run:" or "uses:"`,
+          );
         }
 
         // action version pinning
-        for (const um of stepBlock.matchAll(/uses:\s*([\w-]+\/[\w-]+)@([\w.\-]+)/g)) {
+        for (const um of stepBlock.matchAll(
+          /uses:\s*([\w-]+\/[\w-]+)@([\w.\-]+)/g,
+        )) {
           const [, action, version] = um;
           if (["main", "master"].includes(version)) {
-            errors.push(`Job "${jobName}": ${action}@${version} is unpinned — pin to a release tag`);
+            errors.push(
+              `Job "${jobName}": ${action}@${version} is unpinned — pin to a release tag`,
+            );
           }
         }
       }
@@ -192,7 +231,10 @@ for (const file of files) {
       if (needsMatch) {
         const needsVal = needsMatch[1].trim();
         const deps = needsVal.startsWith("[")
-          ? needsVal.slice(1, -1).split(",").map((s) => s.trim().replace(/['"]/g, ""))
+          ? needsVal
+              .slice(1, -1)
+              .split(",")
+              .map((s) => s.trim().replace(/['"]/g, ""))
           : [needsVal.replace(/['"]/g, "")];
         for (const dep of deps) {
           if (dep && !jobNames.includes(dep)) {
@@ -202,7 +244,9 @@ for (const file of files) {
       }
     }
 
-    console.log(`  ${file}: ${jobNames.length} job(s) — ${jobNames.join(", ")}`);
+    console.log(
+      `  ${file}: ${jobNames.length} job(s) — ${jobNames.join(", ")}`,
+    );
   }
 
   if (errors.length > 0) {
@@ -218,6 +262,6 @@ for (const file of files) {
 console.log(
   allPassed
     ? `\n✅ All ${files.length} workflow(s) pass validation`
-    : `\n❌ ${totalErrors} issue(s) across ${files.length} file(s)`
+    : `\n❌ ${totalErrors} issue(s) across ${files.length} file(s)`,
 );
 process.exit(allPassed ? 0 : 1);

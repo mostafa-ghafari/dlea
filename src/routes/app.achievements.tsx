@@ -21,7 +21,7 @@ import {
   Swords,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { useAchievements } from "@/lib/api";
+import { useAchievements, type Achievement } from "@/lib/api";
 
 export const Route = createFileRoute("/app/achievements")({
   head: () => ({ meta: [{ title: "نشان‌ها" }] }),
@@ -162,8 +162,57 @@ const defaultStyle = {
   badgeClass: "border-primary/40 bg-primary/10 text-primary",
 };
 
+// Descriptions mirror the seeded backend catalog, ordered exactly like
+// `achievementStyle` above. They are only used to render a badge that the
+// server didn't return (empty portfolio / API hiccup) so the section never
+// silently drops badges — earned state still comes from the API.
+const FALLBACK_DESCS = [
+  "یک هفته کامل طبق قوانین ترید کردی.",
+  "حداکثر دراودان را نصف کردی.",
+  "کنترل احساسات درجه یک.",
+  "قهرمان ژورالنویسی.",
+  "استراتژی سودده اثبات‌شده.",
+  "روانشناسی طلایی.",
+  "سفرت را شروع کردی.",
+  "عادت طلایی ساخته شد.",
+  "یک ماه کامل با سود مثبت.",
+  "دقت شکار درجه یک.",
+  "مدیر ریسک واقعی.",
+  "صبر یعنی همین.",
+  "سرمایه اولیه‌ات را دو برابر کردی.",
+  "فقط ست‌آپ‌های تمیز.",
+  "همگام‌سازی خودکار فعال شد.",
+  "۵۰ چک‌لیست کامل قبل از ورود.",
+];
+
+/**
+ * Merge the API list with the known badge catalog: every known badge is
+ * always rendered (earned/description from the API when present, locked
+ * otherwise) and any extra server-defined badge is appended.
+ */
+function resolveBadgeList(apiBadges: Achievement[]): Achievement[] {
+  const known = Object.keys(achievementStyle);
+  const byTitle = new Map(apiBadges.map((a) => [a.title, a]));
+  const merged = known.map((title, i) => {
+    const api = byTitle.get(title);
+    return (
+      api ?? {
+        id: title,
+        title,
+        desc: FALLBACK_DESCS[i] ?? "",
+        earned: false,
+        rule: "",
+      }
+    );
+  });
+  for (const a of apiBadges) {
+    if (!known.includes(a.title)) merged.push(a);
+  }
+  return merged;
+}
+
 function AchievementsPage() {
-  const achievements = useAchievements();
+  const achievements = resolveBadgeList(useAchievements());
   const earned = achievements.filter((a) => a.earned).length;
 
   return (

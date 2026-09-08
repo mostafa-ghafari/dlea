@@ -41,6 +41,9 @@ export const Route = createFileRoute("/app/goals")({
 function GoalsPage() {
   const [portfolioId] = useActivePortfolioId();
   const [goals, setGoals] = useState<Goal[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [loadFailed, setLoadFailed] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
   const [open, setOpen] = useState(false);
   const [title, setTitle] = useState("");
   const [type, setType] = useState("سود");
@@ -50,13 +53,26 @@ function GoalsPage() {
 
   useEffect(() => {
     let alive = true;
+    setLoading(true);
+    setLoadFailed(false);
     fetchGoals(portfolioId ?? undefined)
-      .then((list) => alive && setGoals(list))
-      .catch(() => alive && toast.error("دریافت اهداف از سرور ممکن نشد"));
+      .then((list) => {
+        if (!alive) return;
+        setGoals(list);
+        setLoadFailed(false);
+      })
+      .catch(() => {
+        // A missing server (or an empty portfolio with no matching rows) is
+        // shown as an empty state below instead of an error toast.
+        if (alive) setLoadFailed(true);
+      })
+      .finally(() => {
+        if (alive) setLoading(false);
+      });
     return () => {
       alive = false;
     };
-  }, [portfolioId]);
+  }, [portfolioId, reloadKey]);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -221,9 +237,27 @@ function GoalsPage() {
             </div>
           </div>
         ))}
-        {goals.length === 0 && (
+        {!loading && goals.length === 0 && (
           <div className="card-surface p-8 text-center text-sm text-muted-foreground md:col-span-2">
-            هنوز هدفی تعریف نکردی — با دکمه «هدف جدید» شروع کن.
+            {loadFailed ? (
+              <>
+                <p className="mx-auto max-w-sm leading-relaxed">
+                  اهداف از سرور دریافت نشدند — برای این پرتفولیو هنوز چیزی ثبت
+                  نشده یا سرور در دسترس نیست.
+                </p>
+                <div className="mt-4 flex items-center justify-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setReloadKey((k) => k + 1)}
+                  >
+                    تلاش دوباره
+                  </Button>
+                </div>
+              </>
+            ) : (
+              <p>هنوز هدفی تعریف نکردی — با دکمه «هدف جدید» شروع کن.</p>
+            )}
           </div>
         )}
       </div>

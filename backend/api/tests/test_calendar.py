@@ -17,8 +17,12 @@ def _expected_grid(j_year, j_month):
     elif j_month <= 11:
         dim = 30
     else:
-        leap = ((j_year + 19) % 33) * 4 < 33
-        dim = 30 if leap else 29
+        # Esfand: 30 days iff (year,12,30) exists in the Jalali calendar.
+        try:
+            jdatetime.date(j_year, 12, 30)
+            dim = 30
+        except ValueError:
+            dim = 29
     total = ((sat_based_offset + dim + 6) // 7) * 7
     return sat_based_offset, dim, total
 
@@ -87,6 +91,15 @@ class CalendarGridTests(BaseTestCase):
         # 1409 is not a leap year → Esfand 29 days
         r = self.client.get("/api/calendar/", {"year": 1409, "month": 12})
         _, dim, total = _expected_grid(1409, 12)
+        self.assertEqual(dim, 29)
+        days = [c["day"] for c in r.data if c["day"] is not None]
+        self.assertEqual(len(days), 29)
+        self.assertEqual(len(r.data), total)
+
+    def test_1405_esfand_has_29_days(self):
+        # 1405 is NOT a leap year — the Larizan shortcut wrongly marks it leap.
+        r = self.client.get("/api/calendar/", {"year": 1405, "month": 12})
+        _, dim, total = _expected_grid(1405, 12)
         self.assertEqual(dim, 29)
         days = [c["day"] for c in r.data if c["day"] is not None]
         self.assertEqual(len(days), 29)
