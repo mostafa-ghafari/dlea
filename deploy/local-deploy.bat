@@ -3,9 +3,6 @@ echo ==========================================
 echo Dlea Local Deployment
 echo ==========================================
 
-set WHEELS_DIR=%TEMP%\pip-wheels
-set WHEEL_ENV=%TEMP%\dlea-wheel-env
-
 rem Step 1: Build frontend
 echo.
 echo Step 1: Building frontend...
@@ -19,28 +16,28 @@ echo Build OK!
 rem Step 2: Build pip wheels for offline install
 echo.
 echo Step 2: Building pip wheels for offline install...
-if exist "%WHEELS_DIR%" rmdir /s /q "%WHEELS_DIR%"
-mkdir "%WHEELS_DIR%"
+set WHEEL_ENV=%TEMP%\dlea-wheel-env
 if exist "%WHEEL_ENV%" rmdir /s /q "%WHEEL_ENV%"
 python -m venv "%WHEEL_ENV%" 2>nul || python3 -m venv "%WHEEL_ENV%" 2>nul
 "%WHEEL_ENV%\Scripts\pip.exe" install --upgrade pip -q 2>nul
-"%WHEEL_ENV%\Scripts\pip.exe" wheel -r backend\requirements.txt -w "%WHEELS_DIR%" -q
+"%WHEEL_ENV%\Scripts\pip.exe" wheel -r backend\requirements.txt -w pip-wheels -q
 if %errorlevel% neq 0 (
     echo Warning: Could not build wheels, will fall back to PyPI on server
 )
-for %%f in ("%WHEELS_DIR%\*.whl") do set /a WHEEL_COUNT+=1
-if defined WHEEL_COUNT echo Built %WHEEL_COUNT% wheels
+set WHEEL_COUNT=0
+for %%f in (pip-wheels\*.whl) do set /a WHEEL_COUNT+=1
+if %WHEEL_COUNT% gtr 0 echo Built %WHEEL_COUNT% wheels
+rem Cleanup temp venv
+rmdir /s /q "%WHEEL_ENV%" 2>nul
 
-rem Step 3: Create archive with wheels
+rem Step 3: Create archive
 echo.
 echo Step 3: Creating deployment archive...
-tar czf %TEMP%\dlea-deploy.tar.gz --exclude=node_modules --exclude=.tanstack --exclude=.git --exclude=.freebuff --exclude=*.log --exclude=backend/.venv -C "%TEMP%" pip-wheels .
+tar czf %TEMP%\dlea-deploy.tar.gz --exclude=node_modules --exclude=.tanstack --exclude=.git --exclude=.freebuff --exclude=*.log --exclude=backend/.venv --exclude=backend/__pycache__ --exclude=*.pyc --exclude=backend/db.sqlite3 --exclude=test-results --exclude=smoke-test .
 echo Archive created!
-
-rem Cleanup temp wheel build
-del /q "%WHEELS_DIR%\*.whl" 2>nul
-rmdir /s /q "%WHEELS_DIR%" 2>nul
-rmdir /s /q "%WHEEL_ENV%" 2>nul
+rem Cleanup pip-wheels
+del /q pip-wheels\*.whl 2>nul
+rmdir /s /q pip-wheels 2>nul
 
 rem Step 4: Upload to server
 echo.
