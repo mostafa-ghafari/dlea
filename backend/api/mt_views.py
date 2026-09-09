@@ -171,6 +171,7 @@ def trades_webhook(request):
         )
 
     created = 0
+    skipped = 0
     errors = []
     for idx, item in enumerate(items):
         if not isinstance(item, dict):
@@ -186,6 +187,11 @@ def trades_webhook(request):
         for field in ("open_time", "close_time"):
             if item.get(field):
                 item[field] = _normalize_mt_datetime(item[field])
+        # --- Dedup: skip trades that already exist for this portfolio ---
+        ticket = str(item.get("ticket", "")).strip()
+        if ticket and Trade.objects.filter(ticket=ticket, portfolio=portfolio).exists():
+            skipped += 1
+            continue
         ser = TradeSerializer(data=item)
         if not ser.is_valid():
             errors.append({"index": idx, "detail": ser.errors})
@@ -196,7 +202,7 @@ def trades_webhook(request):
         except Exception as exc:
             errors.append({"index": idx, "detail": str(exc)})
 
-    payload = {"created": created, "total": len(items)}
+    payload = {"created": created, "skipped": skipped, "total": len(items)}
     if errors:
         payload["errors"] = errors[:10]
         # Debug: persist the exact validation errors so they can be diagnosed.
@@ -205,4 +211,6 @@ def trades_webhook(request):
                 fh.write(json.dumps({"errors": errors[:3], "sample": items[:1]}, ensure_ascii=False, default=str) + "\n")
         except OSError:
             pass
-    return JsonResponse(payload, status=201 if created else 400)
+    if errors and created == 0:
+        return JsonResponse(payload, status=400)
+    return JsonResponse(payload, status=201 if created else 200)

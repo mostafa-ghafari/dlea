@@ -146,6 +146,22 @@ class WebhookTests(BaseTestCase):
         self.assertEqual(r.json()["created"], 0)
         self.assertIn("errors", r.json())
 
+    def test_duplicate_trade_ticket_is_skipped(self):
+        """Sending the same ticket twice should not create duplicates."""
+        payload = {"token": "tok123", "trades": [self._trade_item()]}
+        r1 = self._post(payload)
+        self.assertEqual(r1.status_code, 201)
+        self.assertEqual(r1.json()["created"], 1)
+        self.assertEqual(Trade.objects.filter(ticket="999").count(), 1)
+
+        # Send the same trade again (simulates MT restart)
+        r2 = self._post(payload)
+        self.assertEqual(r2.status_code, 200)
+        self.assertEqual(r2.json()["created"], 0)
+        self.assertEqual(r2.json()["skipped"], 1)
+        # Still only one record
+        self.assertEqual(Trade.objects.filter(ticket="999").count(), 1)
+
     def _trade_item(self):
         return {
             "ticket": "999",

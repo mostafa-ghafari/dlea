@@ -15,6 +15,7 @@ export default tseslint.config(
       "**/.venv",
       "**/venv",
       "**/node_modules",
+      "scripts/**",
     ],
   },
   {

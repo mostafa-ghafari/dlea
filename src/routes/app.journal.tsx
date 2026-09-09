@@ -43,6 +43,7 @@ import { ImageUploader } from "@/components/ImageUploader";
 import {
   createJournalEntry,
   createJournalGroup,
+  deleteJournalEntry,
   deleteJournalGroup,
   fetchJournalEntries,
   fetchJournalGroups,
@@ -135,6 +136,8 @@ function JournalPage() {
   const [newGroup, setNewGroup] = useState("");
   const [editingGroupId, setEditingGroupId] = useState<string | null>(null);
   const [groupNameDraft, setGroupNameDraft] = useState("");
+
+  const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
 
   const [filterOpen, setFilterOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -341,6 +344,19 @@ function JournalPage() {
     } catch (err) {
       toast.error(
         `حذف گروه ناموفق بود: ${err instanceof Error ? err.message : err}`,
+      );
+    }
+  }
+
+  async function deleteEntry(id: string) {
+    try {
+      await deleteJournalEntry(id);
+      setEntries((list) => list.filter((e) => e.id !== id));
+      setDeleteTarget(null);
+      toast.success("ژورنال حذف شد");
+    } catch (err) {
+      toast.error(
+        `حذف ژورنال ناموفق بود: ${err instanceof Error ? err.message : err}`,
       );
     }
   }
@@ -865,6 +881,14 @@ function JournalPage() {
                   >
                     <Pencil className="h-4 w-4" />
                   </button>
+                  <button
+                    type="button"
+                    onClick={() => setDeleteTarget(j.id)}
+                    aria-label="حذف ژورنال"
+                    className="grid h-8 w-8 place-items-center rounded-lg border border-border text-muted-foreground transition-colors hover:text-destructive"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </button>
                   <Badge
                     variant="outline"
                     className={
@@ -926,6 +950,30 @@ function JournalPage() {
           );
         })}
       </div>
+
+      {/* Delete confirmation dialog */}
+      <Dialog open={!!deleteTarget} onOpenChange={() => setDeleteTarget(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>حذف ژورنال</DialogTitle>
+            <DialogDescription>
+              آیا مطمئنید که می‌خواهید این ژورنال را حذف کنید؟ این عمل قابل
+              بازگشت نیست.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="mt-6">
+            <DialogClose asChild>
+              <Button variant="outline">انصراف</Button>
+            </DialogClose>
+            <Button
+              variant="destructive"
+              onClick={() => deleteTarget && deleteEntry(deleteTarget)}
+            >
+              حذف
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </AppShell>
   );
 }
