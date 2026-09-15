@@ -3,7 +3,7 @@
 //|              Dlea AI - MetaTrader 5 trade sync expert            |
 //+------------------------------------------------------------------+
 #property copyright "Dlea AI"
-#property version   "1.05"
+#property version   "1.06"
 #property strict
 #property description "Syncs closed trades from MetaTrader 5 to Dlea AI"
 
@@ -11,6 +11,7 @@
 input string InpWebhookUrl  = "http://127.0.0.1:8000/api/trades/webhook/"; // Dlea webhook URL
 input string InpToken       = "YOUR_TOKEN_HERE";                          // Webhook token (from settings)
 input bool   InpSyncHistory = true;                                       // Import existing closed trades on start
+input int    InpBackfillDays= 0;                                          // Backfill window in days (0 = everything MT has)
 input bool   InpDebugLog    = true;                                       // Print sent deals to log
 
 ulong g_lastDeal = 0; // dedupe: last deal ticket we already sent
@@ -174,16 +175,26 @@ void CacheOpenPositions()
 //+------------------------------------------------------------------+
 void SyncHistory()
 {
-   if(!HistorySelect(0, TimeCurrent()))
+   //--- MT5 only serves history it has actually downloaded, so an account
+   //--- whose deals are months old can look "incomplete" until the terminal
+   //--- fetches that range (open the History tab and scroll back).
+   datetime from = 0;
+   if(InpBackfillDays > 0)
+      from = TimeCurrent() - (datetime)InpBackfillDays * 86400;
+
+   if(!HistorySelect(from, TimeCurrent()))
    {
       Print("DleaSync: could not load history.");
       return;
    }
 
    int total = HistoryDealsTotal();
-   if(InpDebugLog) Print("DleaSync: scanning ", total, " history deals...");
+   Print("DleaSync: backfill window from ", TimeToString(from == 0 ? 0 : from, TIME_DATE),
+         " — MT returned ", total, " history deals.");
 
-   int sent = 0;
+   int closed  = 0;
+   int sent    = 0;
+   int failed  = 0;
    for(int i = 0; i < total; i++)
    {
       ulong dealTicket = HistoryDealGetTicket(i);
@@ -192,10 +203,18 @@ void SyncHistory()
       ENUM_DEAL_ENTRY entry = (ENUM_DEAL_ENTRY)HistoryDealGetInteger(dealTicket, DEAL_ENTRY);
       if(entry != DEAL_ENTRY_OUT) continue;
 
+      closed++;
       if(SendDeal(dealTicket)) sent++;
+      else failed++;
    }
 
-   if(InpDebugLog) Print("DleaSync: backfill done, sent ", sent, " closed deals.");
+   //--- Printed unconditionally: this line is how you tell whether a missing
+   //--- row was never given to the EA, or was rejected on the way out.
+   Print("DleaSync: backfill summary — deals=", total, " closed=", closed,
+         " accepted=", sent, " failed=", failed);
+   if(closed < total)
+      Print("DleaSync: note ", total - closed, " deal(s) were entries/balance "
+            "operations, not closed trades.");
 }
 
 //+------------------------------------------------------------------+
@@ -343,9 +362,17 @@ bool SendDeal(const ulong dealTicket)
    if(tp <= 0 && ParseLevelFromComment(comment, "tp", tp) && InpDebugLog)
       Print("DleaSync: TP recovered from deal comment for pos #", position, " -> ", tp);
 
-   //--- compute rough RR (server recomputes exact values)
-   double risk = fabs(entryPrice - exitPrice);
-   double rr   = (risk > 0) ? (fabs(profit) / (risk * volume * 100.0)) : 0.0;
+   //--- R:R = how far price actually travelled / how much was risked.
+   //--- It needs the stop (the old formula divided by volume x 100 and
+   //--- produced nonsense like 617). Without a stop the ratio does not
+   //--- exist, so 0 is the honest value.
+   double rr = 0.0;
+   if(sl > 0)
+   {
+      double risk = fabs(entryPrice - sl);
+      if(risk > 0)
+         rr = fabs(exitPrice - entryPrice) / risk;
+   }
 
    string sideStr = (type == DEAL_TYPE_BUY) ? "buy" : "sell";
 
