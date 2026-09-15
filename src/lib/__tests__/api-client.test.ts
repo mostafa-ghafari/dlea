@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   confirmPaymentOrder,
   del,
+  fetchPaymentHealth,
   fetchPaymentOrder,
   get,
   invalidateCache,
@@ -9,6 +10,7 @@ import {
   post,
   postRaw,
   put,
+  runPaymentHealthCheck,
   startCheckout,
 } from "@/lib/api";
 
@@ -231,3 +233,70 @@ describe("payment gateway", () => {
   });
 });
 
+describe("admin payment health", () => {
+  const report = {
+    checkedAt: "2026-09-15T12:00:00+00:00",
+    live: false,
+    sandbox: true,
+    merchant: "ziba*",
+    callbackUrl: "https://dlea.piqagram.ir/api/billing/callback/",
+    amounts: {
+      minRial: 1000,
+      maxRial: 4_000_000_000,
+      minToman: 100,
+      maxToman: 400_000_000,
+    },
+    summary: { passed: 3, failed: 0, warned: 2, skipped: 1 },
+    checks: [
+      { id: "gateway", title: "اتصال به درگاه", status: "skipped", detail: "" },
+    ],
+    plans: [],
+    orders: {
+      pending: 0,
+      stuck: 0,
+      failedRecent: 0,
+      failedWindowDays: 2,
+      recentFailed: [],
+      oldestStuck: null,
+      lastPaid: null,
+    },
+    codes: [{ code: 106, message: "آدرس بازگشت نامعتبر است" }],
+  };
+
+  it("reads the offline snapshot without calling the gateway", async () => {
+    const fetchMock = mockFetch(200, report);
+    const data = await fetchPaymentHealth();
+    expect(data.summary.warned).toBe(2);
+    const [url, init] = fetchMock.mock.calls[0] as unknown as [
+      string,
+      RequestInit,
+    ];
+    expect(url).toBe(`${API_BASE}/admin/payment-health/`);
+    expect(init.method ?? "GET").toBe("GET");
+    expect(data.codes[0].code).toBe(106);
+  });
+
+  it("runs the live check with a POST and returns the same shape", async () => {
+    const fetchMock = mockFetch(200, {
+      ...report,
+      live: true,
+      summary: { passed: 8, failed: 0, warned: 2, skipped: 0 },
+    });
+    const data = await runPaymentHealthCheck();
+    expect(data.live).toBe(true);
+    expect(data.summary.passed).toBe(8);
+    const [url, init] = fetchMock.mock.calls[0] as unknown as [
+      string,
+      RequestInit,
+    ];
+    expect(url).toBe(`${API_BASE}/admin/payment-health/`);
+    expect(init.method).toBe("POST");
+  });
+
+  it("keeps a non-admin out with the server's message", async () => {
+    mockFetch(403, { detail: "شما به این بخش دسترسی ندارید" });
+    await expect(fetchPaymentHealth()).rejects.toThrow(
+      "شما به این بخش دسترسی ندارید",
+    );
+  });
+});

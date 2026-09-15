@@ -16,7 +16,7 @@ from rest_framework.permissions import BasePermission, IsAuthenticated, SAFE_MET
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from . import gemini, jutils
+from . import gemini, jutils, payment_health
 from .plan_limits import ai_quota_for_user
 from .models import (
     Achievement,
@@ -647,6 +647,30 @@ class PaymentViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = Payment.objects.all()
     serializer_class = PaymentSerializer
     permission_classes = [IsAdminUserPermission]
+
+
+class PaymentHealthView(APIView):
+    """Admin: is the payment path healthy, and what did the gateway say?
+
+    GET is free — configuration, plan prices, recent orders and the gateway's
+    result-code reference, with no outbound request. POST also probes the
+    gateway for real (connection, amount bounds, a bad callback URL), which
+    opens abandoned payment sessions and moves no money.
+    """
+
+    permission_classes = [IsAdminUserPermission]
+
+    def get(self, request):
+        return Response(payment_health.build_report(request, live=False))
+
+    def post(self, request):
+        try:
+            timeout = int(request.data.get("timeout", payment_health.GATEWAY_TIMEOUT))
+        except (TypeError, ValueError):
+            timeout = payment_health.GATEWAY_TIMEOUT
+        return Response(
+            payment_health.build_report(request, live=True, timeout=max(3, min(timeout, 30)))
+        )
 
 
 class ReferralLinkViewSet(viewsets.ReadOnlyModelViewSet):

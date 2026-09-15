@@ -34,6 +34,7 @@ from .views import (
     JournalGroupViewSet,
     NewsItemViewSet,
     NotificationViewSet,
+    PaymentHealthView,
     PaymentViewSet,
     PlanLimitsView,
     PlanViewSet,
@@ -103,5 +104,7 @@ urlpatterns = [
     path("billing/checkout/", BillingCheckoutView.as_view(), name="billing-checkout"),
     path("billing/callback/", BillingCallbackView.as_view(), name="billing-callback"),
     path("billing/orders/<int:pk>/", BillingOrderView.as_view(), name="billing-order"),
+    # Admin: one-click health check for the whole payment path.
+    path("admin/payment-health/", PaymentHealthView.as_view(), name="admin-payment-health"),
     path("", include(router.urls)),
 ]

@@ -34,6 +34,7 @@ import { Route as AppAdminAuditRouteImport } from './routes/app.admin.audit'
 import { Route as AppAdminDashboardRouteImport } from './routes/app.admin.dashboard'
 import { Route as AppAdminLogsRouteImport } from './routes/app.admin.logs'
 import { Route as AppAdminNewsRouteImport } from './routes/app.admin.news'
+import { Route as AppAdminPaymentHealthRouteImport } from './routes/app.admin.payment-health'
 import { Route as AppAdminPaymentsRouteImport } from './routes/app.admin.payments'
 import { Route as AppAdminPlansRouteImport } from './routes/app.admin.plans'
 import { Route as AppAdminTicketsRouteImport } from './routes/app.admin.tickets'
@@ -169,6 +170,11 @@ const AppAdminNewsRoute = AppAdminNewsRouteImport.update({
   path: '/news',
   getParentRoute: () => AppAdminRoute,
 } as any)
+const AppAdminPaymentHealthRoute = AppAdminPaymentHealthRouteImport.update({
+  id: '/payment-health',
+  path: '/payment-health',
+  getParentRoute: () => AppAdminRoute,
+} as any)
 const AppAdminPaymentsRoute = AppAdminPaymentsRouteImport.update({
   id: '/payments',
   path: '/payments',
@@ -241,6 +247,7 @@ export interface FileRoutesByFullPath {
   '/app/admin/dashboard': typeof AppAdminDashboardRoute
   '/app/admin/logs': typeof AppAdminLogsRoute
   '/app/admin/news': typeof AppAdminNewsRoute
+  '/app/admin/payment-health': typeof AppAdminPaymentHealthRoute
   '/app/admin/payments': typeof AppAdminPaymentsRoute
   '/app/admin/plans': typeof AppAdminPlansRoute
   '/app/admin/tickets': typeof AppAdminTicketsRoute
@@ -277,6 +284,7 @@ export interface FileRoutesByTo {
   '/app/admin/dashboard': typeof AppAdminDashboardRoute
   '/app/admin/logs': typeof AppAdminLogsRoute
   '/app/admin/news': typeof AppAdminNewsRoute
+  '/app/admin/payment-health': typeof AppAdminPaymentHealthRoute
   '/app/admin/payments': typeof AppAdminPaymentsRoute
   '/app/admin/plans': typeof AppAdminPlansRoute
   '/app/admin/tickets': typeof AppAdminTicketsRoute
@@ -314,6 +322,7 @@ export interface FileRoutesById {
   '/app/admin/dashboard': typeof AppAdminDashboardRoute
   '/app/admin/logs': typeof AppAdminLogsRoute
   '/app/admin/news': typeof AppAdminNewsRoute
+  '/app/admin/payment-health': typeof AppAdminPaymentHealthRoute
   '/app/admin/payments': typeof AppAdminPaymentsRoute
   '/app/admin/plans': typeof AppAdminPlansRoute
   '/app/admin/tickets': typeof AppAdminTicketsRoute
@@ -352,6 +361,7 @@ export interface FileRouteTypes {
     | '/app/admin/dashboard'
     | '/app/admin/logs'
     | '/app/admin/news'
+    | '/app/admin/payment-health'
     | '/app/admin/payments'
     | '/app/admin/plans'
     | '/app/admin/tickets'
@@ -388,6 +398,7 @@ export interface FileRouteTypes {
     | '/app/admin/dashboard'
     | '/app/admin/logs'
     | '/app/admin/news'
+    | '/app/admin/payment-health'
     | '/app/admin/payments'
     | '/app/admin/plans'
     | '/app/admin/tickets'
@@ -424,6 +435,7 @@ export interface FileRouteTypes {
     | '/app/admin/dashboard'
     | '/app/admin/logs'
     | '/app/admin/news'
+    | '/app/admin/payment-health'
     | '/app/admin/payments'
     | '/app/admin/plans'
     | '/app/admin/tickets'
@@ -623,6 +635,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppAdminNewsRouteImport
       parentRoute: typeof AppAdminRoute
     }
+    '/app/admin/payment-health': {
+      id: '/app/admin/payment-health'
+      path: '/payment-health'
+      fullPath: '/app/admin/payment-health'
+      preLoaderRoute: typeof AppAdminPaymentHealthRouteImport
+      parentRoute: typeof AppAdminRoute
+    }
     '/app/admin/payments': {
       id: '/app/admin/payments'
       path: '/payments'
@@ -695,6 +714,7 @@ interface AppAdminRouteChildren {
   AppAdminDashboardRoute: typeof AppAdminDashboardRoute
   AppAdminLogsRoute: typeof AppAdminLogsRoute
   AppAdminNewsRoute: typeof AppAdminNewsRoute
+  AppAdminPaymentHealthRoute: typeof AppAdminPaymentHealthRoute
   AppAdminPaymentsRoute: typeof AppAdminPaymentsRoute
   AppAdminPlansRoute: typeof AppAdminPlansRoute
   AppAdminTicketsRoute: typeof AppAdminTicketsRoute
@@ -707,6 +727,7 @@ const AppAdminRouteChildren: AppAdminRouteChildren = {
   AppAdminDashboardRoute: AppAdminDashboardRoute,
   AppAdminLogsRoute: AppAdminLogsRoute,
   AppAdminNewsRoute: AppAdminNewsRoute,
+  AppAdminPaymentHealthRoute: AppAdminPaymentHealthRoute,
   AppAdminPaymentsRoute: AppAdminPaymentsRoute,
   AppAdminPlansRoute: AppAdminPlansRoute,
   AppAdminTicketsRoute: AppAdminTicketsRoute,

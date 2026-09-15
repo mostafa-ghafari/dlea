@@ -121,6 +121,82 @@ export type Payment = {
   paidAt: string;
 };
 
+/** Verdict of one line in the payment health report. */
+export type PaymentHealthStatus = "pass" | "fail" | "warn" | "skipped" | "info";
+
+/** One check in the payment health report (admin panel). */
+export type PaymentHealthCheck = {
+  id: string;
+  title: string;
+  status: PaymentHealthStatus;
+  detail: string;
+};
+
+/** How one plan's price maps onto the gateway's amount bounds. */
+export type PaymentHealthPlan = {
+  slug: string;
+  name: string;
+  price: string;
+  sellable: boolean;
+  monthlyRial: number;
+  yearlyRial: number;
+  status: PaymentHealthStatus;
+  detail: string;
+};
+
+/** An order that did not end in a paid plan, with the gateway's own answer. */
+export type PaymentHealthOrder = {
+  id: number;
+  user: string;
+  plan: string;
+  amount: string;
+  date: string;
+  /** Which gateway call produced the code: request, verify, or engine (ours). */
+  stage: string;
+  /** Gateway result code, or null when the gateway never answered. */
+  code: number | null;
+  message: string;
+};
+
+/** A paid order quoted in the report (last one that worked). */
+export type PaymentHealthPaidOrder = {
+  id: number;
+  plan: string;
+  amount: string;
+  referenceId: string;
+  date: string;
+};
+
+/** Everything the payment health page renders, in one payload. */
+export type PaymentHealthReport = {
+  checkedAt: string;
+  /** True when the gateway was really called (POST, not GET). */
+  live: boolean;
+  sandbox: boolean;
+  merchant: string;
+  callbackUrl: string;
+  amounts: {
+    minRial: number;
+    maxRial: number;
+    minToman: number;
+    maxToman: number;
+  };
+  summary: { passed: number; failed: number; warned: number; skipped: number };
+  checks: PaymentHealthCheck[];
+  plans: PaymentHealthPlan[];
+  orders: {
+    pending: number;
+    stuck: number;
+    failedRecent: number;
+    failedWindowDays: number;
+    recentFailed: PaymentHealthOrder[];
+    oldestStuck: PaymentHealthOrder | null;
+    lastPaid: PaymentHealthPaidOrder | null;
+  };
+  /** The gateway's result codes with the Persian text we show for them. */
+  codes: { code: number; message: string }[];
+};
+
 /** A payment session opened at the bank, waiting for the buyer to pay. */
 export type CheckoutSession = {
   paymentId: number;
@@ -442,6 +518,18 @@ export const fetchPaymentOrder = (id: number | string) =>
 /** Ask the gateway again about an order whose callback never made it back. */
 export const confirmPaymentOrder = (id: number | string) =>
   post<PaymentOrder>(`billing/orders/${id}/`, {});
+/**
+ * Admin: payment path snapshot. Makes no outbound request, so it is safe to
+ * call on page load; press the button for the live gateway checks.
+ */
+export const fetchPaymentHealth = () =>
+  get<PaymentHealthReport>("admin/payment-health/");
+/**
+ * Admin: run the live checks too. This probes the gateway for real (opening
+ * abandoned payment sessions) and returns the same report shape.
+ */
+export const runPaymentHealthCheck = () =>
+  post<PaymentHealthReport>("admin/payment-health/", {});
 export const fetchReferralLinks = () => get<ReferralLink[]>("admin/referrals/");
 export const fetchSubscription = async (): Promise<Subscription | null> => {
   const list = await get<Subscription[]>("subscription/");
