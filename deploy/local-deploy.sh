@@ -1,119 +1,110 @@
 #!/bin/bash
-set -e
+#
+# Deploy Dlea from this machine to the production server.
+#
+# This is the *nix sibling of deploy/local-deploy.bat and does the same work in
+# the same order, so the two cannot drift apart in the parts that matter:
+#
+#   1. npm run build              -> .output/ (the SSR server PM2 runs)
+#   2. pip download               -> pip-wheels/ (offline wheels; the server has no PyPI)
+#   3. tar the repo + those wheels, with a RELATIVE archive name
+#   4. scp the archive and deploy/deploy.sh
+#   5. ssh: run deploy.sh         -> extract, test, migrate, sync, restart, verify
+#
+# Every server-side step lives in deploy/deploy.sh, which is also what
+# deploy/local-deploy.bat uploads — this script only builds and uploads.
+#
+# Keep the archive name relative: GNU tar (the tar in Git Bash) reads a
+# drive-letter operand like C:\...\x.tar.gz as a "host:path" remote spec, fails
+# with "Cannot connect to C: resolve failed" and produces no archive at all.
+#
+# Usage:  bash deploy/local-deploy.sh
+set -euo pipefail
 
-# ============================================
-# Local Deploy Script for Dlea
-# Run this from your local machine (MCI network)
-# ============================================
+SERVER="${SERVER:-ghafari@37.255.212.55}"
+REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+TMP="${TMPDIR:-/tmp}"
+ARCHIVE="$TMP/dlea-deploy.tar.gz"
+WHEELS="$REPO_DIR/pip-wheels"
 
-SERVER="ghafari@37.255.212.55"
-REMOTE_DIR="/opt/dlea"
+PYTHON="$(command -v python3 || command -v python || true)"
+if [ -z "$PYTHON" ]; then
+    echo "python3 is required to download the server's wheels" >&2
+    exit 1
+fi
+
+cleanup() {
+    rm -f "$ARCHIVE"
+    rm -rf "$WHEELS"
+    [ -n "${WHEEL_ENV_DIR:-}" ] && rm -rf "$WHEEL_ENV_DIR"
+}
+trap cleanup EXIT
 
 echo "=========================================="
-echo "Dlea Local Deployment"
+echo "Dlea deployment  ->  $SERVER"
 echo "=========================================="
 
-# Step 1: Build frontend locally
-echo ""
+echo
 echo "Step 1: Building frontend..."
-npm ci 2>/dev/null || npm install
+cd "$REPO_DIR"
 npm run build
-echo "Frontend built successfully!"
+echo "Frontend built."
 
-# Step 2: Create deployment archive
-echo ""
-echo "Step 2: Building pip wheels for offline install..."
-WHEELS_DIR="/tmp/pip-wheels"
-rm -rf "$WHEELS_DIR"
-mkdir -p "$WHEELS_DIR"
-python3 -m venv /tmp/dlea-wheel-env 2>/dev/null || true
-/tmp/dlea-wheel-env/bin/pip install --upgrade pip -q 2>/dev/null || true
-/tmp/dlea-wheel-env/bin/pip wheel -r backend/requirements.txt typing-extensions -w "$WHEELS_DIR" -q || \
-  /tmp/dlea-wheel-env/bin/pip wheel -r backend/requirements.txt typing-extensions -w "$WHEELS_DIR" -q -i https://mirrors.aliyun.com/pypi/simple/
-echo "Built $(ls "$WHEELS_DIR"/*.whl 2>/dev/null | wc -l) wheels"
+echo
+echo "Step 2: Downloading pip packages for Linux (Python 3.12)..."
+WHEEL_ENV_DIR="$(mktemp -d)"
+"$PYTHON" -m venv "$WHEEL_ENV_DIR/venv"
+PIP="$WHEEL_ENV_DIR/venv/bin/pip"
+[ -x "$PIP" ] || PIP="$WHEEL_ENV_DIR/venv/Scripts/pip.exe"   # Git Bash on Windows
+rm -rf "$WHEELS"
+mkdir -p "$WHEELS"
+"$PIP" install --upgrade pip -q 2>/dev/null || true
 
-echo ""
+download_wheels() {
+    "$PIP" download -r "$REPO_DIR/backend/requirements.txt" typing-extensions -d "$WHEELS" "$@"
+}
+download_wheels --platform manylinux2014_x86_64 --platform manylinux_2_17_x86_64 \
+    --platform any --python-version 312 --only-binary=:all: ||
+    download_wheels --python-version 312 ||
+    download_wheels --platform manylinux2014_x86_64 --platform manylinux_2_17_x86_64 \
+        --platform any --python-version 312 --only-binary=:all: -i https://mirrors.aliyun.com/pypi/simple/
+
+echo "Downloaded $(find "$WHEELS" -name '*.whl' | wc -l) packages"
+"$PYTHON" "$REPO_DIR/deploy/check_wheels.py" "$WHEELS" "$REPO_DIR/backend/requirements.txt"
+
+echo
 echo "Step 3: Creating deployment archive..."
-TIMESTAMP=$(date +%Y%m%d_%H%M%S)
-tar czf /tmp/dlea-deploy-$TIMESTAMP.tar.gz \
-  --exclude='node_modules' \
-  --exclude='.tanstack' \
-  --exclude='backend/.venv' \
-  --exclude='backend/__pycache__' \
-  --exclude='*.pyc' \
-  --exclude='backend/db.sqlite3' \
-  --exclude='.git' \
-  --exclude='.freebuff' \
-  -C /tmp pip-wheels \
-  .
-echo "Archive created: /tmp/dlea-deploy-$TIMESTAMP.tar.gz"
-rm -rf "$WHEELS_DIR" /tmp/dlea-wheel-env
+rm -f "$ARCHIVE"
+(cd "$TMP" && tar czf dlea-deploy.tar.gz \
+    --exclude=node_modules \
+    --exclude=.tanstack \
+    --exclude=.git \
+    --exclude=.freebuff \
+    --exclude='*.log' \
+    --exclude=backend/.venv \
+    --exclude='__pycache__' \
+    --exclude='*.pyc' \
+    --exclude=backend/db.sqlite3 \
+    --exclude=test-results \
+    --exclude=smoke-test \
+    -C "$REPO_DIR" .)
+if [ ! -s "$ARCHIVE" ]; then
+    echo "Archive was not created — refusing to continue." >&2
+    exit 1
+fi
+echo "Archive created: $ARCHIVE ($(du -h "$ARCHIVE" | cut -f1))"
 
-# Step 3: Upload to server
-echo ""
+echo
 echo "Step 4: Uploading to server..."
-scp /tmp/dlea-deploy-$TIMESTAMP.tar.gz $SERVER:/tmp/
-echo "Upload complete!"
+scp -q "$ARCHIVE" "$SERVER:/tmp/" || { echo "Uploading the archive failed." >&2; exit 1; }
+scp -q "$REPO_DIR/deploy/deploy.sh" "$SERVER:/tmp/" || { echo "Uploading deploy.sh failed." >&2; exit 1; }
+echo "Upload OK."
 
-# Step 4: Deploy on server
-echo ""
+echo
 echo "Step 5: Deploying on server..."
-ssh $SERVER << 'SERVEREOF'
-set -e
-DEPLOY_DIR="/opt/dlea"
-TIMESTAMP=$(date +%Y%m%d_%H%M%S)
-RELEASE_DIR="$DEPLOY_DIR/releases/$TIMESTAMP"
-CURRENT_LINK="$DEPLOY_DIR/current"
-SHARED_DIR="$DEPLOY_DIR/shared"
+ssh "$SERVER" "sed -i 's/\r\$//' /tmp/deploy.sh && bash /tmp/deploy.sh"
 
-echo "Creating release directory..."
-mkdir -p "$RELEASE_DIR" "$SHARED_DIR"
-
-cd "$RELEASE_DIR"
-echo "Extracting archive..."
-tar xzf /tmp/dlea-deploy-*.tar.gz
-rm -f /tmp/dlea-deploy-*.tar.gz
-
-# Symlink shared env
-if [ -f "$SHARED_DIR/backend/.env" ]; then
-  ln -sf "$SHARED_DIR/backend/.env" "$RELEASE_DIR/backend/.env"
-fi
-
-# Backend setup
-echo "Setting up backend..."
-cd backend
-python3 -m venv .venv 2>/dev/null || true
-.venv/bin/pip install --upgrade pip -q 2>/dev/null || true
-if [ -d "../pip-wheels" ] && (ls ../pip-wheels/*.whl >/dev/null 2>&1 || ls ../pip-wheels/*.tar.gz >/dev/null 2>&1); then
-  echo "Installing from local packages (offline)..."
-  .venv/bin/pip install --no-index --find-links ../pip-wheels -r requirements.txt -q
-else
-  echo "No local packages found, falling back to PyPI..."
-  .venv/bin/pip install -r requirements.txt -q
-fi
-
-# Migrations
-echo "Running migrations..."
-.venv/bin/python manage.py migrate --noinput
-
-# Symlink release
-cd "$DEPLOY_DIR"
-ln -sfn "$RELEASE_DIR" "$CURRENT_LINK"
-
-# Restart services
-echo "Restarting services..."
-systemctl restart dlea-backend 2>/dev/null || true
-systemctl restart dlea-frontend 2>/dev/null || true
-systemctl reload nginx 2>/dev/null || true
-
-echo "Deployment complete on server!"
-SERVEREOF
-
-# Cleanup
-rm -f /tmp/dlea-deploy-$TIMESTAMP.tar.gz
-
-echo ""
+echo
 echo "=========================================="
-echo "Deployment complete!"
-echo "https://dlea.piqagram.ir"
+echo "Done! https://dlea.piqagram.ir"
 echo "=========================================="
