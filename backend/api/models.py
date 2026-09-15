@@ -315,14 +315,41 @@ class PlatformUser(Timestamped):
         return self.name
 
 
+# Payment lifecycle. A row is created as soon as the buyer is sent to the
+# gateway so an interrupted payment is still visible to support instead of
+# vanishing; it only becomes `PAYMENT_PAID` after the gateway confirms it.
+PAYMENT_PENDING = "در انتظار"
+PAYMENT_PAID = "موفق"
+PAYMENT_FAILED = "ناموفق"
+
+
 class Payment(models.Model):
     user = models.CharField(max_length=64)
     plan = models.CharField(max_length=32)
     amount = models.CharField(max_length=64)
     date = models.DateField()
-    status = models.CharField(max_length=16, default="موفق")
+    status = models.CharField(max_length=16, default=PAYMENT_PAID)
+    # Gateway-issued reference (کد رهگیری) shown to the buyer and in support.
     reference_id = models.CharField(max_length=128, blank=True, default="")
     raw_response = models.JSONField(default=dict, blank=True)
+    # Real account behind the order, so a confirmed payment can unlock a plan.
+    # `user` above stays as the display name the admin tables already show.
+    account = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name="payments"
+    )
+    plan_slug = models.CharField(max_length=16, blank=True, default="")
+    cycle = models.CharField(
+        max_length=8, choices=[("monthly", "ماهانه"), ("yearly", "سالانه")], default="monthly"
+    )
+    amount_rial = models.BigIntegerField(default=0)
+    gateway = models.CharField(max_length=16, default="zibal")
+    # Gateway session id: the key the callback/verify requests are matched on.
+    authority = models.CharField(max_length=64, blank=True, default="")
+    card_number = models.CharField(max_length=24, blank=True, default="")
+    paid_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-id"]
 
     def __str__(self):
         return f"{self.user} — {self.plan}"

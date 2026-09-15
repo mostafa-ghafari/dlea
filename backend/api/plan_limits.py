@@ -31,6 +31,11 @@ def _match(plans, value):
     return None
 
 
+def find_plan(value):
+    """A plan by slug or display name, or None when nothing matches."""
+    return _match(list(Plan.objects.all()), value)
+
+
 def resolve_plan(user):
     """The plan that governs `user`, falling back to the free plan.
 

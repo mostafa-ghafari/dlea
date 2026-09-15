@@ -417,13 +417,29 @@ class PlatformUserSerializer(serializers.ModelSerializer):
 
 class PaymentSerializer(serializers.ModelSerializer):
     date = serializers.SerializerMethodField()
+    accountEmail = serializers.SerializerMethodField()
+    paidAt = serializers.SerializerMethodField()
+    planSlug = serializers.CharField(source="plan_slug")
+    amountRial = serializers.IntegerField(source="amount_rial")
+    referenceId = serializers.CharField(source="reference_id")
+    cardNumber = serializers.CharField(source="card_number")
 
     class Meta:
         model = Payment
-        fields = ["id", "user", "plan", "amount", "date", "status"]
+        fields = [
+            "id", "user", "accountEmail", "plan", "planSlug", "cycle", "amount", "amountRial",
+            "date", "status", "referenceId", "cardNumber", "gateway", "paidAt",
+        ]
 
     def get_date(self, obj):
         return jutils.to_jalali_date(obj.date)
+
+    def get_accountEmail(self, obj):
+        """The signed-up account behind the order, when there is one."""
+        return obj.account.email if obj.account_id else ""
+
+    def get_paidAt(self, obj):
+        return jutils.to_jalali_date(obj.paid_at.date()) if obj.paid_at else ""
 
 
 class ReferralLinkSerializer(serializers.ModelSerializer):

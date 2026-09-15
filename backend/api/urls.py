@@ -10,6 +10,7 @@ from .auth_views import (
     send_otp,
     verify_otp_register,
 )
+from .billing_views import BillingCallbackView, BillingCheckoutView, BillingOrderView
 from .mt_views import MtConnectView, MtStatusView, trades_webhook
 from .views import (
     AchievementHistoryViewSet,
@@ -98,5 +99,9 @@ urlpatterns = [
     path("admin/charts/", AdminChartsView.as_view(), name="admin-charts"),
     path("admin/ai-apis/", AdminAiApisView.as_view(), name="admin-ai-apis"),
     path("plans/limits/", PlanLimitsView.as_view(), name="plan-limits"),
+    # Payment gateway (Zibal): checkout, the bank's return trip, order status.
+    path("billing/checkout/", BillingCheckoutView.as_view(), name="billing-checkout"),
+    path("billing/callback/", BillingCallbackView.as_view(), name="billing-callback"),
+    path("billing/orders/<int:pk>/", BillingOrderView.as_view(), name="billing-order"),
     path("", include(router.urls)),
 ]
