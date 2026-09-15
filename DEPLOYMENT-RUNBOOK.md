@@ -1,567 +1,281 @@
-# راهنمای عملیات استقرار (Runbook) — Dlea AI
+# راهنمای استقرار و عملیات (Runbook) — Dlea AI
 
-> **محیط اجرا:** شبکه داخلی همراه اول (MCI)
-> **سرور تولید:** `ghafari@37.255.212.55` → `/opt/dlea`
+> **سرور تولید:** `ghafari@37.255.212.55` (فقط از شبکه داخلی MCI)
 > **آدرس سایت:** https://dlea.piqagram.ir
-> **تاریخ آخرین به‌روزرسانی:** سپتامبر ۲۰۲۶
+> **آخرین هم‌راست‌سازی با سرور:** سپتامبر ۲۰۲۶
+>
+> این سند تنها منبع درست عملیات است. اگر جایی با واقعیت سرور نمی‌خواند،
+> **سرور درست است**؛ اول با دستورهای بخش ۸ وضعیت را بگیر، بعد سند را اصلاح کن.
 
 ---
 
-## فهرست مطالب
+## ۰. معماری واقعی
 
-1. [پیش‌نیازها](#۱-پیش‌نیازها)
-2. [تست‌های محلی پیش از استقرار (درگاه ۱)](#۲-تست‌های-محلی-پیش-از-استقرار-دروازه-۱)
-3. [اجرای CI و تأیید نتایج (دروازه ۲)](#۳-اجرای-ci-و-تأیید-نتایج-دروازه-۲)
-4. [بیلد تولید و بسته‌بندی (دروازه ۳)](#۴-بیلد-تولید-و-بسته‌بندی-دروازه-۳)
-5. [آپلود و استقرار روی سرور](#۵-آپلود-و-استقرار-روی-سرور)
-6. [تست‌های سمت سرور پیش از ریستارت (دروازه ۴)](#۶-تست‌های-سمت-سرور-پیش-از-ریستارت-دروازه-۴)
-7. [ریستارت سرویس‌ها و بررسی سلامت (دروازه ۵)](#۷-ریستارت-سرویس‌ها-و-بررسی-سلامت-دروازه-۵)
-8. [تست نهایی روی سایت زنده (دروازه ۶)](#۸-تست-نهایی-روی-سایت-زنده-دروازه-۶)
-9. [بازگشت به عقب (Rollback)](#۹-بازگشت-به-عقب-rollback)
-10. [عیب‌یابی مشکلات رایج](#۱۰-عیب‌یابی-مشکلات-رایج)
-11. [چک‌لیست نهایی](#۱۱-چک‌لیست-نهایی)
+```
+مرورگر
+  │  https://dlea.piqagram.ir
+  ▼
+ArvanCloud            ← TLS اینجاست (گواهی صادرشده توسط CDN)، کش و WAF
+  │  http://37.255.212.55:80
+  ▼
+nginx  (vhost: /etc/nginx/sites-enabled/dlea.piqagram.ir)
+  ├── /api/    → 127.0.0.1:8002   gunicorn  (PM2 app: dlea-api)
+  ├── /media/  → /var/www/dlea.piqagram.ir/backend/media/   (فایل‌های آپلودی)
+  └── /        → 127.0.0.1:3000   node .output/server/index.mjs  (PM2 app: dlea)
+```
+
+نکات حیاتی این معماری:
+
+- **TLS روی سرور تمام نمی‌شود.** vhost فقط `listen 80` دارد؛ بلاک `listen 443`
+  اضافه نکن. روی همین ماشین سایت‌های دیگری هم روی `:443` هستند.
+- **پورت ۸۰۰۰ مال این پروژه نیست؛** سایت دیگری روی آن گوش می‌دهد. هیچ سرویس،
+  یونیت systemd یا کانفیگی نباید `:8000` را بگیرد. بک‌اند دلئا روی **۸۰۰۲** است.
+- **پروسه‌ها مال PM2 هستند، نه systemd.** یونیت systemd برای دلئا وجود ندارد و
+  نباید ساخته شود.
+
+### پروسه‌ها (PM2)
+
+| نام در PM2 | اجرا | cwd | آرگومان‌ها |
+|---|---|---|---|
+| `dlea-api` | `backend/.venv/bin/gunicorn` | `/var/www/dlea.piqagram.ir/backend` | `config.wsgi:application --bind 127.0.0.1:8002 --workers 3 --timeout 120` |
+| `dlea` | `npm start` → `node .output/server/index.mjs` | `/var/www/dlea.piqagram.ir` | `start` |
+
+- سرویس بوت: `pm2-ghafari.service` (enabled). یعنی بعد از ریبوت، PM2 دقیقاً همان
+  چیزی را برمی‌گرداند که در `~/.pm2/dump.pm2` ذخیره شده است.
+- **بعد از هر تغییر در تعریف اپ‌ها** یک بار `pm2 save` بزن، وگرنه بعد از ریبوت
+  تعریف قدیمی برمی‌گردد.
+
+### مسیرها
+
+| مسیر | چیست | در استقرار دست‌خورده می‌ماند؟ |
+|---|---|---|
+| `~/dlea/releases/<timestamp>` | هر استقرار یک ریلیس کامل (کد + `pip-wheels` + `.output`) | — |
+| `~/dlea/current` | لینک نمادین به آخرین ریلیس (آرشیو؛ سرو نمی‌شود) | — |
+| `/var/www/dlea.piqagram.ir/backend` | **کدی که واقعاً اجرا می‌شود** (`api/`, `config/`, `manage.py`) | `api/` و `config/` آینه می‌شوند؛ `.env`، `media/` و `.venv` دست‌نخورده می‌مانند |
+| `/var/www/dlea.piqagram.ir/.output` | بیلد فرانت که PM2 سرو می‌کند | از ریلیس بازنویسی می‌شود |
+| `backend/media/` | آواتار، رسید پرداخت و … (۸ فایل در آخرین بررسی) | هرگز |
+| `backend/.env` | تنظیمات تولید (DB، کلیدها) | هرگز |
+
+> هر ریلیس حدود **۸۰ مگابایت** است و در آخرین بررسی ۲۸ ریلیس (۲.۲ گیگ) روی دیسک
+> بود. دیسک سرور ~۱۴ گیگ آزاد دارد؛ بخش ۹ را دوره‌ای اجرا کن.
 
 ---
 
 ## ۱. پیش‌نیازها
 
-### ۱.۱ نرم‌افزار مورد نیاز روی ماشین محلی
-
-| نرم‌افزار | نسخه حداقل | نحوه بررسی |
-|-----------|------------|------------|
-| Node.js | ۲۲.۱۲+ | `node -v` |
-| npm | ۱۰+ | `npm -v` |
-| Python | ۳.۱۲+ | `python3 --v` |
-| pip | — | `pip --version` |
-| Git | — | `git --v` |
-| SSH client | — | `ssh -V` |
-
-### ۱.۲ دسترسی‌ها
-
-- [ ] اتصال به شبکه داخلی MCI فعال است (IP سرور از اینترنت عمومی قابل دسترسی نیست)
-- [ ] کلید SSH برای کاربر `ghafari` روی سرور `37.255.212.55` تنظیم شده
-- [ ] دسترسی `sudo` برای دستورات nginx در سرور فعال است (`setup-server-sudo.sh` یک‌بار اجرا شده)
-- [ ] کد مخزنه (repository) به‌روز است: `git pull origin main`
-
-### ۱.۳ اطلاعات سرور
-
-```
-آدرس:      37.255.212.55
-کاربر:     ghafari
-پوشه اصلی: /opt/dlea
-لینک فعلی: /opt/dlea/current
-محرک بک‌اند: Gunicorn روی 127.0.0.1:8000 (یا 8002 در حالت deploy.sh)
-محرک فرانت‌اند: TanStack Start SSR روی 127.0.0.1:3000
-پروکسی:    Nginx روی ۸۰/۴۴۳
-دیتابیس:   PostgreSQL 16 ( Container یا محلی )
-```
+- [ ] اتصال به شبکه داخلی MCI فعال است (سرور از اینترنت عمومی در دسترس نیست)
+- [ ] کلید SSH کاربر `ghafari` روی `37.255.212.55` کار می‌کند: `ssh ghafari@37.255.212.55 true`
+- [ ] مخزن به‌روز است: `git pull origin main`
+- [ ] Node و npm محلی نصب‌اند (بیلد فرانت روی همین ماشین انجام می‌شود)
 
 ---
 
-## ۲. تست‌های محلی پیش از استقرار (دروازه ۱)
-
-> **هدف:** اطمینان از اینکه کد جدید روی ماشین توسعه‌کننده بدون خطا کار می‌کند.
-> **شرط عبور:** تمام تست‌ها سبز، typecheck و lint بدون خطا.
-
-### ۲.۱ نصب وابستگی‌ها
+## ۲. دروازه ۱ — تست‌های محلی
 
 ```bash
-npm ci
-cd backend && pip install -r requirements-dev.txt && cd ..
+# بک‌اند
+cd backend && ./.venv/Scripts/python.exe manage.py test api --settings config.settings_test && cd ..
+# انتظار: Ran 242 tests ... OK
+
+# فرانت‌اند
+npx vitest run        # انتظار: 116 passed
+npx tsc --noEmit      # انتظار: بدون خطا
+npm run lint          # انتظار: بدون خطا
 ```
 
-### ۲.۲ تست‌های بک‌اند (۱۷۷ تست)
-
-```bash
-cd backend
-python manage.py test api --settings config.settings_test
-```
-
-خروجی مورد انتظار:
-```
-Ran 177 tests in X.XXXs
-
-OK
-```
-
-### ۲.۳ تست‌های فرانت‌اند (۳۷ تست)
-
-```bash
-npx vitest run
-```
-
-### ۲.۴ بررسی TypeCheck
-
-```bash
-npx tsc --noEmit
-```
-
-### ۲.۵ بررسی Lint
-
-```bash
-npm run lint
-```
-
-### ۲.۶ تست‌های E2E (Playwright)
-
-```bash
-npm run test:e2e
-```
-
-> ⚠️ **نکته:** این دستور ابتدا بیلد تولید را اجرا می‌کند (از طریق `pretest:e2e`) و سپس سناریوهای ثبت‌نام تا داشبورد و پنل مدیریت را تست می‌کند.
-
-### ۲.۷ خلاصه درگاه ۱
-
-| لایه | دستور | تعداد تست | شرط عبور |
-|------|--------|-----------|----------|
-| بک‌اند | `python manage.py test api --settings config.settings_test` | ۱۷۷ | ✅ همه OK |
-| فرانت‌اند (واحد) | `npx vitest run` | ۳۷ | ✅ همه سبز |
-| TypeCheck | `npx tsc --noEmit` | — | بدون خطا |
-| Lint | `npm run lint` | — | بدون خطا |
-| E2E | `npm run test:e2e` | ۲ سناریو | ✅ همه سبز |
-
-> ❌ **اگر هر یک از موارد بالا شکست خورد، استقرار را ادامه ندهید. خطا را رفع کنید و دوباره از درگاه ۱ شروع کنید.**
+> استقرار خودش هم همین تست بک‌اند را **روی سرور** و قبل از هر تغییری اجرا می‌کند و
+> در صورت شکست متوقف می‌شود (بخش ۴، مرحله ۳). پس دروازه ۱ برای گرفتن خطای زودتر است.
 
 ---
 
-## ۳. اجرای CI و تأیید نتایج (دروازه ۲)
+## ۳. دروازه ۲ — CI
 
-> **هدف:** اطمینان از اینکه تست‌ها روی محیط CI (GitHub Actions) هم سبز هستند.
-
-### ۳.۱ اجرای CI
-
-```bash
-git push origin main
-```
-
-### ۳.۲ بررسی نتایج
-
-1. به صفحه Actions در GitHub مخزنه بروید
-2. جریان کاری `CI` را پیدا کنید
-3. مطمئن شوید تمام jobها سبز هستند:
-   - `backend-tests` ✅
-   - `frontend-checks` ✅ (TypeCheck + Lint + Unit tests + Build)
-   - `e2e-tests` ✅ (وابسته به دو job قبلی)
-
-### ۳.۳ خلاصه درگاه ۲
-
-| job | شامل | شرط عبور |
-|-----|-------|----------|
-| `backend-tests` | ۱۷۷ تست Django/DRF | ✅ Pass |
-| `frontend-checks` | TypeCheck + Lint + ۳۷ تست Vitest + بیلد | ✅ Pass |
-| `e2e-tests` | ۲ سناریوی Playwright | ✅ Pass |
-
-> ❌ **اگر CI شکست خورد، استقرار را ادامه ندهید.**
+push روی `main` جریان‌های `backend-tests`, `frontend-checks`, `e2e-tests` را در
+GitHub Actions اجرا می‌کند. اگر سبز نبود استقرار را ادامه نده.
 
 ---
 
-## ۴. بیلد تولید و بسته‌بندی (دروازه ۳)
-
-> **هدف:** تولید بیلد نهایی و ایجاد بسته استقرار.
-
-### ۴.۱ بیلد فرانت‌اند
+## ۴. دروازه ۳ — استقرار (یک دستور)
 
 ```bash
-npm run build
-```
+# از ویندوز (مسیر معمول این تیم، از Git Bash یا cmd):
+deploy\local-deploy.bat
 
-### ۴.۲ ایجاد بسته استقرار
-
-```bash
-TIMESTAMP=$(date +%Y%m%d_%H%M%S)
-tar czf /tmp/dlea-deploy-$TIMESTAMP.tar.gz \
-  --exclude='node_modules' \
-  --exclude='.tanstack' \
-  --exclude='backend/.venv' \
-  --exclude='backend/__pycache__' \
-  --exclude='*.pyc' \
-  --exclude='backend/db.sqlite3' \
-  --exclude='.git' \
-  --exclude='.freebuff' \
-  .
-```
-
-### ۴.۳ تأیید بسته
-
-```bash
-ls -lh /tmp/dlea-deploy-$TIMESTAMP.tar.gz
-tar tzf /tmp/dlea-deploy-$TIMESTAMP.tar.gz | head -20
-```
-
-### ۴.۴ خلاصه درگاه ۳
-
-| مرحله | شرط عبور |
-|-------|----------|
-| بیلد فرانت‌اند | `npm run build` بدون خطا |
-| ایجاد بسته | فایل tar.gz با حجم معقول ایجاد شده |
-| تأیید محتوا | فایل‌های ضروری در بسته وجود دارند |
-
----
-
-## ۵. آپلود و استقرار روی سرور
-
-> **این بخش فقط از شبکه داخلی MCI قابل اجراست.**
-
-### ۵.۱ روش خودکار (توصیه‌شده)
-
-```bash
+# از لینوکس/مک یا همان Git Bash:
 bash deploy/local-deploy.sh
 ```
 
-این اسکریپت به‌صورت خودکار:
-1. بیلد فرانت‌اند را اجرا می‌کند
-2. بسته استقرار را ایجاد می‌کند
-3. از طریق SCP آپلود می‌کند
-4. روی سرور استخراج، نصب وابستگی‌ها، مایگریشن و ریستارت را انجام می‌دهد
+هر دو اسکریپت **دقیقاً یک کار** می‌کنند و منطق سمت سرور در یک جا
+(`deploy/deploy.sh`) زندگی می‌کند؛ فقط بیلد و آپلود محلی است:
 
-### ۵.۲ روش دستی
+1. `npm run build` → `.output/`
+2. دانلود `pip-wheels` برای لینوکس/پایتون ۳.۱۲ (سرور به PyPI دسترسی ندارد)
+3. `deploy/check_wheels.py` بررسی می‌کند بستهٔ ویل‌ها کامل است
+4. ساخت آرشیو در پوشهٔ موقت با **نام نسبی**
+   (اگر مسیر `C:\...` به tar داده شود، GNU tar آن را «هاست ریموت» می‌فهمد و
+   اصلاً آرشیو نمی‌سازد؛ این تله یک‌بار ما را زمین زد)
+5. `scp` آرشیو و `deploy/deploy.sh` به `/tmp` سرور
+6. `ssh` → `bash /tmp/deploy.sh`
 
-اگر روش خودکار کار نکرد، مراحل زیر را دستی اجرا کنید:
+و `deploy/deploy.sh` روی سرور به ترتیب:
 
-#### ۵.۲.۱ آپلود بسته
+1. پورت واقعی `/api/` را **از کانفیگ زندهٔ nginx** می‌خواند (پیش‌فرض ۸۰۰۲) تا
+   هرگز روی پورتی که کسی پروکسی نمی‌کند بالا نیاید.
+2. آرشیو را در `~/dlea/releases/<timestamp>` باز می‌کند، و اگر آرشیو نبود
+   همان‌جا با پیام روشن متوقف می‌شود.
+3. تست‌های بک‌اند را با SQLite اجرا می‌کند (شکست = توقف، بدون هیچ تغییری).
+4. `migrate` را روی دیتابیس واقعی اجرا می‌کند.
+5. `~/dlea/current` را به ریلیس جدید لینک می‌کند.
+6. **آینه‌کردن** `backend/api/` و `backend/config/` در پوشهٔ اجرا
+   (`rsync --delete`؛ فایل‌های حذف‌شده هم پاک می‌شوند) و بعد بررسی می‌کند درخت
+   اجرا با ریلیس مو‌به‌مو یکی است.
+7. `.output/` را از ریلیس به پوشهٔ اجرا منتشر و با `cmp` تأیید می‌کند.
+8. اگر `requirements.txt` عوض شده باشد، همان بسته را **آفلاین** (از ویل‌های
+   داخل ریلیس) در venv پوشهٔ اجرا نصب می‌کند؛ چون آن venv است که کد را ایمپورت
+   می‌کند، نه venv ریلیس. این هم قبل از ری‌استارت انجام می‌شود.
+9. `migrate` را در پوشهٔ اجرا هم می‌زند (قبل از کشتن پروسهٔ فعلی، تا خطای
+   مایگریشن سایت را نخواباند).
+10. `pm2 restart dlea-api` و `pm2 restart dlea` (اگر PM2 نبود، روش جایگزین با
+    بررسی آزادبودن پورت).
+11. چهار بررسی سلامت؛ اگر هر کدام سبز نباشد با کد خطا و لاگ‌ها خارج می‌شود.
 
-```bash
-scp /tmp/dlea-deploy-$TIMESTAMP.tar.gz ghafari@37.255.212.55:/tmp/
+خروجی مورد انتظار در پایان:
+
 ```
-
-#### ۵.۲.۲ اتصال به سرور
-
-```bash
-ssh ghafari@37.255.212.55
+Backend (port 8002): HTTP 200
+Frontend (port 3000): HTTP 200
+API through nginx (loopback): HTTP 200
+Public API (https://dlea.piqagram.ir): HTTP 200
+=== Deployment complete ===
 ```
-
-#### ۵.۲.۳ استخراج و نصب
-
-```bash
-set -e
-
-DEPLOY_DIR="/opt/dlea"
-TIMESTAMP=$(date +%Y%m%d_%H%M%S)
-RELEASE_DIR="$DEPLOY_DIR/releases/$TIMESTAMP"
-CURRENT_LINK="$DEPLOY_DIR/current"
-SHARED_DIR="$DEPLOY_DIR/shared"
-
-# ایجاد پوشه ریلیس
-mkdir -p "$RELEASE_DIR" "$SHARED_DIR"
-cd "$RELEASE_DIR"
-
-# استخراج بسته
-tar xzf /tmp/dlea-deploy-*.tar.gz
-rm -f /tmp/dlea-deploy-*.tar.gz
-
-# پیوند فایل .env مشترک
-if [ -f "$SHARED_DIR/backend/.env" ]; then
-  ln -sf "$SHARED_DIR/backend/.env" "$RELEASE_DIR/backend/.env"
-fi
-
-# نصب وابستگی‌های بک‌اند
-cd backend
-python3 -m venv .venv 2>/dev/null || true
-.venv/bin/pip install --upgrade pip -q 2>/dev/null || true
-.venv/bin/pip install -r requirements.txt -q
-
-# اجرای مایگریشن
-.venv/bin/python manage.py migrate --noinput
-
-# پیوند ریلیس جدید به current
-cd "$DEPLOY_DIR"
-ln -sfn "$RELEASE_DIR" "$CURRENT_LINK"
-
-echo "✅ ریلیس $TIMESTAMP آماده ریستارت است."
-```
-
-> ⚠️ **مهم:** در این مرحله هنوز سرویس‌ها را ریستارت نکنید! ابتدا درگاه ۴ را اجرا کنید.
 
 ---
 
-## ۶. تست‌های سمت سرور پیش از ریستارت (دروازه ۴)
-
-> **هدف:** اطمینان از اینکه تست‌ها روی سرور تولید هم عبور می‌کنند.
-
-### ۶.۱ تست‌های بک‌اند روی سرور
+## ۵. دروازه ۴ — بررسی دستی بعد از استقرار
 
 ```bash
 ssh ghafari@37.255.212.55
 
-cd /opt/dlea/current/backend
-USE_SQLITE=1 .venv/bin/python manage.py test api --settings config.settings_test
+pm2 list                                    # هر سه اپ online
+curl -s -o /dev/null -w '%{http_code}\n' -H 'Host: dlea.piqagram.ir' http://127.0.0.1/api/plans/
+curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:3000/
+ls -l --time-style=long-iso /var/www/dlea.piqagram.ir/.output/server/index.mjs   # باید امروز باشد
 ```
 
-> ⚠️ **نکته:** از `USE_SQLITE=1` استفاده می‌کنیم تا نیازی به PostgreSQL تستی نداشته باشیم و تست‌ها سریع‌تر اجرا شوند.
+سپس در مرورگر: ورود با حساب واقعی، باز شدن داشبورد، لیست معاملات و پنل `/admin`.
 
-### ۶.۲ بررسی سلامت دیتابیس
-
-```bash
-.venv/bin/python manage.py showmigrations --plan | tail -5
-```
-
-مطمئن شوید تمام مایگریشن‌ها اعمال شده‌اند.
-
-### ۶.۳ خلاصه درگاه ۴
-
-| مرحله | دستور | شرط عبور |
-|-------|--------|----------|
-| تست بک‌اند روی سرور | `python manage.py test api --settings config.settings_test` | ✅ ۱۷۷ تست OK |
-| سلامت مایگریشن | `manage.py showmigrations` | همه applied |
-
-> ❌ **اگر تست‌ها روی سرور شکست خوردند، ریستارت نکنید. مشکل را بررسی و رفع کنید.**
+> نکته: `/api/auth/login/` با متد `GET` عدد **۴۰۵** می‌دهد و این درست است؛
+> فقط `POST` مجاز است.
 
 ---
 
-## ۷. ریستارت سرویس‌ها و بررسی سلامت (دروازه ۵)
+## ۶. بازگشت به عقب (Rollback)
 
-> **هدف:** ریستارت سرویس‌ها و اطمینان از بالا آمدن آنها.
-
-### ۷.۱ ریستارت سرویس‌ها
-
-```bash
-# ریستارت بک‌اند
-sudo systemctl restart dlea-backend
-
-# ریستارت فرانت‌اند
-sudo systemctl restart dlea-frontend
-
-# ریستارت Nginx
-sudo systemctl reload nginx
-```
-
-### ۷.۲ بررسی وضعیت سرویس‌ها
-
-```bash
-# بررسی وضعیت
-sudo systemctl status dlea-backend --no-pager
-sudo systemctl status dlea-frontend --no-pager
-sudo systemctl status nginx --no-pager
-```
-
-مطمئن شوید همه سرویس‌ها **active (running)** هستند.
-
-### ۷.۳ بررسی پورت‌ها
-
-```bash
-# بررسی گوش دادن پورت‌ها
-ss -tlnp | grep -E ':(3000|8000|443|80) '
-```
-
-خروجی مورد انتظار:
-```
-LISTEN  0  128  127.0.0.1:3000   ...
-LISTEN  0  128  127.0.0.1:8000   ...
-LISTEN  0  511  0.0.0.0:443      ...
-LISTEN  0  511  0.0.0.0:80       ...
-```
-
-### ۷.۴ تست سلامت HTTP
-
-```bash
-# تست بک‌اند
-curl -s -o /dev/null -w "Backend: HTTP %{http_code}\n" \
-  http://127.0.0.1:8000/api/auth/password-reset-request/ \
-  -X POST -H "Content-Type: application/json" -d '{"email":"test"}'
-
-# تست فرانت‌اند
-curl -s -o /dev/null -w "Frontend: HTTP %{http_code}\n" \
-  http://127.0.0.1:3000/
-
-# تست از طریق Nginx (HTTPS)
-curl -s -o /dev/null -w "Nginx:   HTTP %{http_code}\n" \
-  https://dlea.piqagram.ir/
-```
-
-### ۷.۵ بررسی لاگ‌ها در صورت خطا
-
-```bash
-# لاگ Gunicorn
-sudo journalctl -u dlea-backend --since "5 minutes ago" --no-pager | tail -30
-
-# لاگ فرانت‌اند
-sudo journalctl -u dlea-frontend --since "5 minutes ago" --no-pager | tail -30
-
-# لاگ Nginx
-sudo tail -20 /var/log/nginx/error.log
-```
-
-### ۷.۶ خلاصه درگاه ۵
-
-| مرحله | شرط عبور |
-|-------|----------|
-| سرویس بک‌اند | `active (running)` |
-| سرویس فرانت‌اند | `active (running)` |
-| Nginx | `active (running)` |
-| پورت ۳۰۰۰ (فرانت‌اند) | گوش می‌دهد |
-| پورت ۸۰۰۰ (بک‌اند) | گوش می‌دهد |
-| پورت ۴۴۳ (HTTPS) | گوش می‌دهد |
-| HTTP بک‌اند | ۲۰۰ یا ۴۰۵ |
-| HTTP فرانت‌اند | ۲۰۰ |
-| HTTP از طریق Nginx | ۲۰۰ |
-
-> ❌ **اگر هر سرویسی بالا نیامد، ریستارت نکنید! ابتدا لاگ‌ها را بررسی کنید و مشکل را پیدا کنید.**
-
----
-
-## ۸. تست نهایی روی سایت زنده (دروازه ۶)
-
-> **هدف:** تأیید عملکرد صحیح سایت زنده پس از استقرار.
-
-### ۸.۱ تست دستی سریع
-
-1. مرورگر را باز کنید: **https://dlea.piqagram.ir**
-2. مطمئن شوید صفحه اصلی بدون خطا بارگذاری می‌شود
-3. با حساب آزمایشی وارد شوید
-4. بخش‌های اصلی را بررسی کنید:
-   - [ ] داشبورد بارگذاری می‌شود و KPIها نمایش داده می‌شوند
-   - [ ] لیست معاملات خالی یا داده‌دار بارگذاری می‌شود
-   - [ ] ژورنال باز می‌شود
-   - [ ] تنظیمات قابل دسترسی است
-
-### ۸.۲ اجرای تست دود (Smoke Test) خودکار
-
-```bash
-# از روی ماشین محلی
-npm run record:smoke
-```
-
-> این دستور یک مرورگر باز می‌کند، حساب جدید می‌سازد و تمام بخش‌های اصلی را طی می‌کند. خروجی در `smoke-test/smoke-test-<timestamp>.webm` ذخیره می‌شود.
-
-### ۸.۳ چک‌لیست دستی کامل
-
-چک‌لیست کامل در فایل **`QA-CHECKLIST.md`** موجود است. موارد حیاتی:
-
-| بخش | مورد حیاتی |
-|------|-----------|
-| ثبت‌نام و ورود | ارسال OTP، ورود، خروج |
-| پروفایل | ویرایش نام، آواتار، تغییر رمز |
-| پرتفولیو | ساخت، ویرایش، فعال‌سازی |
-| معاملات | ایمپورت CSV، جزئیات، فیلتر |
-| ژورنال | ثبت یادداشت، تاریخ شمسی |
-| داشبورد | KPIها، نمودارها |
-| مربی هوشمند | تولید گزارش |
-| پنل مدیریت | دسترسی admin فقط |
-| امنیت | جداسازی داده کاربران |
-
-### ۸.۴ خلاصه درگاه ۶
-
-| مرحله | شرط عبور |
-|-------|----------|
-| بارگذاری صفحه اصلی | HTTP ۲۰۰ بدون خطا |
-| ورود و خروج | عملکرد صحیح |
-| Smoke Test | خروجی ضبط شده بدون خطا |
-| بررسی دستی بخش‌های حیاتی | ✅ همه تأیید |
-
----
-
-## ۹. بازگشت به عقب (Rollback)
-
-اگر مشکلی پس از استقرار پیش آمد، مراحل زیر را اجرا کنید:
-
-### ۹.۱ بازگشت به ریلیس قبلی
+ریلیس‌های قبلی همیشه روی سرور می‌مانند، ولی توجه کن که **فقط `~/dlea/current`
+عوض‌کردن کافی نیست**: فرانت و بک‌اند از پوشهٔ اجرا سرو می‌شوند. یعنی باید از
+ریلیس قدیمی دوباره «آینه» کنی:
 
 ```bash
 ssh ghafari@37.255.212.55
+ls -1t ~/dlea/releases | head -5          # ریلیس‌ها از جدید به قدیم
 
-# لیست ریلیس‌ها
-ls -la /opt/dlea/releases/
+PREV=$(ls -1t ~/dlea/releases | sed -n 2p)   # ریلیس قبلی
+echo "$PREV"
 
-# پیدا کردن ریلیس قبلی (بزرگ‌ترین عدد بعد از فعلی)
-ls -t /opt/dlea/releases/ | head -5
+# ۱) کد بک‌اند را از ریلیس قبلی برگردان
+rsync -a --delete --exclude='__pycache__' \
+  ~/dlea/releases/$PREV/backend/api/ /var/www/dlea.piqagram.ir/backend/api/
+rsync -a --delete --exclude='__pycache__' \
+  ~/dlea/releases/$PREV/backend/config/ /var/www/dlea.piqagram.ir/backend/config/
+cp -f ~/dlea/releases/$PREV/backend/manage.py /var/www/dlea.piqagram.ir/backend/manage.py
 
-# پیوند به ریلیس قبلی
-ln -sfn /opt/dlea/releases/<TIMESTAMP_PREVIOUS> /opt/dlea/current
+# ۲) فرانت را از همان ریلیس برگردان
+rsync -a --delete ~/dlea/releases/$PREV/.output/ /var/www/dlea.piqagram.ir/.output/
 
-# ریستارت سرویس‌ها
-sudo systemctl restart dlea-backend
-sudo systemctl restart dlea-frontend
+# ۳) لینک current را هم به همان ریلیس برگردان و پروسه‌ها را ری‌استارت کن
+ln -sfn ~/dlea/releases/$PREV ~/dlea/current
+cd /var/www/dlea.piqagram.ir/backend && .venv/bin/python manage.py migrate --noinput
+pm2 restart dlea-api && pm2 restart dlea
+
+# ۴) تأیید
+curl -s -o /dev/null -w 'API: %{http_code}\n' -H 'Host: dlea.piqagram.ir' http://127.0.0.1/api/plans/
+curl -s -o /dev/null -w 'front: %{http_code}\n' http://127.0.0.1:3000/
 ```
 
-### ۹.۲ بازگشت مایگریشن (در صورت نیاز)
+> ⚠️ **مایگریشن‌ها به عقب برنمی‌گردند.** اگر ریلیس قدیمی به ستون‌های حذف‌شده
+> وابسته باشد، برگشت کد کافی نیست. در عمل: تا وقتی مایگریشن جدید فقط ستون اضافه
+> کرده باشد، برگشت کد بی‌خطر است.
 
-> ⚠️ **فقط در صورتی که مایگریشن جدید مشکل‌ساز باشد.**
+---
+
+## ۷. عیب‌یابی
+
+| نشانه | تشخیص سریع | راه‌حل |
+|---|---|---|
+| **همهٔ مسیرهای `/api/` حتی مسیرهای ناموجود ۵۰۰ می‌دهند** و صفحهٔ ۵۰۰ خالی/کوچک است | ایمپورت URLconf خطا می‌دهد؛ یعنی ماژولی در پوشهٔ اجرا نیست | `cd /var/www/dlea.piqagram.ir/backend && .venv/bin/python -c "import api.urls"` تا خطا را ببینی؛ بعد یک استقرار کامل بزن تا آینه‌سازی انجام شود |
+| `gunicorn` با `Address already in use` بالا نمی‌آید | PM2 پروسهٔ قدیمی را دوباره آورده | `pm2 restart dlea-api` (به‌جای `pkill` + اجرای دستی) |
+| پاسخ `/api/...` در زمان `curl` سریع است ولی در مرورگر ۵۰۰ | Cloudflare/ArvanCloud کش کرده | در پنل ArvanCloud کش را پاک کن؛ کش `X-Cache` را در هدرها ببین |
+| سایت قدیمی به‌نظر می‌رسد (CSS/JS کهنه) | `.output` پوشهٔ اجرا به‌روز نشده | `ls -l /var/www/dlea.piqagram.ir/.output/server/index.mjs`؛ باید تاریخ امروز باشد. استقرار جدید این را با `cmp` تأیید می‌کند |
+| `migrate` می‌گوید `multiple leaf nodes in the migration graph` | فایل مایگریشن قدیمی در پوشهٔ اجرا مانده | `ls /var/www/dlea.piqagram.ir/backend/api/migrations/` را با `~/dlea/current/backend/api/migrations/` مقایسه کن؛ فایل اضافه را پاک کن |
+| بک‌اند ۵۰۰ می‌دهد ولی همهٔ ماژول‌ها سرجایشان‌اند | `requirements.txt` عوض شده و venv پوشهٔ اجرا وابستگی جدید را ندارد | استقرار خودش این را نصب می‌کند (مرحلهٔ ۸ بخش ۴). اگر دستی لازم شد: `cd /var/www/dlea.piqagram.ir/backend && .venv/bin/pip install --no-index --find-links ~/dlea/current/pip-wheels -r requirements.txt` |
+| هیچ پروسه‌ای روی ۸۰۰۲ نیست | PM2 اپ را نگه نداشته یا کرش کرده | `pm2 logs dlea-api --lines 50`؛ سپس `pm2 restart dlea-api` و `pm2 save` |
+| فرانت بالا نمی‌آید | `.output/server/index.mjs` نبود | `pm2 logs dlea --lines 50`؛ بیلد محلی + استقرار مجدد |
+| دیسک پر شده | `df -h /` | بخش ۸ (پاک‌سازی ریلیس‌های قدیمی) |
+| بعد از ریبوت هیچ‌چیز بالا نیست | `systemctl status pm2-ghafari` و محتوای `~/.pm2/dump.pm2` | `pm2 resurrect` و بعد از درستی، `pm2 save` |
+
+لاگ‌ها:
 
 ```bash
-cd /opt/dlea/current/backend
-.venv/bin/python manage.py migrate api <شماره_مایگریشن_قبلی> --settings config.settings
-```
-
-### ۹.۳ تأیید بازگشت
-
-```bash
-curl -s -o /dev/null -w "Backend: HTTP %{http_code}\n" \
-  http://127.0.0.1:8000/api/auth/password-reset-request/ \
-  -X POST -H "Content-Type: application/json" -d '{"email":"test"}'
-curl -s -o /dev/null -w "Frontend: HTTP %{http_code}\n" http://127.0.0.1:3000/
+pm2 logs dlea-api --lines 100     # بک‌اند
+pm2 logs dlea     --lines 100     # فرانت
+sudo tail -50 /var/log/nginx/error.log
 ```
 
 ---
 
-## ۱۰. عیب‌یابی مشکلات رایج
-
-### مشکل: سرویس بک‌اند بالا نمی‌آید
+## ۸. نگهداری دوره‌ای
 
 ```bash
-# بررسی لاگ
-sudo journalctl -u dlea-backend -n 50 --no-pager
+# وضعیت کلی
+pm2 list
+df -h /
+(ss -ltn || netstat -ltn) | grep -E ':(80|3000|8002) '
 
-# رایج‌ترین دلایل:
-# 1. خطای Python — وابستگی‌ها نصب نشده‌اند
-cd /opt/dlea/current/backend && .venv/bin/pip install -r requirements.txt
+# نگه‌داشتن ۱۰ ریلیس آخر (هر کدام ~۸۰ مگ)
+cd ~/dlea/releases && ls -1t | tail -n +11 | xargs -r rm -rf
 
-# 2. خطای مایگریشن
-cd /opt/dlea/current/backend && .venv/bin/python manage.py migrate --noinput
-
-# 3. خطای .env — فایل .env وجود ندارد
-ls -la /opt/dlea/current/backend/.env
+# بعد از هر تغییر در تعریف اپ‌های PM2
+pm2 save
 ```
 
-### مشکل: فرانت‌اند بالا نمی‌آید
-
-```bash
-# بررسی لاگ
-sudo journalctl -u dlea-frontend -n 50 --no-pager
-
-# رایج‌ترین دلیل: فایل .output/server/index.mjs وجود ندارد
-ls -la /opt/dlea/current/.output/server/index.mjs
-
-# راه‌حل: بیلد مجدد
-cd /opt/dlea/current && npm run build
-```
-
-### مشکل: Nginx 502 برمی‌گرداند
-
-```bash
-# بررسی اینکه سرویس‌ها گوش می‌دهند
-ss -tlnp | grep -E ':(3000|8000)'
-
-# ریستارت Nginx
-sudo systemctl restart nginx
-```
-
-### مشکل: دیتابیس PostgreSQL متصل نیست
-
-```bash
-# بررسی وضعیت PostgreSQL
-sudo systemctl status postgresql
-
-# بررسی اتصال
-psql -U dlea -d dlea -c "SELECT 1;"
-```
+فهرست کارهای سرور (نصب پیش‌نیاز، vhost، PM2 startup) در
+`deploy/setup-server.sh` است و **قابل اجرای مکرر** است: چیزی را بدون
+`--force` بازنویسی نمی‌کند، قبل از `reload` با `nginx -t` تست می‌کند و به فایل
+سایت‌های دیگر دست نمی‌زند.
 
 ---
 
-## ۱۱. چک‌لیست نهایی
+## ۹. چیزهایی که آگاهانه انجام نمی‌شود
 
-پس از اتمام استقرار، مطمئن شوید:
-
-- [ ] **دروازه ۱:** تست‌های محلی سبز هستند
-- [ ] **دروازه ۲:** CI روی GitHub Actions سبز است
-- [ ] **دروازه ۳:** بیلد تولید موفق و بسته ایجاد شده
-- [ ] **دروازه ۴:** تست‌های سمت سرور عبور کرده‌اند
-- [ ] **دروازه ۵:** تمام سرویس‌ها فعال و سالم هستند
-- [ ] **دروازه ۶:** سایت زنده عملکرد صحیح دارد
-- [ ] فایل `.env` مشترک روی سرور حفظ شده
-- [ ] ریلیس قبلی برای بازگشت احتمالی موجود است
-- [ ] لاگ‌های سرویس‌ها بررسی شده و خطای جدی وجود ندارد
-- [ ] تاریخ و زمان استقرار یادداشت شده
+- **پنل ادمین خود جنگو از بیرون در دسترس نیست.** کانفیگ nginx مسیری برای
+  `/admin/` ندارد، پس `/admin/` به اپ فرانت (SPA) می‌رسد. پنل مدیریتی که
+  استفاده می‌کنی همان `/admin` خودِ اپ است. اگر یک روز پنل جنگو لازم شد، باید
+  یک `location /admin/` و یک `location /static/` (فایل‌های استاتیک جنگو هم
+  سرو نمی‌شوند؛ whitenoise نصب نیست) اضافه شود.
+- **دیپلوی بیلد فرانت را دوباره اجرا نمی‌کند** روی سرور؛ `.output` را از ماشین
+  محلی می‌آورد. Node روی سرور فقط آن را اجرا می‌کند.
+- **کش ArvanCloud به‌صورت خودکار پاک نمی‌شود.** اگر بعد از استقرار هنوز
+  asset قدیمی دیدی، کش را از پنل پاک کن.
 
 ---
 
-> **نکته امنیتی:** تمام مراحل استقرار باید از شبکه داخلی MCI انجام شود. سرور از اینترنت عمومی قابل دسترسی نیست.
+## ۱۰. چک‌لیست نهایی
+
+- [ ] تست‌های محلی سبز (۲۴۲ بک‌اند، ۱۱۶ فرانت، tsc، lint)
+- [ ] استقرار با `local-deploy.bat` یا `local-deploy.sh` تمام شد
+- [ ] چهار خط خلاصهٔ استقرار همه ۲۰۰ بودند
+- [ ] `pm2 list` سه اپ را `online` نشان می‌دهد
+- [ ] تاریخ `.output/server/index.mjs` امروز است
+- [ ] ورود و داشبورد در مرورگر سالم است
+- [ ] ریلیس قبلی برای بازگشت موجود است (`ls -1t ~/dlea/releases | head`)
+- [ ] اگر تعریف PM2 عوض شده: `pm2 save`
