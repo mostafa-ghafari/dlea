@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ImageUploader } from "@/components/ImageUploader";
 import { useLocalState } from "@/lib/app-state";
-import { updateTradeScreenshots, useTrades } from "@/lib/api";
+import { updateTradeScreenshots, usePlanLimits, useTrades } from "@/lib/api";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/app/trades/$id")({
@@ -51,6 +51,7 @@ function Row({
 function TradeDetail() {
   const { id } = useParams({ from: "/app/trades/$id" });
   const trades = useTrades();
+  const limits = usePlanLimits();
   const trade = trades.find((t) => t.id === id);
 
   const [shots, setShots] = useLocalState<string[]>(
@@ -183,6 +184,7 @@ function TradeDetail() {
             onChange={saveShots}
             label="تصاویر معامله"
             hint="چارت قبل/بعد از ورود یا Report History"
+            maxImages={limits.maxImagesPerEntry ?? -1}
           />
         </div>
       </div>

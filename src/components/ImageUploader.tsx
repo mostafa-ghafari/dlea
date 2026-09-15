@@ -61,26 +61,50 @@ export function ImageUploader({
   label = "اسکرین‌شات‌ها",
   hint = "چارت یا Report History — فرمت HEIC، JPG، PNG",
   compact = false,
+  maxImages = -1,
 }: {
   images: string[];
   onChange: (next: string[]) => void;
   label?: string;
   hint?: string;
   compact?: boolean;
+  /** Screenshot cap for this user's plan (-1 = unlimited). */
+  maxImages?: number;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
 
   async function handleFiles(files: FileList | null) {
     if (!files || files.length === 0) return;
+
+    // The cap is part of the plan, so stop before doing the (expensive) image
+    // work and tell the user why.
+    const room = maxImages < 0 ? Infinity : maxImages - images.length;
+    if (room <= 0) {
+      toast.error(
+        maxImages <= 0
+          ? "پلن فعلی اجازه آپلود تصویر ندارد. برای فعال شدن، پلن را ارتقا بده."
+          : `سقف ${maxImages} تصویر پلن فعلی پر شده است. برای تصاویر بیشتر پلن را ارتقا بده.`,
+      );
+      return;
+    }
+
+    const picked = Array.from(files);
+    const accepted = picked.slice(0, room);
     const results: string[] = [];
-    for (const file of Array.from(files)) {
+    for (const file of accepted) {
       results.push(await optimize(file));
     }
     onChange([...images, ...results]);
-    toast.success(
-      `${results.length} تصویر آپلود شد و به حدود ۲۰۰ کیلوبایت بهینه‌سازی شد`,
-    );
+    if (accepted.length < picked.length) {
+      toast.warning(
+        `فقط ${accepted.length} تصویر اضافه شد — سقف پلن ${maxImages} تصویر برای هر معامله است.`,
+      );
+    } else {
+      toast.success(
+        `${results.length} تصویر آپلود شد و به حدود ۲۰۰ کیلوبایت بهینه‌سازی شد`,
+      );
+    }
   }
 
   return (

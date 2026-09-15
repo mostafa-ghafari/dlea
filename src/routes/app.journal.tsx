@@ -50,6 +50,7 @@ import {
   renameJournalGroup,
   updateJournalEntry,
   updateJournalFavorite,
+  usePlanLimits,
   type JournalEntryInput,
 } from "@/lib/api";
 import type { JournalEntry, JournalGroup } from "@/lib/types";
@@ -108,6 +109,7 @@ const emptyDraft: Draft = {
 
 function JournalPage() {
   const [portfolioId] = useActivePortfolioId();
+  const limits = usePlanLimits();
   const [entries, setEntries] = useState<JournalEntry[]>([]);
   const [groups, setGroups] = useState<JournalGroup[]>([]);
 
@@ -724,6 +726,7 @@ function JournalPage() {
                 images={draft.images}
                 onChange={(images) => setDraft((d) => ({ ...d, images }))}
                 label="اسکرین‌شات ژورنال"
+                maxImages={limits.maxImagesPerEntry ?? -1}
               />
 
               <div className="grid gap-3 sm:grid-cols-2">
