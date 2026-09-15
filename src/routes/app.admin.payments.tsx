@@ -32,9 +32,15 @@ function AdminPaymentsPage() {
     const q = paymentQuery.trim().toLowerCase();
     if (!q) return payments;
     return payments.filter((p) =>
-      [p.id, p.user, p.plan, p.amount, p.status].some((v) =>
-        String(v).toLowerCase().includes(q),
-      ),
+      [
+        p.id,
+        p.user,
+        p.accountEmail,
+        p.plan,
+        p.amount,
+        p.status,
+        p.referenceId,
+      ].some((v) => String(v).toLowerCase().includes(q)),
     );
   }, [paymentQuery, payments]);
 
@@ -65,6 +71,7 @@ function AdminPaymentsPage() {
             <th className="py-3 text-right">کاربر</th>
             <th className="py-3 text-right">پلن</th>
             <th className="py-3 text-right">مبلغ</th>
+            <th className="py-3 text-right">کد رهگیری</th>
             <th className="py-3 text-right">تاریخ</th>
             <th className="py-3 text-right">وضعیت</th>
           </tr>
@@ -75,9 +82,29 @@ function AdminPaymentsPage() {
               <td className="py-3 text-xs tabular text-muted-foreground">
                 {p.id}
               </td>
-              <td className="py-3">{p.user}</td>
-              <td className="py-3">{p.plan}</td>
+              <td className="py-3">
+                {p.user}
+                {p.accountEmail && p.accountEmail !== p.user && (
+                  <div className="text-xs text-muted-foreground">
+                    {p.accountEmail}
+                  </div>
+                )}
+              </td>
+              <td className="py-3">
+                {p.plan}
+                {p.cycle && (
+                  <div className="text-xs text-muted-foreground">
+                    {p.cycle === "yearly" ? "سالانه" : "ماهانه"}
+                  </div>
+                )}
+              </td>
               <td className="py-3 tabular">{p.amount}</td>
+              <td className="py-3 text-xs tabular">
+                {p.referenceId || "—"}
+                {p.cardNumber && (
+                  <div className="text-muted-foreground">{p.cardNumber}</div>
+                )}
+              </td>
               <td className="py-3 text-xs text-muted-foreground tabular">
                 {p.date}
               </td>

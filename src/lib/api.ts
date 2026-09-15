@@ -104,10 +104,51 @@ export type PlatformUser = {
 export type Payment = {
   id: string;
   user: string;
+  /** Account behind the order (empty for payments entered by an admin). */
+  accountEmail: string;
   plan: string;
+  planSlug: string;
+  cycle: "monthly" | "yearly";
   amount: string;
+  amountRial: number;
   date: string;
   status: string;
+  /** Bank tracking code (کد رهگیری) returned by the gateway. */
+  referenceId: string;
+  /** Masked card number the buyer paid with. */
+  cardNumber: string;
+  gateway: string;
+  paidAt: string;
+};
+
+/** A payment session opened at the bank, waiting for the buyer to pay. */
+export type CheckoutSession = {
+  paymentId: number;
+  /** Where to send the browser: the gateway's own payment page. */
+  paymentUrl: string;
+  trackId: string;
+  amount: number;
+  amountToman: number;
+  plan: string;
+  cycle: "monthly" | "yearly";
+  /** True while the gateway's test merchant is in use. */
+  sandbox: boolean;
+};
+
+/** One of the buyer's own orders; `status` is Persian, like the admin list. */
+export type PaymentOrder = {
+  id: number;
+  plan: string;
+  planSlug: string;
+  cycle: "monthly" | "yearly";
+  amount: string;
+  amountRial: number;
+  status: string;
+  referenceId: string;
+  cardNumber: string;
+  paidAt: string | null;
+  payUrl: string | null;
+  detail?: string;
 };
 
 export type ReferralLink = {
@@ -392,6 +433,15 @@ export const fetchUsers = (page = 1, pageSize = 20, search = "") =>
     `admin/users/?page=${page}&page_size=${pageSize}${search ? `&search=${encodeURIComponent(search)}` : ""}`,
   );
 export const fetchPayments = () => get<Payment[]>("admin/payments/");
+/** Open a payment session for `plan` and hand back the gateway URL. */
+export const startCheckout = (plan: string, cycle: "monthly" | "yearly") =>
+  post<CheckoutSession>("billing/checkout/", { plan, cycle });
+/** Read one of my orders (used after the bank sends the browser back). */
+export const fetchPaymentOrder = (id: number | string) =>
+  get<PaymentOrder>(`billing/orders/${id}/`);
+/** Ask the gateway again about an order whose callback never made it back. */
+export const confirmPaymentOrder = (id: number | string) =>
+  post<PaymentOrder>(`billing/orders/${id}/`, {});
 export const fetchReferralLinks = () => get<ReferralLink[]>("admin/referrals/");
 export const fetchSubscription = async (): Promise<Subscription | null> => {
   const list = await get<Subscription[]>("subscription/");

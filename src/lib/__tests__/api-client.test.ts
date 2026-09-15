@@ -1,12 +1,15 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  confirmPaymentOrder,
   del,
+  fetchPaymentOrder,
   get,
   invalidateCache,
   patch,
   post,
   postRaw,
   put,
+  startCheckout,
 } from "@/lib/api";
 
 const API_BASE = "http://localhost:8000/api";
@@ -178,3 +181,53 @@ describe("response handling", () => {
     await expect(get("dashboard/")).rejects.toThrow("API 500: dashboard/");
   });
 });
+
+describe("payment gateway", () => {
+  it("opens a checkout session for the chosen plan and cycle", async () => {
+    const fetchMock = mockFetch(200, {
+      paymentId: 7,
+      paymentUrl: "https://gateway.zibal.ir/start/15966442233311",
+    });
+    const session = await startCheckout("promax", "yearly");
+    expect(session.paymentUrl).toContain("gateway.zibal.ir");
+    const [url, init] = fetchMock.mock.calls[0] as unknown as [
+      string,
+      RequestInit,
+    ];
+    expect(url).toBe(`${API_BASE}/billing/checkout/`);
+    expect(init.body).toBe(JSON.stringify({ plan: "promax", cycle: "yearly" }));
+  });
+
+  it("surfaces the gateway's own refusal message to the buyer", async () => {
+    mockFetch(400, { detail: "آدرس بازگشت نامعتبر است" });
+    await expect(startCheckout("pro", "monthly")).rejects.toThrow(
+      "آدرس بازگشت نامعتبر است",
+    );
+  });
+
+  it("asks the gateway again about a pending order", async () => {
+    const fetchMock = mockFetch(200, {
+      id: 7,
+      status: "موفق",
+      referenceId: "778899",
+    });
+    const order = await confirmPaymentOrder(7);
+    expect(order.status).toBe("موفق");
+    const [url, init] = fetchMock.mock.calls[0] as unknown as [
+      string,
+      RequestInit,
+    ];
+    expect(url).toBe(`${API_BASE}/billing/orders/7/`);
+    expect(init.method).toBe("POST");
+  });
+
+  it("re-reads an order after it was confirmed (cache not reused)", async () => {
+    mockFetch(200, { id: 7, status: "در انتظار" });
+    await fetchPaymentOrder(7);
+    mockFetch(200, { id: 7, status: "موفق" });
+    await confirmPaymentOrder(7); // invalidates `billing/orders/7`
+    const after = await fetchPaymentOrder(7);
+    expect(after.status).toBe("موفق");
+  });
+});
+
