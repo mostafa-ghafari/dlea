@@ -146,6 +146,41 @@ class WebhookTests(BaseTestCase):
         self.assertEqual(r.json()["created"], 0)
         self.assertIn("errors", r.json())
 
+    def test_re_push_fills_stop_loss_added_after_entry(self):
+        """A stop added to a live position must land on the stored trade.
+
+        A trade that is pushed without SL/TP (or with the stop added after
+        entry) has sl=0 in the first payload, so only a later push can
+        deliver the value.
+        """
+        r1 = self._post({"token": "tok123", "trades": [self._trade_item()]})
+        self.assertEqual(r1.status_code, 201)
+        self.assertEqual(float(Trade.objects.get(ticket="999").sl), 0)
+
+        later = dict(self._trade_item(), sl="1.16225", comment="[sl 1.16225]")
+        r2 = self._post({"token": "tok123", "trades": [later]})
+        self.assertEqual(r2.status_code, 200)
+        self.assertEqual(r2.json()["updated"], 1)
+        self.assertEqual(r2.json()["created"], 0)
+        trade = Trade.objects.get(ticket="999")
+        self.assertEqual(float(trade.sl), 1.16225)
+        self.assertEqual(Trade.objects.filter(ticket="999").count(), 1)
+
+    def test_re_push_never_overwrites_stored_stops(self):
+        """A stale repeat push must not wipe or rewrite existing SL/TP."""
+        first = dict(self._trade_item(), sl="1.1111", tp="1.2222")
+        self.assertEqual(
+            self._post({"token": "tok123", "trades": [first]}).status_code, 201
+        )
+
+        stale = dict(self._trade_item(), sl="9.9999", tp="0")
+        r = self._post({"token": "tok123", "trades": [stale]})
+        self.assertEqual(r.json()["skipped"], 1)
+        self.assertEqual(r.json()["updated"], 0)
+        trade = Trade.objects.get(ticket="999")
+        self.assertEqual(float(trade.sl), 1.1111)
+        self.assertEqual(float(trade.tp), 1.2222)
+
     def test_duplicate_trade_ticket_is_skipped(self):
         """Sending the same ticket twice should not create duplicates."""
         payload = {"token": "tok123", "trades": [self._trade_item()]}

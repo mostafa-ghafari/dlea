@@ -52,6 +52,28 @@ def _webhook_url(request):
     return f"{scheme}://{host}/api/trades/webhook/"
 
 
+def _fill_missing_stops(trade, item):
+    """Backfill SL/TP that only became known after the first push.
+
+    A trader can add or move a stop on an *open* position, and the EA may
+    have already pushed that ticket (or push it before the edit reaches it).
+    Re-pushes are therefore the only way the stop can reach us, so fill the
+    gap without ever overwriting a value we already stored.
+    """
+    changed = False
+    for field in ("sl", "tp"):
+        try:
+            incoming = float(item.get(field) or 0)
+        except (TypeError, ValueError):
+            continue
+        if incoming > 0 and float(getattr(trade, field) or 0) <= 0:
+            setattr(trade, field, incoming)
+            changed = True
+    if changed:
+        trade.save(update_fields=["sl", "tp", "updated_at"])
+    return changed
+
+
 def _normalize_mt_datetime(value):
     """Convert MetaTrader '2026.08.19 19:28' to ISO '2026-08-19T19:28:00'."""
     if not isinstance(value, str) or not value.strip():
@@ -172,6 +194,7 @@ def trades_webhook(request):
 
     created = 0
     skipped = 0
+    updated = 0
     errors = []
     for idx, item in enumerate(items):
         if not isinstance(item, dict):
@@ -187,10 +210,17 @@ def trades_webhook(request):
         for field in ("open_time", "close_time"):
             if item.get(field):
                 item[field] = _normalize_mt_datetime(item[field])
-        # --- Dedup: skip trades that already exist for this portfolio ---
+        # --- Dedup: an existing ticket is never duplicated, but a repeat
+        # --- push may carry stop data the first one lacked.
         ticket = str(item.get("ticket", "")).strip()
-        if ticket and Trade.objects.filter(ticket=ticket, portfolio=portfolio).exists():
-            skipped += 1
+        existing = None
+        if ticket:
+            existing = Trade.objects.filter(ticket=ticket, portfolio=portfolio).first()
+        if existing is not None:
+            if _fill_missing_stops(existing, item):
+                updated += 1
+            else:
+                skipped += 1
             continue
         ser = TradeSerializer(data=item)
         if not ser.is_valid():
@@ -202,7 +232,7 @@ def trades_webhook(request):
         except Exception as exc:
             errors.append({"index": idx, "detail": str(exc)})
 
-    payload = {"created": created, "skipped": skipped, "total": len(items)}
+    payload = {"created": created, "skipped": skipped, "updated": updated, "total": len(items)}
     if errors:
         payload["errors"] = errors[:10]
         # Debug: persist the exact validation errors so they can be diagnosed.

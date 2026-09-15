@@ -3,7 +3,7 @@
 //|              Dlea AI - MetaTrader 5 trade sync expert            |
 //+------------------------------------------------------------------+
 #property copyright "Dlea AI"
-#property version   "1.04"
+#property version   "1.05"
 #property strict
 #property description "Syncs closed trades from MetaTrader 5 to Dlea AI"
 
@@ -26,18 +26,22 @@ int g_cacheCount = 0;
 
 //+------------------------------------------------------------------+
 //| Store SL/TP for a position in the cache                           |
+//| Returns true when the stored values actually changed (so callers   |
+//| that refresh on every tick stay quiet in the log).                |
 //+------------------------------------------------------------------+
-void CacheSLTP(ulong posTicket, double sl, double tp)
+bool CacheSLTP(ulong posTicket, double sl, double tp)
 {
    // Update existing entry
    for(int i = 0; i < g_cacheCount; i++)
    {
       if(g_cacheKeys[i] == posTicket)
       {
+         if(g_cacheSL[i] == sl && g_cacheTP[i] == tp)
+            return false;
          g_cacheSL[i] = sl;
          g_cacheTP[i] = tp;
          if(InpDebugLog) Print("DleaSync: cached SL/TP for pos #", posTicket, " sl=", sl, " tp=", tp);
-         return;
+         return true;
       }
    }
    // Add new entry
@@ -48,7 +52,32 @@ void CacheSLTP(ulong posTicket, double sl, double tp)
       g_cacheTP[g_cacheCount] = tp;
       if(InpDebugLog) Print("DleaSync: cached SL/TP for pos #", posTicket, " sl=", sl, " tp=", tp);
       g_cacheCount++;
+      return true;
    }
+   return false;
+}
+
+//+------------------------------------------------------------------+
+//| Read a level out of MT5's own close comment.                      |
+//| MT5 writes "[sl 1.16225]" / "[tp 1.16204]" on the deal that closed |
+//| the position; that is the last resort when the live SL/TP was      |
+//| never captured (e.g. it was added after the position opened).      |
+//+------------------------------------------------------------------+
+bool ParseLevelFromComment(const string comment, const string tag, double &level)
+{
+   string needle = "[" + tag + " ";
+   int at = StringFind(comment, needle);
+   if(at < 0) return false;
+   int from = at + StringLen(needle);
+   int to   = StringFind(comment, "]", from);
+   if(to < 0) return false;
+   string raw = StringSubstr(comment, from, to - from);
+   StringTrimLeft(raw);
+   StringTrimRight(raw);
+   double value = StringToDouble(raw);
+   if(value <= 0) return false;
+   level = value;
+   return true;
 }
 
 //+------------------------------------------------------------------+
@@ -119,21 +148,25 @@ int OnInit()
 }
 
 //+------------------------------------------------------------------+
-//| Scan all open positions and cache their SL/TP                    |
+//| Scan all open positions and cache their *current* SL/TP.          |
+//| Called at start-up and on every tick: when the trader adds or      |
+//| moves a stop on a live position MT5 only emits a position change   |
+//| (no new deal), so a one-shot capture at open time would keep the   |
+//| stale zero forever and the stop would never reach Dlea.            |
 //+------------------------------------------------------------------+
 void CacheOpenPositions()
 {
-   int total = PositionsTotal();
+   int total   = PositionsTotal();
+   int changed = 0;
    for(int i = 0; i < total; i++)
    {
       ulong ticket = PositionGetTicket(i);
       if(ticket == 0) continue;
-      double sl = PositionGetDouble(POSITION_SL);
-      double tp = PositionGetDouble(POSITION_TP);
-      if(sl > 0 || tp > 0)
-         CacheSLTP(ticket, sl, tp);
+      if(CacheSLTP(ticket, PositionGetDouble(POSITION_SL), PositionGetDouble(POSITION_TP)))
+         changed++;
    }
-   if(InpDebugLog) Print("DleaSync: cached SL/TP for ", g_cacheCount, " open positions.");
+   if(InpDebugLog && changed > 0)
+      Print("DleaSync: SL/TP cache refreshed for ", changed, " open position(s).");
 }
 
 //+------------------------------------------------------------------+
@@ -172,6 +205,17 @@ void OnTradeTransaction(const MqlTradeTransaction &trans,
                         const MqlTradeRequest &request,
                         const MqlTradeResult &result)
 {
+   //--- SL/TP edited on a live position: refresh the cache from the
+   //--- position itself (this is the case that used to be dropped).
+   if(trans.type == TRADE_TRANSACTION_POSITION)
+   {
+      ulong posTicket = trans.position;
+      if(posTicket > 0 && PositionSelectByTicket(posTicket))
+         CacheSLTP(posTicket,
+                   PositionGetDouble(POSITION_SL),
+                   PositionGetDouble(POSITION_TP));
+   }
+
    //--- When a new deal is added to history...
    if(trans.type == TRADE_TRANSACTION_DEAL_ADD)
    {
@@ -206,6 +250,14 @@ void OnTradeTransaction(const MqlTradeTransaction &trans,
    }
 
 
+}
+
+//+------------------------------------------------------------------+
+//| Keep the SL/TP cache in step with the open positions             |
+//+------------------------------------------------------------------+
+void OnTick()
+{
+   CacheOpenPositions();
 }
 
 //+------------------------------------------------------------------+
@@ -285,15 +337,25 @@ bool SendDeal(const ulong dealTicket)
       }
    }
 
+   //--- last resort: the level MT5 itself closed the position at
+   if(sl <= 0 && ParseLevelFromComment(comment, "sl", sl) && InpDebugLog)
+      Print("DleaSync: SL recovered from deal comment for pos #", position, " -> ", sl);
+   if(tp <= 0 && ParseLevelFromComment(comment, "tp", tp) && InpDebugLog)
+      Print("DleaSync: TP recovered from deal comment for pos #", position, " -> ", tp);
+
    //--- compute rough RR (server recomputes exact values)
    double risk = fabs(entryPrice - exitPrice);
    double rr   = (risk > 0) ? (fabs(profit) / (risk * volume * 100.0)) : 0.0;
 
    string sideStr = (type == DEAL_TYPE_BUY) ? "buy" : "sell";
 
-   //--- debug: print SL/TP to MT5 Experts log
+   //--- debug: print SL/TP to MT5 Experts log (read into temporaries so
+   //--- the print never overwrites the values we are about to send)
+   double dbgSL = 0.0, dbgTP = 0.0;
+   bool   cacheHit = GetCachedSLTP((ulong)position, dbgSL, dbgTP);
    if(InpDebugLog)
-      Print("DleaSync: deal #", dealTicket, " ", symbol, " SL=", sl, " TP=", tp, " (cache hit=", GetCachedSLTP((ulong)position, sl, tp) ? "yes" : "no", ")");
+      Print("DleaSync: deal #", dealTicket, " ", symbol, " SL=", sl, " TP=", tp,
+            " (cache hit=", cacheHit ? "yes" : "no", ", cached SL=", dbgSL, ", cached TP=", dbgTP, ")");
 
    //--- build the JSON payload (now includes sl and tp)
    string payload = StringFormat(
