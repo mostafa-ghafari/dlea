@@ -30,8 +30,8 @@ import {
   generateCoachReport,
   invalidateCache,
   useAiInsights,
+  useAiQuota,
   useApi,
-  usePlanLimits,
 } from "@/lib/api";
 import { scopeLabels, type CoachScope } from "@/lib/ai-coach-data";
 import { useEffect, useMemo, useState } from "react";
@@ -65,7 +65,6 @@ const severityStyle: Record<string, string> = {
 
 function AiCoach() {
   const insights = useAiInsights();
-  const limits = usePlanLimits();
   const [activePortfolioId] = useActivePortfolioId();
   const periodsApi = useApi(
     () => fetchCoachPeriods(activePortfolioId ?? undefined),
@@ -74,8 +73,12 @@ function AiCoach() {
   const coachPeriods = periodsApi.data ?? [];
   const [generating, setGenerating] = useState(false);
   const existingCount = coachPeriods.length;
-  const isFree = limits.slug === "free";
-  const canAnalyze = !isFree || existingCount < 1;
+  // The quota belongs to the plan and is counted server-side, so the button
+  // and the API agree on what is left (free 1/month, Pro 3/week, Pro Max
+  // 3/day). Until the quota loads we stay permissive and let the API decide.
+  const quota = useAiQuota();
+  const canAnalyze = quota ? quota.allowed : true;
+  const quotaUnlimited = (quota?.limit ?? -1) < 0;
   const models = insights?.models ?? [];
   const [model, setModel] = useState<string | undefined>(undefined);
   // Sync model when models load from API — pick the first available model
@@ -139,10 +142,37 @@ function AiCoach() {
             ? "در حال تحلیل با Gemini..."
             : canAnalyze
               ? "تحلیل جدید"
-              : "محدودت تحلیل رایگان"}
+              : "سهمیه تحلیل تمام شد"}
         </Button>
       }
     >
+      {quota && (
+        <div className="mb-4 flex flex-wrap items-center gap-2 text-xs">
+          <Badge
+            variant="outline"
+            className={
+              canAnalyze
+                ? "border-primary/40 bg-primary/10 text-primary"
+                : "border-destructive/40 bg-destructive/10 text-destructive"
+            }
+          >
+            <Sparkles className="ml-1 h-3 w-3" />
+            {quotaUnlimited
+              ? "سهمیه هوش مصنوعی: نامحدود"
+              : canAnalyze
+                ? `سهمیه ${quota.periodLabel}: ${
+                    quota.remaining
+                  } از ${quota.limit} درخواست باقی مانده`
+                : `سهمیه ${quota.periodLabel} تمام شد (${quota.limit} درخواست)`}
+          </Badge>
+          {!canAnalyze && (
+            <span className="text-muted-foreground">
+              برای تحلیل بیشتر پلن را ارتقا بده یا تا بازشدن سهمیه صبر کن.
+            </span>
+          )}
+        </div>
+      )}
+
       {/* Model selector */}
       <div className="card-surface p-5">
         <div className="grid gap-4 md:grid-cols-[auto_1fr_auto] md:items-center">
