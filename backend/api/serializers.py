@@ -10,6 +10,7 @@ from rest_framework import serializers
 
 from . import jutils
 from .mt_stops import realized_rr
+from .plan_limits import max_images_for_user
 from .models import (
     Achievement,
     AchievementHistory,
@@ -200,6 +201,25 @@ class TradeSerializer(serializers.ModelSerializer):
         return obj.portfolio.name if obj.portfolio else None
 
     def validate(self, attrs):
+        """Check the per-plan screenshot cap and derive R:R when missing.
+
+        The uploader already limits the count client-side; this is the
+        server-side half of the same rule, so a crafted request cannot store
+        unlimited images in the trade's JSON column.
+        """
+        request = self.context.get("request")
+        user = getattr(request, "user", None)
+        cap = max_images_for_user(user)
+        screenshots = attrs.get("screenshots", getattr(self.instance, "screenshots", None))
+        if cap >= 0 and len(screenshots or []) > cap:
+            raise serializers.ValidationError(
+                {"screenshots": f"حداکثر {cap} تصویر برای هر معامله مجاز است."}
+            )
+
+        attrs = self._fill_rr(attrs)
+        return attrs
+
+    def _fill_rr(self, attrs):
         """Derive R:R from the stop when the client did not provide one.
 
         R:R here is |exit - entry| / |entry - sl| (the ratio `seed_data.py`
@@ -232,6 +252,8 @@ class JournalGroupSerializer(serializers.ModelSerializer):
 
 
 class JournalEntrySerializer(serializers.ModelSerializer):
+    """Journal entry, with the same per-plan screenshot cap as trades."""
+
     id = serializers.CharField(source="pk", read_only=True)
     # tradeId may be empty — the frontend form defaults it to "" (optional link
     # to a trade ticket), so blank must be allowed or creation fails.
@@ -265,6 +287,17 @@ class JournalEntrySerializer(serializers.ModelSerializer):
 
     def get_groupId(self, obj):
         return str(obj.group_id) if obj.group_id else None
+
+    def validate(self, attrs):
+        """Same per-plan screenshot cap as trades, applied to journal images."""
+        request = self.context.get("request")
+        cap = max_images_for_user(getattr(request, "user", None))
+        images = attrs.get("images", getattr(self.instance, "images", None))
+        if cap >= 0 and len(images or []) > cap:
+            raise serializers.ValidationError(
+                {"images": f"حداکثر {cap} تصویر برای هر یادداشت مجاز است."}
+            )
+        return attrs
 
 
 class GoalSerializer(serializers.ModelSerializer):
@@ -342,10 +375,15 @@ class PlanSerializer(serializers.ModelSerializer):
     maxPortfolios = serializers.IntegerField(source="max_portfolios")
     maxTradesPerMonth = serializers.IntegerField(source="max_trades_per_month")
     planFeatures = serializers.JSONField(source="plan_features")
+    aiRequestsLimit = serializers.IntegerField(source="ai_requests_limit")
+    aiRequestsPeriod = serializers.CharField(source="ai_requests_period")
+    maxImagesPerEntry = serializers.IntegerField(source="max_images_per_entry")
 
     class Meta:
         model = Plan
-        fields = ["id", "name", "price", "unit", "tagline", "portfolioLimit", "features", "cta", "highlight", "sellable", "users", "maxPortfolios", "maxTradesPerMonth", "planFeatures"]
+        fields = ["id", "name", "price", "unit", "tagline", "portfolioLimit", "features", "cta", "highlight", "sellable", "users", "maxPortfolios", "maxTradesPerMonth", "planFeatures", "aiRequestsLimit", "aiRequestsPeriod", "maxImagesPerEntry"]
+        # The admin panel edits prices, limits and quotas — never the user count.
+        read_only_fields = ["users"]
 
 
 class SubscriptionSerializer(serializers.ModelSerializer):

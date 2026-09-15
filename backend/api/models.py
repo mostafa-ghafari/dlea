@@ -228,10 +228,20 @@ class Plan(models.Model):
     highlight = models.BooleanField(default=False)
     sellable = models.BooleanField(default=True)
     users = models.PositiveIntegerField(default=0)
-    # Feature-gating limits (-1 = unlimited)
+    # Feature-gating limits (-1 = unlimited, 0 = not allowed)
     max_portfolios = models.IntegerField(default=-1)
     max_trades_per_month = models.IntegerField(default=-1)
     plan_features = models.JSONField(default=list, blank=True)
+    # AI coach quota: `ai_requests_limit` calls per `ai_requests_period`
+    # (free gets 1/month, Pro 3/week, Pro Max 3/day by default).
+    ai_requests_limit = models.IntegerField(default=-1)
+    ai_requests_period = models.CharField(
+        max_length=8,
+        choices=[("day", "روزانه"), ("week", "هفتگی"), ("month", "ماهانه")],
+        default="month",
+    )
+    # Screenshots allowed per trade / journal entry.
+    max_images_per_entry = models.IntegerField(default=-1)
 
     class Meta:
         ordering = ["id"]

@@ -11,11 +11,13 @@ from django.db.models import Q, Sum
 User = get_user_model()
 from rest_framework import parsers, serializers, viewsets
 from rest_framework.decorators import action
+from rest_framework.exceptions import PermissionDenied
 from rest_framework.permissions import BasePermission, IsAuthenticated, SAFE_METHODS
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from . import gemini, jutils
+from .plan_limits import ai_quota_for_user
 from .models import (
     Achievement,
     AchievementHistory,
@@ -338,25 +340,64 @@ class RoleTierViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = RoleTierSerializer
 
 
-class PlanViewSet(viewsets.ReadOnlyModelViewSet):
+class PlanViewSet(viewsets.ModelViewSet):
+    """Plans are public to read and admin-only to change.
+
+    The admin panel edits prices and limits, so a read-only viewset meant
+    every save silently did nothing (the frontend only had a local state
+    update to show for it).
+    """
+
     queryset = Plan.objects.all()
     serializer_class = PlanSerializer
+    lookup_field = "slug"
+    http_method_names = ["get", "patch", "put", "head", "options"]
+
+    def _require_admin(self, request):
+        if not _is_admin_user(request.user):
+            raise PermissionDenied("فقط مدیر می‌تواند پلن‌ها را تغییر دهد")
+
+    def update(self, request, *args, **kwargs):
+        self._require_admin(request)
+        return super().update(request, *args, **kwargs)
+
+    def partial_update(self, request, *args, **kwargs):
+        self._require_admin(request)
+        return super().partial_update(request, *args, **kwargs)
 
 
 class PlanLimitsView(APIView):
-    """Return plan limits for feature gating (public, no auth required)."""
+    """Return plan limits for feature gating (public, no auth required).
+
+    `name` is included on purpose: `Subscription.plan` stores the display
+    name ("Pro Max"), so the client can only resolve a slug by matching the
+    name too — otherwise every paying user falls back to the free caps.
+    """
     def get(self, request):
         plans = Plan.objects.all()
         data = [
             {
                 "slug": p.slug,
+                "name": p.name,
                 "maxPortfolios": p.max_portfolios,
                 "maxTradesPerMonth": p.max_trades_per_month,
                 "features": p.plan_features,
+                "aiRequestsLimit": p.ai_requests_limit,
+                "aiRequestsPeriod": p.ai_requests_period,
+                "maxImagesPerEntry": p.max_images_per_entry,
             }
             for p in plans
         ]
         return Response(data)
+
+
+class AiQuotaView(APIView):
+    """How many AI coach requests the signed-in user has left."""
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        return Response(ai_quota_for_user(request.user))
 
 
 class SubscriptionViewSet(UserScopedMixin, viewsets.ReadOnlyModelViewSet):
@@ -992,6 +1033,21 @@ class CoachGenerateView(APIView):
                 status=400,
             )
         user = request.user if request.user.is_authenticated else None
+        # ── Per-plan AI quota (free 1/month, Pro 3/week, Pro Max 3/day) ──
+        if user is not None:
+            quota = ai_quota_for_user(user)
+            if not quota["allowed"]:
+                return Response(
+                    {
+                        "detail": (
+                            f"سهمیه هوش مصنوعی پلن {quota['planName']} تمام شده است "
+                            f"({quota['limit']} درخواست {quota['periodLabel']}). "
+                            "برای ادامه صبر کن یا پلن را ارتقا بده."
+                        ),
+                        "quota": quota,
+                    },
+                    status=403,
+                )
         portfolio_id = request.data.get("portfolio")
         if user:
             trades = Trade.objects.filter(portfolio__user=user)
