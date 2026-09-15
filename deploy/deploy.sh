@@ -9,6 +9,10 @@ RELEASE_DIR="$DEPLOY_DIR/releases/$TIMESTAMP"
 CURRENT_LINK="$DEPLOY_DIR/current"
 RUNNING_DIR="/var/www/dlea.piqagram.ir"
 SITE_HOST="dlea.piqagram.ir"
+# Releases are ~80 MB each (code + offline wheels + .output) on a disk shared
+# with other sites, so a successful deploy keeps only the newest ones. Override
+# with e.g. KEEP_RELEASES=20 bash /tmp/deploy.sh; 0 disables pruning.
+KEEP_RELEASES="${KEEP_RELEASES:-10}"
 
 # Gunicorn must listen on whatever port nginx proxies /api/ to. This used to be
 # a hardcoded 8002 while deploy/nginx-dlea.conf says 8000, so the two could
@@ -275,6 +279,33 @@ if [ "$FAILED" = "1" ]; then
         tail -20 /tmp/frontend.log >&2 || true
     fi
     exit 1
+fi
+
+# Prune old releases only now, after a deploy that passed every health check, so
+# a failed deploy never costs you rollback material. The release ~/dlea/current
+# points at is always kept, whatever its age.
+if [ "$KEEP_RELEASES" -gt 0 ]; then
+    echo "Pruning old releases (keeping the newest $KEEP_RELEASES)..."
+    CURRENT_TARGET=$(readlink -f "$CURRENT_LINK" 2>/dev/null || true)
+    PRUNED=0
+    # Only directories count: a stray file in releases/ must not use up a slot.
+    while IFS= read -r old; do
+        [ -n "$old" ] || continue
+        old_path="$DEPLOY_DIR/releases/$old"
+        if [ ! -d "$old_path" ]; then
+            continue
+        fi
+        if [ "$(readlink -f "$old_path")" = "$CURRENT_TARGET" ]; then
+            echo "  kept $old (current release)"
+            continue
+        fi
+        rm -rf "$old_path"
+        echo "  removed $old"
+        PRUNED=$((PRUNED + 1))
+    done <<< "$(ls -1t "$DEPLOY_DIR/releases" 2>/dev/null \
+        | while IFS= read -r entry; do [ -d "$DEPLOY_DIR/releases/$entry" ] && echo "$entry"; done \
+        | tail -n +$((KEEP_RELEASES + 1)))"
+    echo "Pruned $PRUNED release(s)."
 fi
 
 echo "=== Deployment complete ==="
