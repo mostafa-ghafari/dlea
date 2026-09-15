@@ -41,20 +41,59 @@ echo "Running migrations..."
 cd "$DEPLOY_DIR"
 ln -sfn "$RELEASE_DIR" "$CURRENT_LINK"
 
-# Also sync to the running directory so gunicorn picks up changes
-echo "Syncing to running directory..."
+# Sync the code gunicorn actually runs.
+#
+# This used to copy a hand-maintained list of files, which silently dropped
+# every *new* module: the release had `api/plan_limits.py` while the running
+# copy did not, so importing the URLconf raised and the entire API answered 500
+# (for every path, including unknown ones) — a failure this script happily
+# reported as "Deployment complete". Copy whole directories instead, and verify
+# afterwards that nothing is missing.
+echo "Syncing backend code to the running directory..."
 if [ -d "$RUNNING_DIR/backend" ]; then
-    cp "$RELEASE_DIR/backend/api/models.py" "$RUNNING_DIR/backend/api/models.py"
-    cp "$RELEASE_DIR/backend/api/views.py" "$RUNNING_DIR/backend/api/views.py"
-    cp "$RELEASE_DIR/backend/api/serializers.py" "$RUNNING_DIR/backend/api/serializers.py"
-    cp "$RELEASE_DIR/backend/api/gemini.py" "$RUNNING_DIR/backend/api/gemini.py"
-    cp "$RELEASE_DIR/backend/api/jutils.py" "$RUNNING_DIR/backend/api/jutils.py"
-    cp "$RELEASE_DIR/backend/api/auth_views.py" "$RUNNING_DIR/backend/api/auth_views.py"
-    cp "$RELEASE_DIR/backend/api/mt_views.py" "$RUNNING_DIR/backend/api/mt_views.py"
-    cp "$RELEASE_DIR/backend/config/settings.py" "$RUNNING_DIR/backend/config/settings.py"
-    cp -r "$RELEASE_DIR/backend/api/management/commands/"*.py "$RUNNING_DIR/backend/api/management/commands/"
-    cp -r "$RELEASE_DIR/backend/api/migrations/"*.py "$RUNNING_DIR/backend/api/migrations/"
+    # Mirror, don't merge: copying over the top only ever *added* files, so a
+    # migration the repo had deleted (0013_alter_portfolio_strategy...) stayed
+    # behind as an orphan leaf and made `migrate` refuse to run with
+    # "multiple leaf nodes in the migration graph".
+    if command -v rsync >/dev/null 2>&1; then
+        rsync -a --delete --exclude='__pycache__' \
+            "$RELEASE_DIR/backend/api/" "$RUNNING_DIR/backend/api/"
+        rsync -a --delete --exclude='__pycache__' \
+            "$RELEASE_DIR/backend/config/" "$RUNNING_DIR/backend/config/"
+    else
+        cp -r "$RELEASE_DIR/backend/api" "$RELEASE_DIR/backend/config" "$RUNNING_DIR/backend/"
+        while IFS= read -r stale; do
+            rel="${stale#$RUNNING_DIR/backend/}"
+            if [ ! -f "$RELEASE_DIR/backend/$rel" ]; then
+                echo "removing stale $rel"
+                rm -f "$stale"
+            fi
+        done <<< "$(find "$RUNNING_DIR/backend/api" -name '*.py' -type f)"
+    fi
+    cp -f "$RELEASE_DIR/backend/manage.py" "$RUNNING_DIR/backend/manage.py"
+    cp -f "$RELEASE_DIR/backend/requirements.txt" "$RUNNING_DIR/backend/requirements.txt"
+    # Never clobber the running environment's own state (backend/.env, media/,
+    # db.sqlite3) — only code paths are synced above — and drop stale bytecode so
+    # it can never shadow the synced sources.
+    find "$RUNNING_DIR/backend/api" "$RUNNING_DIR/backend/config" \
+        -type d -name __pycache__ -prune -exec rm -rf {} + 2>/dev/null || true
+
+    DRIFT=$(diff -rq --exclude=__pycache__ \
+        "$RELEASE_DIR/backend/api" "$RUNNING_DIR/backend/api" 2>&1 || true)
+    MISSING=$(printf '%s\n' "$DRIFT" | grep -E "^Files .* differ$|^Only in $RELEASE_DIR" || true)
+    if [ -n "$MISSING" ]; then
+        echo "" >&2
+        echo "!!! backend/api did not sync cleanly — refusing to restart the backend:" >&2
+        printf '%s\n' "$MISSING" | head -20 >&2
+        exit 1
+    fi
 fi
+
+# Migrate before stopping the old process, so a broken migration leaves the
+# currently working backend up instead of taking the site down.
+cd "$RUNNING_DIR/backend"
+echo "Running migrations in the running directory..."
+.venv/bin/python manage.py migrate --noinput
 
 echo "Restarting backend (Gunicorn on port 8002)..."
 # Kill any existing gunicorn processes
