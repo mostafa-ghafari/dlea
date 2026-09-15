@@ -23,7 +23,8 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.authentication import JWTAuthentication
 
-from .models import MTConnection, Trade
+from .models import MTConnection, Portfolio, Trade
+from .mt_stops import levels_from_comment, realized_rr
 from .serializers import TradeSerializer
 
 
@@ -53,24 +54,38 @@ def _webhook_url(request):
 
 
 def _fill_missing_stops(trade, item):
-    """Backfill SL/TP that only became known after the first push.
+    """Backfill SL/TP (and the R:R derived from them) on a repeat push.
 
     A trader can add or move a stop on an *open* position, and the EA may
     have already pushed that ticket (or push it before the edit reaches it).
     Re-pushes are therefore the only way the stop can reach us, so fill the
     gap without ever overwriting a value we already stored.
     """
+    incoming = {field: item.get(field) for field in ("sl", "tp")}
+    # A payload without a usable level may still carry MT's comment marker.
+    for field, value in levels_from_comment(item.get("comment")).items():
+        if not incoming.get(field):
+            incoming[field] = value
     changed = False
-    for field in ("sl", "tp"):
+    for field, value in incoming.items():
         try:
-            incoming = float(item.get(field) or 0)
+            value = float(value or 0)
         except (TypeError, ValueError):
             continue
-        if incoming > 0 and float(getattr(trade, field) or 0) <= 0:
-            setattr(trade, field, incoming)
+        if value > 0 and float(getattr(trade, field) or 0) <= 0:
+            setattr(trade, field, value)
             changed = True
+
+    # R:R is only meaningful once the stop is known, so it may be derivable
+    # now even though the first push could not report it.
+    if float(trade.rr or 0) <= 0:
+        computed = realized_rr(trade.entry, trade.exit, trade.sl)
+        if computed is not None:
+            trade.rr = computed
+            changed = True
+
     if changed:
-        trade.save(update_fields=["sl", "tp", "updated_at"])
+        trade.save(update_fields=["sl", "tp", "rr", "updated_at"])
     return changed
 
 

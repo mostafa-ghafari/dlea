@@ -9,6 +9,7 @@ from django.db.models import Count, Q, Sum
 from rest_framework import serializers
 
 from . import jutils
+from .mt_stops import realized_rr
 from .models import (
     Achievement,
     AchievementHistory,
@@ -197,6 +198,25 @@ class TradeSerializer(serializers.ModelSerializer):
 
     def get_portfolio(self, obj):
         return obj.portfolio.name if obj.portfolio else None
+
+    def validate(self, attrs):
+        """Derive R:R from the stop when the client did not provide one.
+
+        R:R here is |exit - entry| / |entry - sl| (the ratio `seed_data.py`
+        also uses), so it simply does not exist without a stop. The EA and
+        statement imports may legitimately send 0 — fill it in rather than
+        storing a placeholder zero.
+        """
+        rr = attrs.get("rr", getattr(self.instance, "rr", None))
+        if not rr:
+            computed = realized_rr(
+                attrs.get("entry", getattr(self.instance, "entry", None)),
+                attrs.get("exit", getattr(self.instance, "exit", None)),
+                attrs.get("sl", getattr(self.instance, "sl", None)),
+            )
+            if computed is not None:
+                attrs["rr"] = computed
+        return attrs
 
 
 # ---------------------------------------------------------------------------
