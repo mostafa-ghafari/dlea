@@ -2,10 +2,17 @@ import { useState, useEffect } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { fetchPlans, type Plan } from "@/lib/api";
+import { fetchPlans, updatePlan, invalidateCache, type Plan } from "@/lib/api";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   Dialog,
   DialogClose,
@@ -17,31 +24,49 @@ import {
 } from "@/components/ui/dialog";
 
 type PlanRow = {
-  id: string;
+  slug: string;
   name: string;
   price: string;
+  unit: string;
   users: number;
-  portfolios: string;
-  reportLines: number;
+  portfolioLimit: string;
+  maxPortfolios: number;
+  maxTradesPerMonth: number;
+  aiRequestsLimit: number;
+  aiRequestsPeriod: "day" | "week" | "month";
+  maxImagesPerEntry: number;
   sellable: boolean;
   features: string;
 };
 
-const REPORT_LINES: Record<string, number> = {
-  free: 4,
-  pro: 10,
-  promax: 20,
-  vip: 20,
+/** -1 means "no cap" everywhere in the plan limits. */
+const UNLIMITED = -1;
+
+const PERIOD_LABELS: Record<PlanRow["aiRequestsPeriod"], string> = {
+  day: "روز",
+  week: "هفته",
+  month: "ماه",
 };
+
+function capText(value: number, unit: string) {
+  if (value < 0) return "نامحدود";
+  if (value === 0) return "بدون دسترسی";
+  return `${value} ${unit}`;
+}
 
 function planToRow(p: Plan): PlanRow {
   return {
-    id: p.id,
+    slug: p.id,
     name: p.name,
-    price: p.price === "—" ? "غیرقابل فروش" : `${p.price} تومان`,
+    price: p.price,
+    unit: p.unit,
     users: p.users,
-    portfolios: p.portfolioLimit.includes("نامحدود") ? "نامحدود" : "۱",
-    reportLines: REPORT_LINES[p.id] ?? 10,
+    portfolioLimit: p.portfolioLimit,
+    maxPortfolios: p.maxPortfolios ?? UNLIMITED,
+    maxTradesPerMonth: p.maxTradesPerMonth ?? UNLIMITED,
+    aiRequestsLimit: p.aiRequestsLimit ?? UNLIMITED,
+    aiRequestsPeriod: p.aiRequestsPeriod ?? "month",
+    maxImagesPerEntry: p.maxImagesPerEntry ?? UNLIMITED,
     sellable: p.sellable,
     features: p.features.join("، "),
   };
@@ -50,30 +75,60 @@ function planToRow(p: Plan): PlanRow {
 export function PlansManager() {
   const [plans, setPlans] = useState<PlanRow[]>([]);
   const [editing, setEditing] = useState<PlanRow | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  function load() {
+    return fetchPlans()
+      .then((list) => setPlans(list.map(planToRow)))
+      .catch(() => toast.error("دریافت پلن‌ها از سرور ممکن نشد"));
+  }
 
   useEffect(() => {
-    let alive = true;
-    fetchPlans()
-      .then((list) => alive && setPlans(list.map(planToRow)))
-      .catch(() => alive && toast.error("دریافت پلن‌ها از سرور ممکن نشد"));
-    return () => {
-      alive = false;
-    };
+    load();
   }, []);
 
-  function save(e: React.FormEvent) {
+  async function save(e: React.FormEvent) {
     e.preventDefault();
     if (!editing) return;
-    setPlans((list) => list.map((p) => (p.id === editing.id ? editing : p)));
-    toast.success(`پلن ${editing.name} به‌روزرسانی شد`);
-    setEditing(null);
+    setSaving(true);
+    try {
+      const saved = await updatePlan(editing.slug, {
+        name: editing.name,
+        price: editing.price,
+        unit: editing.unit,
+        portfolioLimit: editing.portfolioLimit,
+        maxPortfolios: editing.maxPortfolios,
+        maxTradesPerMonth: editing.maxTradesPerMonth,
+        aiRequestsLimit: editing.aiRequestsLimit,
+        aiRequestsPeriod: editing.aiRequestsPeriod,
+        maxImagesPerEntry: editing.maxImagesPerEntry,
+        sellable: editing.sellable,
+        // The admin types the list with Persian separators; the API wants a list.
+        features: editing.features
+          .split(/[،,]/)
+          .map((f) => f.trim())
+          .filter(Boolean),
+      });
+      // Other pages (feature gating, the pricing table) read the same data.
+      invalidateCache("plans");
+      setPlans((list) =>
+        list.map((p) => (p.slug === saved.id ? planToRow(saved) : p)),
+      );
+      toast.success(`پلن ${saved.name} ذخیره شد`);
+      setEditing(null);
+    } catch (err) {
+      toast.error(
+        `ذخیره پلن ناموفق بود: ${err instanceof Error ? err.message : err}`,
+      );
+    }
+    setSaving(false);
   }
 
   return (
     <>
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         {plans.map((p) => (
-          <div key={p.id} className="card-surface p-5">
+          <div key={p.slug} className="card-surface p-5">
             <div className="flex items-center justify-between">
               <div className="font-semibold">{p.name}</div>
               {!p.sellable && (
@@ -85,10 +140,23 @@ export function PlansManager() {
                 </Badge>
               )}
             </div>
-            <div className="mt-2 text-2xl font-bold tabular">{p.price}</div>
+            <div className="mt-2 text-2xl font-bold tabular">
+              {p.price === "—" ? "غیرقابل فروش" : `${p.price} تومان`}
+            </div>
             <div className="mt-3 space-y-1 text-xs text-muted-foreground">
-              <div>پرتفولیو: {p.portfolios}</div>
-              <div className="tabular">خطوط گزارش AI: {p.reportLines}</div>
+              <div>پرتفولیو: {capText(p.maxPortfolios, "پرتفولیو")}</div>
+              <div>معامله: {capText(p.maxTradesPerMonth, "در ماه")}</div>
+              <div className="tabular">
+                درخواست هوش مصنوعی:{" "}
+                {p.aiRequestsLimit < 0
+                  ? "نامحدود"
+                  : `${p.aiRequestsLimit} در ${
+                      PERIOD_LABELS[p.aiRequestsPeriod]
+                    }`}
+              </div>
+              <div>
+                تصویر در هر معامله: {capText(p.maxImagesPerEntry, "تصویر")}
+              </div>
               <div>{p.features}</div>
             </div>
             <div className="mt-3 text-sm text-muted-foreground tabular">
@@ -116,7 +184,8 @@ export function PlansManager() {
               <DialogHeader>
                 <DialogTitle>ویرایش پلن {editing.name}</DialogTitle>
                 <DialogDescription>
-                  قیمت، سقف‌ها و امکانات پلن را تغییر بده.
+                  قیمت، سقف‌ها و سهمیه‌ها را تغییر بده. مقدار ۱- یعنی نامحدود و
+                  ۰ یعنی بدون دسترسی.
                 </DialogDescription>
               </DialogHeader>
               <div className="mt-4 space-y-4">
@@ -142,29 +211,102 @@ export function PlansManager() {
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label>سقف پرتفولیو</Label>
+                    <Label>واحد قیمت</Label>
                     <Input
-                      value={editing.portfolios}
+                      value={editing.unit}
                       onChange={(e) =>
-                        setEditing({ ...editing, portfolios: e.target.value })
+                        setEditing({ ...editing, unit: e.target.value })
                       }
                       className="bg-secondary/60"
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label>خطوط گزارش AI (۲ تا ۲۰)</Label>
+                    <Label>متن سقف پرتفولیو</Label>
                     <Input
-                      type="number"
-                      min={2}
-                      max={20}
-                      value={editing.reportLines}
+                      value={editing.portfolioLimit}
                       onChange={(e) =>
                         setEditing({
                           ...editing,
-                          reportLines: Math.max(
-                            2,
-                            Math.min(20, Number(e.target.value) || 2),
-                          ),
+                          portfolioLimit: e.target.value,
+                        })
+                      }
+                      className="bg-secondary/60"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>حداکثر پرتفولیو (۱- = نامحدود)</Label>
+                    <Input
+                      type="number"
+                      value={editing.maxPortfolios}
+                      onChange={(e) =>
+                        setEditing({
+                          ...editing,
+                          maxPortfolios: Number(e.target.value) || 0,
+                        })
+                      }
+                      className="tabular bg-secondary/60"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>حداکثر معامله در ماه (۱- = نامحدود)</Label>
+                    <Input
+                      type="number"
+                      value={editing.maxTradesPerMonth}
+                      onChange={(e) =>
+                        setEditing({
+                          ...editing,
+                          maxTradesPerMonth: Number(e.target.value) || 0,
+                        })
+                      }
+                      className="tabular bg-secondary/60"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>سهمیه هوش مصنوعی (۱- = نامحدود)</Label>
+                    <Input
+                      type="number"
+                      min={-1}
+                      value={editing.aiRequestsLimit}
+                      onChange={(e) =>
+                        setEditing({
+                          ...editing,
+                          aiRequestsLimit: Number(e.target.value) || 0,
+                        })
+                      }
+                      className="tabular bg-secondary/60"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>بازه سهمیه هوش مصنوعی</Label>
+                    <Select
+                      value={editing.aiRequestsPeriod}
+                      onValueChange={(v) =>
+                        setEditing({
+                          ...editing,
+                          aiRequestsPeriod: v as PlanRow["aiRequestsPeriod"],
+                        })
+                      }
+                    >
+                      <SelectTrigger className="bg-secondary/60">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="day">روزانه</SelectItem>
+                        <SelectItem value="week">هفتگی</SelectItem>
+                        <SelectItem value="month">ماهانه</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>حداکثر تصویر در هر معامله (۱- = نامحدود)</Label>
+                    <Input
+                      type="number"
+                      min={-1}
+                      value={editing.maxImagesPerEntry}
+                      onChange={(e) =>
+                        setEditing({
+                          ...editing,
+                          maxImagesPerEntry: Number(e.target.value) || 0,
                         })
                       }
                       className="tabular bg-secondary/60"
@@ -172,7 +314,7 @@ export function PlansManager() {
                   </div>
                 </div>
                 <div className="space-y-2">
-                  <Label>امکانات</Label>
+                  <Label>امکانات (با ، جدا کن)</Label>
                   <Input
                     value={editing.features}
                     onChange={(e) =>
@@ -199,9 +341,10 @@ export function PlansManager() {
                 </DialogClose>
                 <Button
                   type="submit"
+                  disabled={saving}
                   className="bg-primary text-primary-foreground hover:bg-primary/90"
                 >
-                  ذخیره تغییرات
+                  {saving ? "در حال ذخیره..." : "ذخیره تغییرات"}
                 </Button>
               </DialogFooter>
             </form>

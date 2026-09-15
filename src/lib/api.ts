@@ -350,6 +350,14 @@ export const fetchAchievementHistory = () =>
 export const fetchRoleTiers = () => get<RoleTier[]>("role-tiers/");
 export const fetchCalendarDays = () => get<CalendarDay[]>("calendar/");
 export const fetchPlans = () => get<Plan[]>("plans/");
+
+/** Update a plan (admin only). `slug` is the plan's stable id, e.g. "pro". */
+export function updatePlan(
+  slug: string,
+  changes: Partial<Plan>,
+): Promise<Plan> {
+  return patch<Plan>(`plans/${slug}/`, changes);
+}
 export type AdminStats = {
   total_users: number;
   active_subscriptions: number;
@@ -853,16 +861,40 @@ export type PlanFeature =
 
 export type PlanLimits = {
   slug: string;
+  /** display name — `Subscription.plan` stores this, not the slug */
+  name?: string;
   maxPortfolios: number; // -1 = unlimited
   maxTradesPerMonth: number; // -1 = unlimited
+  /** AI coach requests allowed per `aiRequestsPeriod` (-1 = unlimited) */
+  aiRequestsLimit?: number;
+  aiRequestsPeriod?: "day" | "week" | "month";
+  /** screenshots per trade / journal entry (-1 = unlimited) */
+  maxImagesPerEntry?: number;
   features: PlanFeature[];
+};
+
+/** How many AI coach requests the signed-in user has left. */
+export type AiQuota = {
+  plan: string | null;
+  planName: string;
+  limit: number; // -1 = unlimited
+  period: "day" | "week" | "month";
+  periodLabel: string;
+  used: number;
+  remaining: number;
+  allowed: boolean;
+  resetsAt: string | null;
 };
 
 /** Fallback for free plan when plans API is unavailable. */
 const FREE_LIMITS: PlanLimits = {
   slug: "free",
+  name: "رایگان",
   maxPortfolios: 1,
   maxTradesPerMonth: 50,
+  aiRequestsLimit: 1,
+  aiRequestsPeriod: "month",
+  maxImagesPerEntry: 2,
   features: [
     "portfolios",
     "trades",
@@ -881,8 +913,12 @@ const FREE_LIMITS: PlanLimits = {
 /** Permissive fallback for paid plans when plans API is unavailable. */
 const PAID_LIMITS: PlanLimits = {
   slug: "paid",
+  name: "پرداختی",
   maxPortfolios: -1,
   maxTradesPerMonth: -1,
+  aiRequestsLimit: 3,
+  aiRequestsPeriod: "week",
+  maxImagesPerEntry: 10,
   features: [
     "portfolios",
     "trades",
@@ -904,20 +940,44 @@ const PAID_LIMITS: PlanLimits = {
 /** Fetch plan limits from the backend API. */
 export const fetchPlanLimits = () => get<PlanLimits[]>("plans/limits/");
 
-/** Return the limits for the current subscription. Falls back to "free" or permissive for paid plans. */
+/** Normalise a plan label so "Pro Max" and "پرو مکس" can be compared. */
+function planKey(value: string | null | undefined): string {
+  return (value ?? "").toLowerCase().replace(/[\s\u200c\u200f-]+/g, "");
+}
+
+/**
+ * Return the limits for the current subscription.
+ *
+ * `Subscription.plan` holds the display name ("Pro Max"), so matching on the
+ * slug alone would silently hand every paying user the free caps.
+ */
 export function usePlanLimits(): PlanLimits {
   const sub = useSubscription();
-  const slug =
-    sub?.plan
-      ?.toLowerCase()
-      .replace(/\s+/g, "")
-      .replace(/[^a-z0-9-]/g, "") ?? "free";
+  const raw = sub?.plan ?? "";
+  const slug = raw
+    .toLowerCase()
+    .replace(/\s+/g, "")
+    .replace(/[^a-z0-9-]/g, "");
   const plans = useApi(fetchPlanLimits).data;
   if (plans && plans.length > 0) {
-    return plans.find((p) => p.slug === slug) ?? FREE_LIMITS;
+    return (
+      plans.find((p) => p.slug === slug) ??
+      plans.find((p) => planKey(p.name) === planKey(raw)) ??
+      FREE_LIMITS
+    );
   }
   // Plans API unavailable — use subscription to decide fallback
-  return slug === "free" ? FREE_LIMITS : PAID_LIMITS;
+  return slug === "free" || !raw ? FREE_LIMITS : PAID_LIMITS;
+}
+
+/* ------------------------------------------------------------------ */
+/* AI coach quota                                                      */
+/* ------------------------------------------------------------------ */
+
+export const fetchAiQuota = () => get<AiQuota>("ai/quota/");
+
+export function useAiQuota(): AiQuota | null {
+  return useApi(fetchAiQuota).data;
 }
 
 /** Check whether a specific feature is allowed for the current plan. */

@@ -118,6 +118,15 @@ export type Plan = {
   /** VIP is admin-assigned only and never shown on the pricing page */
   sellable: boolean;
   users: number;
+  /* Feature-gating limits — -1 means unlimited, 0 means not allowed */
+  maxPortfolios?: number;
+  maxTradesPerMonth?: number;
+  /** AI coach requests allowed per period */
+  aiRequestsLimit?: number;
+  aiRequestsPeriod?: "day" | "week" | "month";
+  /** Screenshots per trade / journal entry */
+  maxImagesPerEntry?: number;
+  planFeatures?: string[];
 };
 
 /* ------------------------------------------------------------------ */
