@@ -233,6 +233,39 @@ PROXIED_OK=$(curl -s -o /dev/null -w "%{http_code}" -H "Host: $SITE_HOST" \
 PUBLIC_OK=$(curl -sk -o /dev/null -w "%{http_code}" --max-time 20 \
     "https://$SITE_HOST/api/plans/" 2>/dev/null || echo "000")
 
+# The payment path is part of "deployed". A release that loads but cannot take
+# money looks exactly like a good one otherwise, so the smoke test is a gate
+# here: after the restart, before any old release is pruned. It writes one test
+# order and one test user (both named smoke-payment@…) on the running database,
+# deletes them again, and never moves money. SKIP_PAYMENT_SMOKE=1 bypasses the
+# gate in an emergency; SMOKE_PAYMENT_ARGS="--dry-run" narrows it to the
+# read-only checks.
+PAYMENT_SMOKE="skipped (SKIP_PAYMENT_SMOKE=1)"
+PAYMENT_SMOKE_FAILED=0
+SMOKE_CHECKER="$RELEASE_DIR/deploy/smoke_payment.py"
+APP_PYTHON="$RUNNING_DIR/backend/.venv/bin/python"
+if [ "${SKIP_PAYMENT_SMOKE:-0}" = "1" ]; then
+    echo "Skipping the payment smoke test (SKIP_PAYMENT_SMOKE=1)."
+elif [ ! -f "$SMOKE_CHECKER" ]; then
+    echo "!!! This release has no deploy/smoke_payment.py, so the payment path cannot" >&2
+    echo "    be verified: the checkout this deploy came from is too old." >&2
+    PAYMENT_SMOKE="NOT VERIFIED (checker missing from the release)"
+    PAYMENT_SMOKE_FAILED=1
+elif [ ! -x "$APP_PYTHON" ]; then
+    echo "!!! $APP_PYTHON is missing, so the payment smoke test cannot run." >&2
+    PAYMENT_SMOKE="NOT VERIFIED (no venv at $APP_PYTHON)"
+    PAYMENT_SMOKE_FAILED=1
+else
+    echo "Checking the payment path (this takes a few seconds)..."
+    if DLEA_BACKEND_DIR="$RUNNING_DIR/backend" "$APP_PYTHON" "$SMOKE_CHECKER" \
+        --site "http://127.0.0.1" --host "$SITE_HOST" $SMOKE_PAYMENT_ARGS; then
+        PAYMENT_SMOKE="OK"
+    else
+        PAYMENT_SMOKE="FAILED — see the checks above"
+        PAYMENT_SMOKE_FAILED=1
+    fi
+fi
+
 rm -f /tmp/dlea-deploy.tar.gz /tmp/deploy.sh
 
 echo "=== Deployment summary ==="
@@ -242,6 +275,7 @@ echo "Backend (port $BACKEND_PORT): HTTP $BACKEND_OK"
 echo "Frontend (port 3000): HTTP $FRONTEND_OK"
 echo "API through nginx (loopback): HTTP $PROXIED_OK"
 echo "Public API (https://$SITE_HOST): HTTP $PUBLIC_OK"
+echo "Payment path (smoke test): $PAYMENT_SMOKE"
 
 FAILED=0
 if [ "$BACKEND_OK" != "200" ]; then
@@ -260,6 +294,14 @@ else
 fi
 if [ "$FRONTEND_OK" != "200" ]; then
     echo "!!! The frontend did not answer 200 on port 3000." >&2
+    FAILED=1
+fi
+# A deploy that ships a checkout will not be called successful if nobody can
+# check out. Old releases are kept in that case, exactly like a failed health
+# check, so the rollback material is still there.
+if [ "$PAYMENT_SMOKE_FAILED" = "1" ]; then
+    echo "!!! The payment path did not pass its smoke test ($PAYMENT_SMOKE)." >&2
+    echo "    Run it alone with: bash deploy/smoke-payment.sh" >&2
     FAILED=1
 fi
 if [ "$FAILED" = "1" ]; then
