@@ -12,6 +12,10 @@ RUNNING_DIR="/var/www/dlea.piqagram.ir"
 mkdir -p "$DEPLOY_DIR/releases"
 
 echo "Extracting..."
+if [ ! -s /tmp/dlea-deploy.tar.gz ]; then
+    echo "!!! /tmp/dlea-deploy.tar.gz is missing or empty — the upload did not arrive." >&2
+    exit 1
+fi
 mkdir -p "$RELEASE_DIR"
 cd "$RELEASE_DIR"
 tar xzf /tmp/dlea-deploy.tar.gz

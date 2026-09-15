@@ -49,9 +49,27 @@ if %errorlevel% neq 0 (
 rmdir /s /q "%WHEEL_ENV%" 2>nul
 
 rem Step 3: Create archive
+rem
+rem Build it from %TEMP% with a *relative* archive name. GNU tar (the one Git for
+rem Windows ships) reads a drive-letter operand such as C:\Users\...\x.tar.gz as a
+rem "host:path" remote spec and exits with "Cannot connect to C: resolve failed",
+rem producing no archive at all - while this script still printed "Archive
+rem created!". A relative name means something to every tar.
 echo.
 echo Step 3: Creating deployment archive...
-tar czf %TEMP%\dlea-deploy.tar.gz --exclude=node_modules --exclude=.tanstack --exclude=.git --exclude=.freebuff --exclude=*.log --exclude=backend/.venv --exclude=backend/__pycache__ --exclude=*.pyc --exclude=backend/db.sqlite3 --exclude=test-results --exclude=smoke-test .
+set REPO_DIR=%CD%
+pushd "%TEMP%"
+tar czf dlea-deploy.tar.gz --exclude=node_modules --exclude=.tanstack --exclude=.git --exclude=.freebuff --exclude=*.log --exclude=backend/.venv --exclude=backend/__pycache__ --exclude=*.pyc --exclude=backend/db.sqlite3 --exclude=test-results --exclude=smoke-test -C "%REPO_DIR%" .
+if %errorlevel% neq 0 (
+    popd
+    echo Archive creation failed!
+    exit /b 1
+)
+popd
+if not exist "%TEMP%\dlea-deploy.tar.gz" (
+    echo Archive was not created!
+    exit /b 1
+)
 echo Archive created!
 del /q pip-wheels\*.* 2>nul
 rmdir /s /q pip-wheels 2>nul
@@ -59,10 +77,14 @@ rmdir /s /q pip-wheels 2>nul
 rem Step 4: Upload to server
 echo.
 echo Step 4: Uploading to server...
-scp %TEMP%\dlea-deploy.tar.gz ghafari@37.255.212.55:/tmp/
+scp "%TEMP%\dlea-deploy.tar.gz" ghafari@37.255.212.55:/tmp/
+if %errorlevel% neq 0 (
+    echo Uploading the archive failed!
+    exit /b 1
+)
 scp deploy/deploy.sh ghafari@37.255.212.55:/tmp/
 if %errorlevel% neq 0 (
-    echo Upload failed!
+    echo Uploading deploy.sh failed!
     exit /b 1
 )
 echo Upload OK!
@@ -76,7 +98,7 @@ if %errorlevel% neq 0 (
     exit /b 1
 )
 
-del %TEMP%\dlea-deploy.tar.gz
+del /q "%TEMP%\dlea-deploy.tar.gz" 2>nul
 
 echo.
 echo ==========================================
