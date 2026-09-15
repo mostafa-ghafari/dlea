@@ -53,7 +53,14 @@ type MtStatus = {
   broker?: string;
   platform?: string;
   portfolioId?: string | null;
+  /** no pinned portfolio → pushes follow whichever portfolio is active */
+  followActivePortfolio?: boolean;
+  /** where the next import will land, as resolved by the server */
+  destination?: string | null;
 };
+
+/** Sentinel for the "follow the active portfolio" destination choice. */
+const FOLLOW_ACTIVE = "active";
 
 function SettingsPage() {
   const user = useCurrentUser();
@@ -348,7 +355,8 @@ function MetaTraderTab() {
   const [broker, setBroker] = useState("");
   const [server, setServer] = useState("");
   const [account, setAccount] = useState("");
-  const [portfolioId, setPortfolioId] = useState<string>("");
+  // Follows the active portfolio unless a specific one is pinned.
+  const [portfolioId, setPortfolioId] = useState<string>(FOLLOW_ACTIVE);
   const [copied, setCopied] = useState("");
 
   useEffect(() => {
@@ -360,7 +368,7 @@ function MetaTraderTab() {
           setBroker(d.broker ?? "");
           setServer(d.server ?? "");
           setAccount(d.account ?? "");
-          if (d.portfolioId) setPortfolioId(d.portfolioId);
+          setPortfolioId(d.portfolioId ?? FOLLOW_ACTIVE);
         }
       })
       .catch(() => setMt({ connected: false }))
@@ -372,10 +380,6 @@ function MetaTraderTab() {
       toast.error("شماره حساب الزامی است");
       return;
     }
-    if (!portfolioId) {
-      toast.error("یک پرتفولیوی مقصد انتخاب کن");
-      return;
-    }
     setSaving(true);
     try {
       const data = await post<MtStatus>("mt/connect/", {
@@ -383,6 +387,8 @@ function MetaTraderTab() {
         broker: broker.trim(),
         server: server.trim(),
         account: account.trim(),
+        // "active" asks the server to route by the active portfolio, so a
+        // trader with many portfolios never re-installs the EA.
         portfolioId,
       });
       setMt(data);
@@ -421,6 +427,17 @@ function MetaTraderTab() {
         <p className="mt-1 text-sm text-muted-foreground">
           معاملات بسته‌شده با نصب یک EA (اکسپرت) به‌صورت خودکار همگام می‌شوند.
         </p>
+        {connected && mt?.destination && (
+          <p className="mt-2 text-xs text-muted-foreground">
+            مقصد فعلی واردات:{" "}
+            <span className="font-medium text-foreground">
+              {mt.destination}
+            </span>
+            {mt.followActivePortfolio
+              ? " — همگام با پرتفولیوی فعال"
+              : " — پین‌شده"}
+          </p>
+        )}
 
         <div className="mt-6 grid gap-4 sm:grid-cols-2">
           <div className="space-y-2">
@@ -469,13 +486,22 @@ function MetaTraderTab() {
                 <SelectValue placeholder="انتخاب پرتفولیو" />
               </SelectTrigger>
               <SelectContent>
+                <SelectItem value={FOLLOW_ACTIVE}>
+                  پرتفولیوی فعال (پیش‌فرض)
+                </SelectItem>
                 {portfolios.map((p) => (
                   <SelectItem key={p.id} value={String(p.id)}>
                     {p.name} — {p.broker}
+                    {p.is_active ? " (فعال)" : ""}
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
+            <p className="text-xs text-muted-foreground">
+              {portfolioId === FOLLOW_ACTIVE
+                ? "هر معامله به پرتفولیوی فعال همان لحظه می‌رود؛ با عوض کردن پرتفولیو، واردات هم عوض می‌شود و نیازی به نصب مجدد EA نیست."
+                : "معاملات همیشه در همین پرتفولیو ثبت می‌شوند، حتی اگر پرتفولیوی فعال را عوض کنی."}
+            </p>
             {portfolios.length === 0 && (
               <p className="text-xs text-amber-500">
                 اول از بخش پرتفولیوها یک پرتفولیو بساز.

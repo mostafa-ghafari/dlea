@@ -53,6 +53,49 @@ def _webhook_url(request):
     return f"{scheme}://{host}/api/trades/webhook/"
 
 
+def _destination_portfolio(conn, portfolio_id=None, user=None):
+    """Where a push should land.
+
+    One token belongs to a *user*, not to a portfolio, so the destination is
+    resolved here — at write time — instead of being baked into the EA.
+    That is what lets a single EA installation serve every portfolio a
+    trader owns: the server just has to be asked again after a switch.
+
+    Order: an explicit request > the pinned portfolio on the connection >
+    the user's active portfolio. Returns None when neither exists.
+    """
+    owner = user or conn.user
+    if portfolio_id:
+        pinned = Portfolio.objects.filter(pk=portfolio_id, user=owner).first()
+        if pinned is not None:
+            return pinned
+    if conn.portfolio_id:
+        return conn.portfolio
+    return Portfolio.objects.filter(user=owner, is_active=True).first()
+
+
+def _destination_name(conn, user):
+    """Human-readable name of where pushes currently land (for settings UI)."""
+    portfolio = _destination_portfolio(conn, user=user)
+    return portfolio.name if portfolio else None
+
+
+def _log_webhook_problem(payload):
+    """Persist why a push was rejected so silent losses stay diagnosable.
+
+    The EA only logs a failed HTTP status in the MetaTrader Experts tab; a
+    rejected batch would otherwise leave no trace on this side at all, which
+    is how "MetaTrader shows more trades than Dlea" becomes unexplainable.
+    """
+    try:
+        with open("webhook_debug.log", "a", encoding="utf-8") as fh:
+            fh.write(
+                json.dumps(payload, ensure_ascii=False, default=str) + "\n"
+            )
+    except OSError:
+        pass
+
+
 def _fill_missing_stops(trade, item):
     """Backfill SL/TP (and the R:R derived from them) on a repeat push.
 
@@ -130,13 +173,18 @@ class MtConnectView(APIView):
         platform = body.get("platform", "mt5")
         conn.platform = platform if platform in ("mt4", "mt5") else "mt5"
 
+        # "active" (or empty) asks the server to follow whatever portfolio is
+        # active at push time; an id pins one. Anything else is ignored, and
+        # the previous choice stays.
         portfolio_id = body.get("portfolioId")
-        if portfolio_id:
-            from .models import Portfolio
-
+        if portfolio_id in ("", "active"):
+            conn.portfolio = None
+        elif portfolio_id:
             pf = Portfolio.objects.filter(pk=portfolio_id, user=request.user).first()
             if pf:
                 conn.portfolio = pf
+        elif "portfolioId" in body:
+            conn.portfolio = None
 
         conn.save()
 
@@ -150,6 +198,8 @@ class MtConnectView(APIView):
             "broker": conn.broker,
             "platform": conn.platform,
             "portfolioId": str(conn.portfolio_id) if conn.portfolio_id else None,
+            "followActivePortfolio": conn.portfolio_id is None,
+            "destination": _destination_name(conn, request.user),
         })
 
 
@@ -172,6 +222,8 @@ class MtStatusView(APIView):
             "broker": conn.broker,
             "platform": conn.platform,
             "portfolioId": str(conn.portfolio_id) if conn.portfolio_id else None,
+            "followActivePortfolio": conn.portfolio_id is None,
+            "destination": _destination_name(conn, request.user),
         })
 
 
@@ -200,8 +252,16 @@ def trades_webhook(request):
     if not isinstance(items, list) or not items:
         return JsonResponse({"error": "لیست معاملات خالی است"}, status=400)
 
-    portfolio = conn.portfolio
+    portfolio = _destination_portfolio(conn, body.get("portfolio_id"))
     if not portfolio:
+        # Happens when the destination portfolio was deleted (the FK is
+        # SET_NULL) and the trader has no active portfolio either, after
+        # which *every* push fails until one exists.
+        _log_webhook_problem({
+            "error": "no destination portfolio",
+            "account": conn.account,
+            "received": len(items),
+        })
         return JsonResponse(
             {"error": "برای این اتصال پرتفولیوی مقصد مشخص نشده است — در تنظیمات انتخاب کنید"},
             status=400,
@@ -251,11 +311,7 @@ def trades_webhook(request):
     if errors:
         payload["errors"] = errors[:10]
         # Debug: persist the exact validation errors so they can be diagnosed.
-        try:
-            with open("webhook_debug.log", "a", encoding="utf-8") as fh:
-                fh.write(json.dumps({"errors": errors[:3], "sample": items[:1]}, ensure_ascii=False, default=str) + "\n")
-        except OSError:
-            pass
+        _log_webhook_problem({"errors": errors[:3], "sample": items[:1]})
     if errors and created == 0:
         return JsonResponse(payload, status=400)
     return JsonResponse(payload, status=201 if created else 200)

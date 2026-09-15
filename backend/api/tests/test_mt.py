@@ -1,6 +1,7 @@
 """Tests for the MetaTrader integration: connect, status, and EA webhook."""
 
 import json
+from pathlib import Path
 
 from rest_framework import status
 
@@ -57,6 +58,35 @@ class MtConnectTests(BaseTestCase):
         self.assertEqual(r.status_code, 200)
         self.assertIsNone(r.data["portfolioId"])
 
+    def test_connect_without_portfolio_follows_the_active_one(self):
+        user = self.auth(self.make_user(username="trader"))
+        portfolio = self.make_portfolio(user=user, name="فعال‌من")
+
+        r = self.client.post("/api/mt/connect/", {"account": "1"}, format="json")
+
+        self.assertIsNone(r.data["portfolioId"])
+        self.assertTrue(r.data["followActivePortfolio"])
+        self.assertEqual(r.data["destination"], portfolio.name)
+
+    def test_connect_can_switch_back_to_following_the_active_one(self):
+        user = self.auth(self.make_user(username="trader"))
+        portfolio = self.make_portfolio(user=user)
+        self.client.post(
+            "/api/mt/connect/",
+            {"account": "1", "portfolioId": portfolio.pk},
+            format="json",
+        )
+        self.assertIsNotNone(MTConnection.objects.get(user=user).portfolio_id)
+
+        r = self.client.post(
+            "/api/mt/connect/",
+            {"account": "1", "portfolioId": "active"},
+            format="json",
+        )
+
+        self.assertIsNone(r.data["portfolioId"])
+        self.assertIsNone(MTConnection.objects.get(user=user).portfolio_id)
+
     def test_status_before_connect(self):
         user = self.auth(self.make_user(username="trader"))
         r = self.client.get("/api/mt/status/")
@@ -94,11 +124,33 @@ class WebhookTests(BaseTestCase):
         r = self._post({"token": "tok123", "trades": []})
         self.assertEqual(r.status_code, 400)
 
-    def test_missing_portfolio_returns_400(self):
+    def test_no_destination_returns_400(self):
+        """Neither pinned nor active: nothing to import into."""
+        self.portfolio.is_active = False
+        self.portfolio.save(update_fields=["is_active"])
         MTConnection.objects.create(user=self.user, account="x", token="tok-no-pf")
         r = self._post({"token": "tok-no-pf", "trades": [{"ticket": "1"}]})
         self.assertEqual(r.status_code, 400)
         self.assertIn("پرتفولیوی", r.json()["error"])
+
+    def test_missing_portfolio_is_recorded_server_side(self):
+        """A dropped batch must leave a trace, or the loss is unexplainable."""
+        self.portfolio.is_active = False
+        self.portfolio.save(update_fields=["is_active"])
+        MTConnection.objects.create(user=self.user, account="x", token="tok-log")
+        log_path = Path("webhook_debug.log")
+        before = log_path.read_text(encoding="utf-8") if log_path.exists() else ""
+        try:
+            r = self._post({"token": "tok-log", "trades": [{"ticket": "1"}]})
+            self.assertEqual(r.status_code, 400)
+            written = log_path.read_text(encoding="utf-8") if log_path.exists() else ""
+            self.assertGreater(len(written), len(before))
+            self.assertIn("no destination portfolio", written)
+        finally:
+            if before:
+                log_path.write_text(before, encoding="utf-8")
+            elif log_path.exists():
+                log_path.unlink()
 
     def test_valid_trade_created_with_normalized_datetime(self):
         payload = {
@@ -196,6 +248,81 @@ class WebhookTests(BaseTestCase):
         self.assertEqual(r2.json()["skipped"], 1)
         # Still only one record
         self.assertEqual(Trade.objects.filter(ticket="999").count(), 1)
+
+    def test_unpinned_connection_follows_the_active_portfolio(self):
+        """One token, many portfolios: the server routes by what is active."""
+        second = self.make_portfolio(user=self.user, name="دوم", is_active=False)
+        self.portfolio.is_active = False
+        self.portfolio.save(update_fields=["is_active"])
+        second.is_active = True
+        second.save(update_fields=["is_active"])
+        conn = MTConnection.objects.get(token="tok123")
+        conn.portfolio = None
+        conn.save(update_fields=["portfolio"])
+
+        r = self._post({"token": "tok123", "trades": [self._trade_item()]})
+
+        self.assertEqual(r.json()["created"], 1)
+        self.assertEqual(Trade.objects.get(ticket="999").portfolio_id, second.pk)
+
+    def test_switching_the_active_portfolio_redirects_later_pushes(self):
+        """The EA is never reconfigured when the trader switches portfolio."""
+        second = self.make_portfolio(user=self.user, name="دوم", is_active=False)
+        conn = MTConnection.objects.get(token="tok123")
+        conn.portfolio = None
+        conn.save(update_fields=["portfolio"])
+
+        self._post({"token": "tok123", "trades": [self._trade_item()]})
+        self.portfolio.is_active = False
+        self.portfolio.save(update_fields=["is_active"])
+        second.is_active = True
+        second.save(update_fields=["is_active"])
+        r = self._post(
+            {"token": "tok123", "trades": [dict(self._trade_item(), ticket="1000")]}
+        )
+
+        self.assertEqual(r.json()["created"], 1)
+        self.assertEqual(Trade.objects.get(ticket="999").portfolio_id, self.portfolio.pk)
+        self.assertEqual(Trade.objects.get(ticket="1000").portfolio_id, second.pk)
+
+    def test_pinned_connection_ignores_the_active_portfolio(self):
+        second = self.make_portfolio(user=self.user, name="دوم", is_active=False)
+        second.is_active = True
+        second.save(update_fields=["is_active"])
+
+        r = self._post({"token": "tok123", "trades": [self._trade_item()]})
+
+        self.assertEqual(r.json()["created"], 1)
+        # token "tok123" is pinned to self.portfolio in setUp
+        self.assertEqual(Trade.objects.get(ticket="999").portfolio_id, self.portfolio.pk)
+
+    def test_payload_can_override_the_destination(self):
+        second = self.make_portfolio(user=self.user, name="دوم", is_active=False)
+
+        r = self._post(
+            {
+                "token": "tok123",
+                "portfolio_id": second.pk,
+                "trades": [self._trade_item()],
+            }
+        )
+
+        self.assertEqual(r.json()["created"], 1)
+        self.assertEqual(Trade.objects.get(ticket="999").portfolio_id, second.pk)
+
+    def test_payload_cannot_target_a_foreign_portfolio(self):
+        foreign = self.make_portfolio(user=self.make_user(username="other"), name="بیگانه")
+
+        r = self._post(
+            {
+                "token": "tok123",
+                "portfolio_id": foreign.pk,
+                "trades": [self._trade_item()],
+            }
+        )
+
+        self.assertEqual(r.json()["created"], 1)
+        self.assertEqual(Trade.objects.get(ticket="999").portfolio_id, self.portfolio.pk)
 
     def _trade_item(self):
         return {
