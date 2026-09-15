@@ -114,6 +114,8 @@ if [ -d "$RUNNING_DIR/backend" ]; then
             fi
         done <<< "$(find "$RUNNING_DIR/backend/api" -name '*.py' -type f)"
     fi
+    REQS_CHANGED=0
+    cmp -s "$RELEASE_DIR/backend/requirements.txt" "$RUNNING_DIR/backend/requirements.txt" || REQS_CHANGED=1
     cp -f "$RELEASE_DIR/backend/manage.py" "$RUNNING_DIR/backend/manage.py"
     cp -f "$RELEASE_DIR/backend/requirements.txt" "$RUNNING_DIR/backend/requirements.txt"
     # Never clobber the running environment's own state (backend/.env, media/,
@@ -136,6 +138,21 @@ fi
 # Migrate before stopping the old process, so a broken migration leaves the
 # currently working backend up instead of taking the site down.
 cd "$RUNNING_DIR/backend"
+
+# The venv that imports the code is the running one, not the release's. If
+# requirements.txt changed, install the same bundle here from the wheels that
+# came with the release (the server has no PyPI), so a deploy cannot leave the
+# app importing a dependency that only exists in the release. Still before the
+# restart: if this fails, the old process keeps serving.
+if [ "${REQS_CHANGED:-0}" = "1" ]; then
+    echo "requirements.txt changed — installing into the running venv from the release wheels..."
+    if [ -d "$RELEASE_DIR/pip-wheels" ]; then
+        .venv/bin/pip install --no-index --find-links "$RELEASE_DIR/pip-wheels" -q -r requirements.txt
+    else
+        .venv/bin/pip install -q -r requirements.txt
+    fi
+fi
+
 echo "Running migrations in the running directory..."
 .venv/bin/python manage.py migrate --noinput
 
@@ -243,11 +260,20 @@ if [ "$FRONTEND_OK" != "200" ]; then
 fi
 if [ "$FAILED" = "1" ]; then
     echo "" >&2
-    echo "!!! The deploy is NOT good." >&2
-    echo "--- last lines of /tmp/gunicorn.log ---" >&2
-    tail -30 /tmp/gunicorn.log >&2 || true
-    echo "--- last lines of /tmp/frontend.log ---" >&2
-    tail -20 /tmp/frontend.log >&2 || true
+    echo "!!! The deploy is NOT good — see DEPLOYMENT-RUNBOOK.md section 7." >&2
+    # Show the log of whichever process actually owns the app: PM2 on this host,
+    # a nohup'd gunicorn only in the fallback path.
+    if "$PM2_BIN" describe dlea-api >/dev/null 2>&1; then
+        echo "--- pm2 logs dlea-api (last 30 lines) ---" >&2
+        "$PM2_BIN" logs dlea-api --lines 30 --nostream >&2 || true
+    elif [ -f /tmp/gunicorn.log ]; then
+        echo "--- last lines of /tmp/gunicorn.log ---" >&2
+        tail -30 /tmp/gunicorn.log >&2 || true
+    fi
+    if [ -f /tmp/frontend.log ]; then
+        echo "--- last lines of /tmp/frontend.log ---" >&2
+        tail -20 /tmp/frontend.log >&2 || true
+    fi
     exit 1
 fi
 
