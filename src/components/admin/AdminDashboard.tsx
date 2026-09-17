@@ -98,7 +98,7 @@ export function AdminDashboard() {
           <div className="mb-6 flex items-center justify-between">
             <div>
               <h3 className="text-lg font-bold">درآمد ماهانه</h3>
-              <p className="mt-1 text-sm text-muted-foreground">میلیون تومان</p>
+              <p className="mt-1 text-sm text-muted-foreground">هزار تومان</p>
             </div>
             <div className="rounded-full bg-amber-500/10 px-3 py-1 text-xs font-medium text-amber-600 dark:text-amber-400">
               +۲۲٪

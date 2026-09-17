@@ -524,13 +524,25 @@ class AdminChartsView(APIView):
                 next_j_year = j_year + 1 if j_month == 12 else j_year
                 g_end = _jd.date(next_j_year, next_j_month, 1).togregorian()
             month_payments = Payment.objects.filter(date__gte=g_start, date__lt=g_end, status="\u0645\u0648\u0641\u0642")
-            total = 0
+            total_rial = 0
             for p in month_payments:
-                try:
-                    total += int(str(p.amount).replace(",", "").replace(".", "").strip())
-                except (ValueError, AttributeError):
-                    pass
-            revenue.append({"month": _ju.month_name_fa(g_start), "revenue": total // 1000000})
+                if p.amount_rial:
+                    total_rial += p.amount_rial
+                else:
+                    try:
+                        # amount is a Persian string like "۲۰۰,۰۰۰ تومان"
+                        raw = str(p.amount).replace("تومان", "").strip()
+                        raw = raw.translate(str.maketrans("۰۱۲۳۴۵۶۷۸۹٬،.", "0123456789,,."))
+                        raw = raw.replace(",", "").replace(".", "").strip()
+                        # Old records store toman; new ones store rial via amount_rial.
+                        # If the parsed number looks like toman (< 10M), treat as toman
+                        # and convert to rial so the divisor below works uniformly.
+                        parsed = int(raw)
+                        total_rial += parsed * 10 if parsed < 10_000_000 else parsed
+                    except (ValueError, AttributeError):
+                        pass
+            # Rial → thousand toman for chart display
+            revenue.append({"month": _ju.month_name_fa(g_start), "revenue": total_rial // 10_000})
 
         # 3. Plan distribution (from UserProfile)
         plan_counts = Counter(UserProfile.objects.values_list("plan", flat=True))
