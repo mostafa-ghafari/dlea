@@ -19,6 +19,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { fullName, ONBOARDING_KEY, useCurrentUser } from "@/lib/app-state";
 import { useProfile, useRole, useSubscription, ROLE_NAMES } from "@/lib/api";
+import { Num } from "@/components/Num";
 
 export function UserBlock({ compact = false }: { compact?: boolean }) {
   const user = useCurrentUser();
@@ -89,7 +90,7 @@ export function UserBlock({ compact = false }: { compact?: boolean }) {
                   variant="outline"
                   className="h-4 border-border bg-secondary/60 px-1.5 text-[10px] text-muted-foreground tabular"
                 >
-                  {daysLeft} روز
+                  <Num>{daysLeft}</Num> روز
                 </Badge>
               )}
             </div>
@@ -113,7 +114,7 @@ export function UserBlock({ compact = false }: { compact?: boolean }) {
                   اشتراک {subscription?.plan ?? "—"}
                 </span>
                 <span className="font-medium text-primary tabular">
-                  {daysLeft} روز باقی‌مانده
+                  <Num>{daysLeft}</Num> روز باقی‌مانده
                 </span>
               </div>
               <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-secondary">
