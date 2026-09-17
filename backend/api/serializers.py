@@ -378,12 +378,16 @@ class PlanSerializer(serializers.ModelSerializer):
     aiRequestsLimit = serializers.IntegerField(source="ai_requests_limit")
     aiRequestsPeriod = serializers.CharField(source="ai_requests_period")
     maxImagesPerEntry = serializers.IntegerField(source="max_images_per_entry")
+    users = serializers.SerializerMethodField()
 
     class Meta:
         model = Plan
         fields = ["id", "name", "price", "unit", "tagline", "portfolioLimit", "features", "cta", "highlight", "sellable", "users", "maxPortfolios", "maxTradesPerMonth", "planFeatures", "aiRequestsLimit", "aiRequestsPeriod", "maxImagesPerEntry"]
-        # The admin panel edits prices, limits and quotas — never the user count.
-        read_only_fields = ["users"]
+
+    def get_users(self, obj):
+        """Count real users from UserProfile, not the stale static field."""
+        from api.models import UserProfile
+        return UserProfile.objects.filter(plan=obj.name).count()
 
 
 class SubscriptionSerializer(serializers.ModelSerializer):
