@@ -9,6 +9,7 @@ from django.utils import timezone
 from faker import Faker
 
 from api.jutils import month_label, week_label
+from api.plan_defaults import features_for
 from api.models import (
     Achievement,
     AchievementHistory,
@@ -323,34 +324,36 @@ def seed_achievements():
 
 
 def seed_plans():
+    # The *gating* lists come from `plan_defaults` so a fresh database and an
+    # existing one repaired by `sync_plans` cannot end up gating differently.
     plans = [
         dict(slug="free", name="رایگان", price="۰", unit="تومان", tagline="برای شروع ژورنال‌نویسی",
              portfolio_limit="۱ پرتفولیو", features=["۱ پرتفولیو", "۵۰ معامله در ماه", "ژورنال ساده", "آمار پایه"],
              cta="شروع رایگان", highlight=False, sellable=True, users=764,
              max_portfolios=1, max_trades_per_month=50,
              ai_requests_limit=1, ai_requests_period="month", max_images_per_entry=2,
-             plan_features=["portfolios", "trades", "journal", "calendar", "goals", "achievements", "news", "support", "settings", "ai-coach", "risk"]),
+             plan_features=features_for("free")),
         dict(slug="pro", name="Pro", price="۲۰۰,۰۰۰", unit="تومان / ماه", tagline="برای معاملهگران فعال",
              portfolio_limit="پرتفولیو نامحدود",
              features=["پرتفولیو نامحدود", "معاملات نامحدود", "اتصال MetaTrader", "تحلیل هوش مصنوعی", "گزارشهای حرفهای", "نمودارهای کامل"],
              cta="انتخاب Pro", highlight=True, sellable=True, users=302,
              max_portfolios=-1, max_trades_per_month=-1,
              ai_requests_limit=3, ai_requests_period="week", max_images_per_entry=10,
-             plan_features=["portfolios", "trades", "journal", "calendar", "goals", "achievements", "news", "support", "settings", "ai-coach", "risk", "mt-connection", "reports"]),
+             plan_features=features_for("pro")),
         dict(slug="promax", name="Pro Max", price="۵۰۰,۰۰۰", unit="تومان / ماه", tagline="مربی شخصی معاملهگری",
              portfolio_limit="پرتفولیو نامحدود",
              features=["پرتفولیو نامحدود", "تمامی امکانات Pro", "AI پیشرفته + مربی شخصی", "تحلیل روانشناسی", "گزارشهای اختصاصی", "دسترسی زودهنگام به قابلیتهای جدید"],
              cta="انتخاب Pro Max", highlight=False, sellable=True, users=180,
              max_portfolios=-1, max_trades_per_month=-1,
              ai_requests_limit=3, ai_requests_period="day", max_images_per_entry=-1,
-             plan_features=["portfolios", "trades", "journal", "calendar", "goals", "achievements", "news", "support", "settings", "ai-coach", "risk", "mt-connection", "reports", "psychology"]),
+             plan_features=features_for("promax")),
         dict(slug="vip", name="VIP", price="—", unit="غیرقابل فروش", tagline="فقط با تخصیص دستی مدیر",
              portfolio_limit="پرتفولیو نامحدود",
              features=["پرتفولیو نامحدود", "تمامی امکانات Pro Max", "پشتیبانی اختصاصی"],
              cta="تخصیص دستی", highlight=False, sellable=False, users=12,
              max_portfolios=-1, max_trades_per_month=-1,
              ai_requests_limit=-1, ai_requests_period="month", max_images_per_entry=-1,
-             plan_features=["portfolios", "trades", "journal", "calendar", "goals", "achievements", "news", "support", "settings", "ai-coach", "risk", "mt-connection", "reports", "psychology"]),
+             plan_features=features_for("vip")),
     ]
     for p in plans:
         Plan.objects.create(**p)

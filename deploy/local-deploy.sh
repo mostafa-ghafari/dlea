@@ -27,9 +27,26 @@ TMP="${TMPDIR:-/tmp}"
 ARCHIVE="$TMP/dlea-deploy.tar.gz"
 WHEELS="$REPO_DIR/pip-wheels"
 
-PYTHON="$(command -v python3 || command -v python || true)"
+# `command -v python3` alone is not enough on Git Bash for Windows: python3
+# there is the Microsoft Store's AppInstallerPythonRedirector, which exists,
+# resolves, and then exits 49 with "Python was not found" — the deploy died in
+# step 2 without ever uploading anything. Probe each candidate instead of
+# trusting its name (`python` is the real interpreter on that setup).
+find_python() {
+    local candidate
+    for candidate in python3 python py; do
+        if command -v "$candidate" >/dev/null 2>&1 \
+            && "$candidate" -c "" >/dev/null 2>&1; then
+            command -v "$candidate"
+            return 0
+        fi
+    done
+    return 1
+}
+
+PYTHON="$(find_python || true)"
 if [ -z "$PYTHON" ]; then
-    echo "python3 is required to download the server's wheels" >&2
+    echo "A working python3 is required to download the server's wheels" >&2
     exit 1
 fi
 

@@ -2,7 +2,13 @@ import { useState, useEffect } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { fetchPlans, updatePlan, invalidateCache, type Plan } from "@/lib/api";
+import {
+  fetchPlans,
+  updatePlan,
+  invalidateCache,
+  type Plan,
+  type PlanFeature,
+} from "@/lib/api";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
@@ -37,10 +43,35 @@ type PlanRow = {
   maxImagesPerEntry: number;
   sellable: boolean;
   features: string;
+  /** Raw gating keys from the API — kept as strings so a key this panel does
+   *  not know about survives a save instead of being silently dropped. */
+  planFeatures: string[];
 };
 
 /** -1 means "no cap" everywhere in the plan limits. */
 const UNLIMITED = -1;
+
+/**
+ * The gating keys the frontend checks. Nothing in the UI used to write this
+ * list, so a plan saved from here kept whatever the database shipped with — an
+ * empty list, which locks every page for that plan's users.
+ */
+const FEATURE_LABELS: { key: PlanFeature; label: string }[] = [
+  { key: "portfolios", label: "پرتفولیوها" },
+  { key: "trades", label: "معاملات" },
+  { key: "journal", label: "ژورنال" },
+  { key: "calendar", label: "تقویم معاملاتی" },
+  { key: "goals", label: "اهداف" },
+  { key: "achievements", label: "نشان‌ها" },
+  { key: "news", label: "اخبار و اطلاعیه‌ها" },
+  { key: "support", label: "پشتیبانی" },
+  { key: "settings", label: "تنظیمات" },
+  { key: "ai-coach", label: "مربی هوشمند" },
+  { key: "risk", label: "مدیریت ریسک" },
+  { key: "mt-connection", label: "اتصال MetaTrader" },
+  { key: "reports", label: "گزارش‌های پیشرفته" },
+  { key: "psychology", label: "تحلیل روانشناسی" },
+];
 
 const PERIOD_LABELS: Record<PlanRow["aiRequestsPeriod"], string> = {
   day: "روز",
@@ -69,6 +100,7 @@ function planToRow(p: Plan): PlanRow {
     maxImagesPerEntry: p.maxImagesPerEntry ?? UNLIMITED,
     sellable: p.sellable,
     features: p.features.join("، "),
+    planFeatures: p.planFeatures ?? [],
   };
 }
 
@@ -103,6 +135,8 @@ export function PlansManager() {
         aiRequestsPeriod: editing.aiRequestsPeriod,
         maxImagesPerEntry: editing.maxImagesPerEntry,
         sellable: editing.sellable,
+        // The gating list: what actually unlocks the sidebar for this plan.
+        planFeatures: editing.planFeatures,
         // The admin types the list with Persian separators; the API wants a list.
         features: editing.features
           .split(/[،,]/)
@@ -158,6 +192,16 @@ export function PlansManager() {
                 تصویر در هر معامله: {capText(p.maxImagesPerEntry, "تصویر")}
               </div>
               <div>{p.features}</div>
+              <div
+                className={
+                  p.planFeatures.length === 0 ? "text-destructive" : undefined
+                }
+              >
+                بخش‌های باز:{" "}
+                {p.planFeatures.length === 0
+                  ? "هیچ‌کدام — همه‌چیز قفل است"
+                  : `${p.planFeatures.length} از ${FEATURE_LABELS.length}`}
+              </div>
             </div>
             <div className="mt-3 text-sm text-muted-foreground tabular">
               {p.users} کاربر فعال
@@ -322,6 +366,57 @@ export function PlansManager() {
                     }
                     className="bg-secondary/60"
                   />
+                </div>
+                <div className="space-y-3 rounded-lg bg-secondary/40 p-3">
+                  <div>
+                    <Label>دسترسی به بخش‌ها (قفل منو)</Label>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      هر بخشی که خاموش باشد برای کاربران این پلن قفل می‌شود. اگر
+                      هیچ‌کدام روشن نباشد کل اپ قفل است — برای پلن‌هایی که
+                      نمی‌شناسی همه را روشن بگذار.
+                    </p>
+                  </div>
+                  {editing.planFeatures.length === 0 && (
+                    <p className="text-xs text-destructive">
+                      هیچ بخشی فعال نیست: کاربران این پلن با هر صفحه‌ای جز
+                      داشبورد و خرید اشتراک روبه‌رو می‌شوند با پیام «این بخش قفل
+                      است».
+                    </p>
+                  )}
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    {FEATURE_LABELS.map(({ key, label }) => (
+                      <label
+                        key={key}
+                        className="flex items-center justify-between gap-2 rounded-md bg-background/60 px-3 py-2 text-sm"
+                      >
+                        <span>{label}</span>
+                        <Switch
+                          checked={editing.planFeatures.includes(key)}
+                          onCheckedChange={(v) =>
+                            setEditing({
+                              ...editing,
+                              planFeatures: v
+                                ? [...editing.planFeatures, key]
+                                : editing.planFeatures.filter((f) => f !== key),
+                            })
+                          }
+                        />
+                      </label>
+                    ))}
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() =>
+                      setEditing({
+                        ...editing,
+                        planFeatures: FEATURE_LABELS.map((f) => f.key),
+                      })
+                    }
+                  >
+                    فعال‌کردن همه‌ی بخش‌ها
+                  </Button>
                 </div>
                 <div className="flex items-center justify-between rounded-lg bg-secondary/40 p-3">
                   <div className="text-sm">قابل فروش به کاربران</div>

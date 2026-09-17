@@ -1083,6 +1083,54 @@ function planKey(value: string | null | undefined): string {
   return (value ?? "").toLowerCase().replace(/[\s\u200c\u200f-]+/g, "");
 }
 
+/** "Pro Max" -> "promax": the slug form the API stores. */
+function planSlug(value: string | null | undefined): string {
+  return (value ?? "")
+    .toLowerCase()
+    .replace(/\s+/g, "")
+    .replace(/[^a-z0-9-]/g, "");
+}
+
+/** The catalogue entry for `planName`: slug first, display name second. */
+function matchPlan(
+  plans: PlanLimits[],
+  planName: string | null | undefined,
+): PlanLimits | undefined {
+  const slug = planSlug(planName);
+  return (
+    plans.find((p) => p.slug === slug) ??
+    plans.find((p) => planKey(p.name) === planKey(planName))
+  );
+}
+
+/**
+ * The limits that govern `planName`, given the catalogue the API returned.
+ *
+ * Pure and exported on purpose: getting this wrong does not show a wrong
+ * number, it locks every page of the app.
+ *
+ * A plan whose `features` list is empty counts as *not configured*, never as
+ * "nothing allowed". The column shipped with an empty default and nothing
+ * filled it, so an empty list locked every gated page the moment a purchase
+ * put a real plan name on the subscription; three tiers of paid users then had
+ * a sidebar full of padlocks. Until an admin saves the list, the built-in tier
+ * defaults keep the app usable.
+ */
+export function resolvePlanLimits(
+  plans: PlanLimits[] | null | undefined,
+  planName: string | null | undefined,
+): PlanLimits {
+  const matched =
+    plans && plans.length > 0 ? matchPlan(plans, planName) : undefined;
+  if (matched && matched.features.length > 0) {
+    return matched;
+  }
+  // Plans API unavailable, unknown plan, or a plan nobody configured yet. The
+  // matched slug decides the tier — a Persian display name has no Latin slug.
+  const slug = matched?.slug ?? planSlug(planName);
+  return slug === "free" || !planName ? FREE_LIMITS : PAID_LIMITS;
+}
+
 /**
  * Return the limits for the current subscription.
  *
@@ -1091,21 +1139,8 @@ function planKey(value: string | null | undefined): string {
  */
 export function usePlanLimits(): PlanLimits {
   const sub = useSubscription();
-  const raw = sub?.plan ?? "";
-  const slug = raw
-    .toLowerCase()
-    .replace(/\s+/g, "")
-    .replace(/[^a-z0-9-]/g, "");
   const plans = useApi(fetchPlanLimits).data;
-  if (plans && plans.length > 0) {
-    return (
-      plans.find((p) => p.slug === slug) ??
-      plans.find((p) => planKey(p.name) === planKey(raw)) ??
-      FREE_LIMITS
-    );
-  }
-  // Plans API unavailable — use subscription to decide fallback
-  return slug === "free" || !raw ? FREE_LIMITS : PAID_LIMITS;
+  return resolvePlanLimits(plans, sub?.plan);
 }
 
 /* ------------------------------------------------------------------ */

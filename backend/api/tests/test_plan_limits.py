@@ -1,8 +1,10 @@
 """Tests for admin plan editing, the AI quota and the per-plan image cap."""
 
 from datetime import timedelta
+from io import StringIO
 from unittest.mock import patch
 
+from django.core.management import call_command
 from django.utils import timezone
 
 from api.models import AiApiCall, JournalEntry, Plan, Trade
@@ -273,3 +275,73 @@ class ImageCapTests(BaseTestCase):
         self.assertEqual(r.status_code, 400)
         self.assertIn("حداکثر 2 تصویر", str(r.data))
         self.assertEqual(JournalEntry.objects.count(), 0)
+
+
+class PlanFeatureBackfillTests(BaseTestCase):
+    """A plan without a feature list locks every page, so it must not persist.
+
+    Production answered `/api/plans/limits/` with `features: []` for every
+    plan — migration 0015 added the column with an empty default and nothing
+    backfilled it — and the first purchase, the step that puts a plan name on
+    the subscription, turned the whole sidebar into padlocks.
+    """
+
+    def _sync(self, *args):
+        out = StringIO()
+        call_command("sync_plans", *args, stdout=out)
+        return out.getvalue()
+
+    def test_fills_an_empty_feature_list(self):
+        plan = self.make_plan(slug="pro", name="Pro", plan_features=[], features=[])
+        output = self._sync()
+        plan.refresh_from_db()
+        self.assertIn("portfolios", plan.plan_features)
+        self.assertIn("mt-connection", plan.plan_features)
+        self.assertTrue(plan.features)
+        self.assertIn("pro", output)
+
+    def test_keeps_a_list_an_admin_curated(self):
+        plan = self.make_plan(slug="pro", name="Pro", plan_features=["journal"])
+        self._sync()
+        plan.refresh_from_db()
+        self.assertEqual(plan.plan_features, ["journal"])
+
+    def test_force_overwrites_a_curated_list(self):
+        plan = self.make_plan(slug="pro", name="Pro", plan_features=["journal"])
+        self._sync("--force")
+        plan.refresh_from_db()
+        self.assertIn("portfolios", plan.plan_features)
+
+    def test_leaves_a_plan_it_has_no_defaults_for(self):
+        plan = self.make_plan(slug="legacy", name="Legacy", plan_features=[])
+        output = self._sync()
+        plan.refresh_from_db()
+        self.assertEqual(plan.plan_features, [])
+        self.assertIn("legacy", output)
+
+    def test_every_shipped_plan_keeps_the_basics(self):
+        """No tier may be defined as "nothing allowed"."""
+        from api.plan_defaults import PLAN_FEATURES
+
+        for slug, features in PLAN_FEATURES.items():
+            with self.subTest(slug=slug):
+                for gate in ("portfolios", "trades", "journal", "settings"):
+                    self.assertIn(gate, features)
+
+    def test_admin_can_edit_the_gating_list(self):
+        plan = self.make_plan(slug="pro", name="Pro", plan_features=["journal"])
+        self.auth_staff()
+        r = self.client.patch(
+            "/api/plans/pro/", {"planFeatures": ["journal", "risk"]}, format="json"
+        )
+        self.assertEqual(r.status_code, 200)
+        plan.refresh_from_db()
+        self.assertEqual(plan.plan_features, ["journal", "risk"])
+
+    def test_limits_endpoint_reports_the_gating_list(self):
+        self.make_plan(
+            slug="pro", name="Pro", plan_features=["portfolios", "journal"]
+        )
+        items = self.get_list("/api/plans/limits/")
+        pro = next(p for p in items if p["slug"] == "pro")
+        self.assertEqual(pro["features"], ["portfolios", "journal"])

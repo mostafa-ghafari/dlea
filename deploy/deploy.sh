@@ -220,8 +220,29 @@ fi
 sleep 2
 
 echo "Checking the API actually answers..."
-BACKEND_OK=$(curl -s -o /dev/null -w "%{http_code}" "http://127.0.0.1:$BACKEND_PORT/api/plans/" 2>/dev/null || echo "000")
-FRONTEND_OK=$(curl -s -o /dev/null -w "%{http_code}" "http://127.0.0.1:3000/" 2>/dev/null || echo "000")
+# PM2 reports `online` before a Node process has necessarily finished loading the
+# SSR bundle and opened its socket. Retry local checks instead of turning that
+# short startup window into a failed deployment. Keep curl's single status code
+# too: appending `|| echo 000` to curl's output produced confusing values such as
+# `000000` when the connection was refused.
+http_status() {
+    curl -s -o /dev/null -w "%{http_code}" --connect-timeout 2 --max-time 10 "$1" 2>/dev/null || true
+}
+wait_for_http_200() {
+    local url="$1" status="000"
+    for _ in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do
+        status=$(http_status "$url")
+        if [ "$status" = "200" ]; then
+            echo "$status"
+            return 0
+        fi
+        sleep 2
+    done
+    echo "$status"
+    return 1
+}
+BACKEND_OK=$(wait_for_http_200 "http://127.0.0.1:$BACKEND_PORT/api/plans/") || true
+FRONTEND_OK=$(wait_for_http_200 "http://127.0.0.1:3000/") || true
 # 127.0.0.1:$BACKEND_PORT can be perfectly healthy while the public API is dead
 # (wrong port, dead proxy target), so also walk the path a browser walks:
 # through nginx with the real Host header. Probing https://$SITE_HOST against
@@ -315,6 +336,10 @@ if [ "$FAILED" = "1" ]; then
     elif [ -f /tmp/gunicorn.log ]; then
         echo "--- last lines of /tmp/gunicorn.log ---" >&2
         tail -30 /tmp/gunicorn.log >&2 || true
+    fi
+    if [ "$FRONTEND_OK" != "200" ] && "$PM2_BIN" describe dlea >/dev/null 2>&1; then
+        echo "--- pm2 logs dlea (last 30 lines) ---" >&2
+        "$PM2_BIN" logs dlea --lines 30 --nostream >&2 || true
     fi
     if [ -f /tmp/frontend.log ]; then
         echo "--- last lines of /tmp/frontend.log ---" >&2
