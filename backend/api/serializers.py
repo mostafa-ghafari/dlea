@@ -387,7 +387,11 @@ class PlanSerializer(serializers.ModelSerializer):
     def get_users(self, obj):
         """Count real users from UserProfile, not the stale static field."""
         from api.models import UserProfile
-        return UserProfile.objects.filter(plan=obj.name).count()
+        # UserProfile.plan may store the display name (e.g. "\u0631\u0627\u06cc\u06af\u0627\u0646")
+        # while Plan.name is "Basic". Match on either.
+        return UserProfile.objects.filter(
+            Q(plan=obj.name) | Q(plan=obj.slug)
+        ).count()
 
 
 class SubscriptionSerializer(serializers.ModelSerializer):
