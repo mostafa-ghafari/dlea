@@ -6,6 +6,7 @@ import string
 
 from django.contrib.auth import authenticate, get_user_model
 from django.contrib.auth.models import User
+from django.core.cache import cache
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
@@ -13,8 +14,8 @@ from rest_framework_simplejwt.tokens import RefreshToken
 
 User = get_user_model()
 
-# In-memory OTP store (replace with Redis/DB in production)
-_otp_store: dict[str, dict] = {}
+# OTP timeout: 5 minutes (in seconds)
+OTP_TTL = 300
 
 
 def _generate_otp(length: int = 6) -> str:
@@ -40,7 +41,7 @@ def send_otp(request):
 
     email = body["email"].strip().lower()
     otp = _generate_otp()
-    _otp_store[email] = {"otp": otp, "data": body}
+    cache.set(f"otp:{email}", {"otp": otp, "data": body}, OTP_TTL)
 
     # In production: send email via SMTP
     # In dev: prints to console (EMAIL_BACKEND=console)
@@ -84,7 +85,7 @@ def verify_otp_register(request):
     if not all([email, otp, first_name, last_name, password]):
         return JsonResponse({"error": "همه فیلدها الزامی هستند"}, status=400)
 
-    stored = _otp_store.get(email)
+    stored = cache.get(f"otp:{email}")
     if not stored or stored["otp"] != otp:
         return JsonResponse({"error": "کد تأیید نادرست است"}, status=400)
 
@@ -110,7 +111,7 @@ def verify_otp_register(request):
     )
 
     # Clean up OTP
-    _otp_store.pop(email, None)
+    cache.delete(f"otp:{email}")
 
     # Generate JWT tokens
     refresh = RefreshToken.for_user(user)
@@ -194,7 +195,7 @@ def password_reset_request(request):
         return JsonResponse({"message": f"کد تأیید به {email} ارسال شد"})
 
     otp = _generate_otp()
-    _otp_store[email] = {"otp": otp, "type": "password_reset"}
+    cache.set(f"otp:{email}", {"otp": otp, "type": "password_reset"}, OTP_TTL)
 
     try:
         from django.core.mail import send_mail
@@ -233,7 +234,7 @@ def password_reset_verify(request):
     if not email or not code:
         return JsonResponse({"error": "ایمیل و کد تایید الزامی است"}, status=400)
 
-    stored = _otp_store.get(email)
+    stored = cache.get(f"otp:{email}")
     if not stored or stored["otp"] != code or stored.get("type") != "password_reset":
         return JsonResponse({"error": "کد تایید نادرست یا منقضی شده است"}, status=400)
 
@@ -260,7 +261,7 @@ def password_reset_confirm(request):
     if len(password) < 8:
         return JsonResponse({"error": "رمز عبور باید حداقل ۸ کاراکتر باشد"}, status=400)
 
-    stored = _otp_store.get(email)
+    stored = cache.get(f"otp:{email}")
     if not stored or stored["otp"] != code or stored.get("type") != "password_reset":
         return JsonResponse({"error": "کد تایید نادرست یا منقضی شده است"}, status=400)
 
@@ -274,7 +275,7 @@ def password_reset_confirm(request):
     user.save()
 
     # Clean up OTP
-    _otp_store.pop(email, None)
+    cache.delete(f"otp:{email}")
 
     return JsonResponse({"message": "رمز عبور با موفقیت تغییر کرد"})
 

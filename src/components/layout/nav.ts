@@ -86,13 +86,6 @@ export const nav = [
     admin: false,
   },
   {
-    to: "/app/news",
-    icon: Megaphone,
-    label: "اخبار و اطلاعیه‌ها",
-    feature: "news" as PlanFeature,
-    admin: false,
-  },
-  {
     to: "/app/support",
     icon: LifeBuoy,
     label: "پشتیبانی",

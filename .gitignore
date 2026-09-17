@@ -11,6 +11,7 @@ backend/.env
 
 # Backend
 __pycache__/
+_cache/
 *.pyc
 *.pyo
 db.sqlite3

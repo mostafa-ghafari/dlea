@@ -481,34 +481,56 @@ class AdminChartsView(APIView):
     def get(self, request):
         from .models import Payment, UserProfile
         from collections import Counter
-        from datetime import datetime, timedelta
-        from calendar import month_name
 
-        now = datetime.now()
+        import jdatetime as _jd
+        from . import jutils as _ju
 
-        # 1. User growth by month (last 7 months)
+        now_j = _jd.datetime.now()
+
+        # 1. User growth by month (last 7 months, Jalali)
         user_growth = []
         cumulative = 0
         for i in range(6, -1, -1):
-            dt = now - timedelta(days=30 * i)
-            year, month = dt.year, dt.month
-            count = User.objects.filter(date_joined__year=year, date_joined__month=month).count()
+            # Build a Jalali month, then convert to Gregorian for the DB query
+            j_month = now_j.month - i
+            j_year = now_j.year
+            while j_month < 1:
+                j_month += 12
+                j_year -= 1
+            g_start = _jd.date(j_year, j_month, 1).togregorian()
+            if j_month == 12 and j_year % 4 == 3 and (j_year + 1) % 4 != 0:
+                g_end = _jd.date(j_year, 12, 30).togregorian()
+            else:
+                next_j_month = j_month + 1 if j_month < 12 else 1
+                next_j_year = j_year + 1 if j_month == 12 else j_year
+                g_end = _jd.date(next_j_year, next_j_month, 1).togregorian()
+            count = User.objects.filter(date_joined__date__gte=g_start, date_joined__date__lt=g_end).count()
             cumulative += count
-            user_growth.append({"month": month_name[month], "users": cumulative})
+            user_growth.append({"month": _ju.month_name_fa(g_start), "users": cumulative})
 
-        # 2. Monthly revenue (last 7 months)
+        # 2. Monthly revenue (last 7 months, Jalali)
         revenue = []
         for i in range(6, -1, -1):
-            dt = now - timedelta(days=30 * i)
-            year, month = dt.year, dt.month
-            month_payments = Payment.objects.filter(date__year=year, date__month=month, status="\u0645\u0648\u0641\u0642")
+            j_month = now_j.month - i
+            j_year = now_j.year
+            while j_month < 1:
+                j_month += 12
+                j_year -= 1
+            g_start = _jd.date(j_year, j_month, 1).togregorian()
+            if j_month == 12 and j_year % 4 == 3 and (j_year + 1) % 4 != 0:
+                g_end = _jd.date(j_year, 12, 30).togregorian()
+            else:
+                next_j_month = j_month + 1 if j_month < 12 else 1
+                next_j_year = j_year + 1 if j_month == 12 else j_year
+                g_end = _jd.date(next_j_year, next_j_month, 1).togregorian()
+            month_payments = Payment.objects.filter(date__gte=g_start, date__lt=g_end, status="\u0645\u0648\u0641\u0642")
             total = 0
             for p in month_payments:
                 try:
                     total += int(str(p.amount).replace(",", "").replace(".", "").strip())
                 except (ValueError, AttributeError):
                     pass
-            revenue.append({"month": month_name[month], "revenue": total // 1000000})
+            revenue.append({"month": _ju.month_name_fa(g_start), "revenue": total // 1000000})
 
         # 3. Plan distribution (from UserProfile)
         plan_counts = Counter(UserProfile.objects.values_list("plan", flat=True))
