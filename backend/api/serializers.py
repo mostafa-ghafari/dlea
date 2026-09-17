@@ -388,10 +388,12 @@ class PlanSerializer(serializers.ModelSerializer):
         """Count real users from UserProfile, not the stale static field."""
         from api.models import UserProfile
         # UserProfile.plan may store the display name (e.g. "\u0631\u0627\u06cc\u06af\u0627\u0646")
-        # while Plan.name is "Basic". Match on either.
-        return UserProfile.objects.filter(
-            Q(plan=obj.name) | Q(plan=obj.slug)
-        ).count()
+        # while Plan.name is "Basic". Match on name, slug, and the known
+        # Persian alias so every plan's real user count is shown.
+        values = {obj.name, obj.slug}
+        if obj.slug == "free":
+            values.add("\u0631\u0627\u06cc\u06af\u0627\u0646")  # رایگان
+        return UserProfile.objects.filter(plan__in=values).count()
 
 
 class SubscriptionSerializer(serializers.ModelSerializer):
