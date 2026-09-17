@@ -133,11 +133,13 @@ export function UserBlock({ compact = false }: { compact?: boolean }) {
             </>
           )}
         </div>
-        <DropdownMenuItem asChild>
-          <Link to="/app/billing" className="cursor-pointer">
-            <CreditCard className="ml-2 h-4 w-4" /> خرید / تمدید اشتراک
-          </Link>
-        </DropdownMenuItem>
+        {!isAdmin && (
+          <DropdownMenuItem asChild>
+            <Link to="/app/billing" className="cursor-pointer">
+              <CreditCard className="ml-2 h-4 w-4" /> خرید / تمدید اشتراک
+            </Link>
+          </DropdownMenuItem>
+        )}
         <DropdownMenuSeparator />
         <DropdownMenuItem asChild>
           <Link to="/app/settings" className="cursor-pointer">
