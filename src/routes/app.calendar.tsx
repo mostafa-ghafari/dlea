@@ -10,6 +10,7 @@ import {
   jalaliMonthName,
   todayJalali,
 } from "@/lib/persian-calendar";
+import { Num } from "@/components/Num";
 
 export const Route = createFileRoute("/app/calendar")({
   head: () => ({ meta: [{ title: "تقویم معاملاتی" }] }),
@@ -114,7 +115,9 @@ function CalendarPage() {
           <div
             className={`mt-2 text-2xl font-bold tabular ${stats.totalPnl >= 0 ? "gain" : "loss"}`}
           >
-            {stats.totalPnl >= 0 ? "+" : ""}${stats.totalPnl.toFixed(0)}
+            <Num>
+              {stats.totalPnl >= 0 ? "+" : ""}${stats.totalPnl.toFixed(0)}
+            </Num>
           </div>
         </div>
         <div className="card-surface p-4">
@@ -132,7 +135,9 @@ function CalendarPage() {
         <div className="card-surface p-4">
           <div className="text-xs text-muted-foreground">بهترین روز</div>
           <div className="mt-2 text-2xl font-bold tabular gain">
-            {stats.bestDay > 0 ? "+" : ""}${stats.bestDay.toFixed(0)}
+            <Num>
+              {stats.bestDay > 0 ? "+" : ""}${stats.bestDay.toFixed(0)}
+            </Num>
           </div>
         </div>
       </div>
@@ -178,10 +183,12 @@ function CalendarPage() {
                     <div
                       className={`truncate text-[9px] font-bold leading-tight tabular sm:text-xs ${pnl > 0 ? "gain" : "loss"}`}
                     >
-                      {pnl > 0 ? "+" : ""}$
-                      {Math.abs(pnl) >= 1000
-                        ? `${(pnl / 1000).toFixed(1)}k`
-                        : pnl}
+                      <Num>
+                        {pnl > 0 ? "+" : ""}$
+                        {Math.abs(pnl) >= 1000
+                          ? `${(pnl / 1000).toFixed(1)}k`
+                          : pnl}
+                      </Num>
                     </div>
                     <div className="mt-0.5 hidden text-[10px] text-muted-foreground sm:block">
                       {trades} معامله

@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/dialog";
 import { useRole, useTrades, useJournalEntries, useUsers } from "@/lib/api";
 import { nav } from "./nav";
+import { Num } from "@/components/Num";
 
 /** Global search across pages, trades and journal entries. */
 export function GlobalSearch() {
@@ -165,7 +166,7 @@ function GlobalSearchContent({
                   {t.symbol} • {t.id}
                 </span>
                 <span className={cn("tabular", t.pnl >= 0 ? "gain" : "loss")}>
-                  ${t.pnl}
+                  <Num>${t.pnl}</Num>
                 </span>
               </button>
             ))}

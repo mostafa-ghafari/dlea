@@ -37,6 +37,7 @@ import { scopeLabels, type CoachScope } from "@/lib/ai-coach-data";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { useActivePortfolioId } from "@/lib/app-state";
+import { Num } from "@/components/Num";
 
 export const Route = createFileRoute("/app/ai-coach")({
   head: () => ({
@@ -299,7 +300,7 @@ function AiCoach() {
                     variant="outline"
                     className={`tabular ${period.net.startsWith("-") ? "loss" : "gain"}`}
                   >
-                    {period.net}
+                    <Num>{period.net}</Num>
                   </Badge>
                   <Badge variant="outline" className="tabular">
                     Win Rate: {period.winRate}

@@ -41,6 +41,7 @@ import {
 } from "@/components/ui/select";
 import { useTrades, usePlanLimits } from "@/lib/api";
 import { useLocalState } from "@/lib/app-state";
+import { Num } from "@/components/Num";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/app/trades/")({
@@ -434,9 +435,9 @@ function TradesPage() {
                     <td
                       className={`py-3 tabular font-medium ${t.pnl >= 0 ? "gain" : "loss"}`}
                     >
-                      <span dir="ltr">
+                      <Num>
                         {t.pnl >= 0 ? "+" : ""}${t.pnl}
-                      </span>
+                      </Num>
                     </td>
                   )}
                   {visibleColumns.includes("followedPlan") && (
@@ -507,9 +508,9 @@ function TradesPage() {
                   <span
                     className={`text-lg font-bold tabular ${t.pnl >= 0 ? "gain" : "loss"}`}
                   >
-                    <span dir="ltr">
+                    <Num>
                       {t.pnl >= 0 ? "+" : ""}${t.pnl}
-                    </span>
+                    </Num>
                   </span>
                 )}
               </div>

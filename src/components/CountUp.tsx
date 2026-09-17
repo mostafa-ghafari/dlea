@@ -74,7 +74,7 @@ export function CountUp({
 
   const sign = signed && value > 0 ? "+" : "";
   return (
-    <span ref={ref} className={className}>
+    <span ref={ref} className={className} dir="ltr">
       {sign}
       {prefix}
       {fa(display, decimals)}

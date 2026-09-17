@@ -17,6 +17,7 @@ import {
 } from "@/lib/risk-metrics";
 import { jalaliMonthName, todayJalali } from "@/lib/persian-calendar";
 import { toast } from "sonner";
+import { Num } from "@/components/Num";
 
 export const Route = createFileRoute("/app/risk")({
   head: () => ({ meta: [{ title: "مدیریت ریسک" }] }),
@@ -170,8 +171,10 @@ function RiskPage() {
                 <div
                   className={`text-lg font-bold tabular ${adherence.netPnl >= 0 ? "gain" : "loss"}`}
                 >
-                  {adherence.netPnl >= 0 ? "+" : ""}
-                  {faNum(adherence.netPnl)}
+                  <Num>
+                    {adherence.netPnl >= 0 ? "+" : ""}
+                    {faNum(adherence.netPnl)}
+                  </Num>
                 </div>
                 <div className="text-[10px] text-muted-foreground">PnL</div>
               </div>

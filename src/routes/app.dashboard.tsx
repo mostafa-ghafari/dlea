@@ -32,6 +32,7 @@ import {
   ShieldCheck,
 } from "lucide-react";
 import { useMemo, useState } from "react";
+import { Num } from "@/components/Num";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -187,7 +188,7 @@ function DashboardPage() {
               </div>
             </div>
             <div className="mt-2 sm:mt-3 text-lg sm:text-2xl font-bold tabular">
-              {s.value}
+              <Num>{s.value}</Num>
             </div>
             <div
               className={`mt-1 flex items-center gap-1 text-[11px] sm:text-xs tabular ${s.positive ? "gain" : "loss"}`}
@@ -490,7 +491,9 @@ function DashboardPage() {
                     <td
                       className={`py-3 tabular font-medium ${t.pnl >= 0 ? "gain" : "loss"}`}
                     >
-                      {t.pnl >= 0 ? "+" : ""}${t.pnl}
+                      <Num>
+                        {t.pnl >= 0 ? "+" : ""}${t.pnl}
+                      </Num>
                     </td>
                     <td className="py-3 text-xs text-muted-foreground tabular">
                       {t.date}
@@ -532,7 +535,9 @@ function DashboardPage() {
                   <span
                     className={`text-lg font-bold tabular ${t.pnl >= 0 ? "gain" : "loss"}`}
                   >
-                    {t.pnl >= 0 ? "+" : ""}${t.pnl}
+                    <Num>
+                      {t.pnl >= 0 ? "+" : ""}${t.pnl}
+                    </Num>
                   </span>
                 </div>
                 <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
@@ -563,7 +568,7 @@ function DashboardPage() {
               {bestTrade?.symbol ?? "—"}
             </div>
             <div className="gain text-xl sm:text-2xl font-bold tabular">
-              {bestTrade ? formatMoney(bestTrade.pnl) : "—"}
+              <Num>{bestTrade ? formatMoney(bestTrade.pnl) : "—"}</Num>
             </div>
             <div className="mt-1 sm:mt-2 text-[11px] sm:text-xs text-muted-foreground">
               {bestTrade
@@ -580,7 +585,7 @@ function DashboardPage() {
               {worstTrade?.symbol ?? "—"}
             </div>
             <div className="loss text-xl sm:text-2xl font-bold tabular">
-              {worstTrade ? formatMoney(worstTrade.pnl) : "—"}
+              <Num>{worstTrade ? formatMoney(worstTrade.pnl) : "—"}</Num>
             </div>
             <div className="mt-1 sm:mt-2 text-[11px] sm:text-xs text-muted-foreground">
               {worstTrade

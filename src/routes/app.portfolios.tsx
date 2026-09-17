@@ -55,6 +55,7 @@ import {
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { useHasPortfolio, useActivePortfolioId } from "@/lib/app-state";
+import { Num } from "@/components/Num";
 
 export const Route = createFileRoute("/app/portfolios")({
   head: () => ({ meta: [{ title: "پرتفولیوها" }] }),
@@ -486,7 +487,7 @@ function Portfolios() {
                     موجودی فعلی
                   </div>
                   <div className="mt-1 text-lg font-bold tabular">
-                    ${p.balance.toLocaleString()}
+                    <Num>${p.balance.toLocaleString()}</Num>
                   </div>
                 </div>
                 <div className="rounded-lg bg-secondary/40 p-3">
@@ -496,7 +497,9 @@ function Portfolios() {
                   <div
                     className={`mt-1 text-lg font-bold tabular ${pnl >= 0 ? "gain" : "loss"}`}
                   >
-                    {pnl >= 0 ? "+" : ""}${pnl.toLocaleString()}
+                    <Num>
+                      {pnl >= 0 ? "+" : ""}${pnl.toLocaleString()}
+                    </Num>
                   </div>
                 </div>
               </div>
@@ -530,8 +533,10 @@ function Portfolios() {
                 <div
                   className={`text-sm font-medium tabular ${pct >= 0 ? "gain" : "loss"}`}
                 >
-                  {pct >= 0 ? "+" : ""}
-                  {pct.toFixed(2)}٪
+                  <Num>
+                    {pct >= 0 ? "+" : ""}
+                    {pct.toFixed(2)}٪
+                  </Num>
                 </div>
               </div>
 

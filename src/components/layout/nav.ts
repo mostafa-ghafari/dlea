@@ -99,13 +99,6 @@ export const nav = [
     feature: "settings" as PlanFeature,
     admin: false,
   },
-  {
-    to: "/app/billing",
-    icon: CreditCard,
-    label: "خرید اشتراک",
-    feature: null,
-    admin: false,
-  },
   // Admin-only items
   {
     to: "/app/admin/dashboard",
