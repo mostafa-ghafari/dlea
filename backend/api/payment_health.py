@@ -5,7 +5,9 @@ routes, a real checkout). This module answers the same question from inside it �
 what the running code can see — so an admin can look before calling support:
 
 * is the gateway configured with a real merchant code, or in sandbox?
-* which callback URL would the gateway send the buyer back to?
+* which callback URL would the gateway send the buyer back to, and where does
+  the buyer end up after that (a callback that works but redirects to
+  `localhost` is a dead end an admin has to be able to see here)?
 * does the gateway accept the amount bounds we enforce, and reject a bad
   callback URL?
 * can every plan actually be paid at its price (yearly is the one that runs
@@ -21,6 +23,7 @@ unreachable gateway becomes a failed *check* rather than an exception, because
 
 from datetime import timedelta
 
+from django.conf import settings
 from django.urls import NoReverseMatch, reverse
 from django.utils import timezone
 
@@ -57,13 +60,25 @@ def _merchant_check() -> dict:
     return _check("merchant", "مرچنت‌کد درگاه", "pass", f"{_mask(payments.merchant_code())} (کد واقعی)")
 
 
-def _callback_check(request) -> str:
+def _callback_check(request) -> tuple[str, dict]:
     """Return the callback URL, and a check describing whether it is usable."""
-    if request is None:
-        # No request to derive the host from; only the configured URL is real.
-        callback = billing_views._callback_url(_ConfiguredOnlyRequest())
-    else:
-        callback = billing_views._callback_url(request)
+    callback = billing_views._callback_url(request or _ConfiguredOnlyRequest())
+    if not callback:
+        return callback, _check(
+            "callback",
+            "آدرس بازگشت خریدار",
+            "warn",
+            "تعیین نشد — PUBLIC_BACKEND_URL را در .env ست کن تا درگاه بداند خریدار را کجا "
+            "برگرداند",
+        )
+    if billing_views.is_loopback_url(callback):
+        return callback, _check(
+            "callback",
+            "آدرس بازگشت خریدار",
+            "fail",
+            f"{callback} — آدرس محلی است و از اینترنت قابل دسترسی نیست؛ خریدار هرگز "
+            "برنمی‌گردد. PUBLIC_BACKEND_URL را در .env ست کن",
+        )
     if callback.startswith("https://"):
         status, detail = "pass", callback
     else:
@@ -75,11 +90,56 @@ def _callback_check(request) -> str:
     return callback, _check("callback", "آدرس بازگشت خریدار", status, detail)
 
 
+def _frontend_check(request) -> tuple[str, dict]:
+    """Where the buyer's browser lands once we have settled the order.
+
+    The callback URL can be perfect and this still sends the buyer to their own
+    machine — `FRONTEND_URL` unset means the dev fallback, so it is checked
+    explicitly rather than assumed.
+    """
+    target = billing_views._frontend_url(request)
+    if not target:
+        return target, _check(
+            "frontend",
+            "مقصد بازگشت خریدار",
+            "info",
+            "روی همان هاستی که خریدار با آن آمده می‌ماند (FRONTEND_URL ست نشده)",
+        )
+    if billing_views.is_loopback_url(target):
+        if settings.DEBUG:
+            # Aimed at a developer running both halves on this machine.
+            return target, _check(
+                "frontend", "مقصد بازگشت خریدار", "info", f"{target} — حالت توسعه"
+            )
+        # Only reachable by setting FRONTEND_URL to a local address by mistake;
+        # that mistake sends every paying buyer to their own machine.
+        return target, _check(
+            "frontend",
+            "مقصد بازگشت خریدار",
+            "fail",
+            f"{target} — خریدار بعد از پرداخت به سیستم خودش فرستاده می‌شود؛ "
+            "FRONTEND_URL را در .env ست کن",
+        )
+    if not target.startswith("https://"):
+        return target, _check(
+            "frontend",
+            "مقصد بازگشت خریدار",
+            "warn",
+            f"{target} — روی https نیست؛ FRONTEND_URL را در .env ست کن",
+        )
+    return target, _check("frontend", "مقصد بازگشت خریدار", "pass", target)
+
+
 class _ConfiguredOnlyRequest:
-    """Stands in for a request when there is none (management command, tests)."""
+    """Stands in for a request when there is none (management command, tests).
+
+    Only the configured URL is real in that case, so the host is left empty:
+    inventing one (`http://localhost/...`) would show up as a broken callback
+    when the truth is that no one can tell without a request.
+    """
 
     def build_absolute_uri(self, path: str) -> str:
-        return f"http://localhost{path}"
+        return ""
 
 
 def _route_check() -> dict:
@@ -375,7 +435,8 @@ def build_report(request=None, live: bool = False, timeout: int = GATEWAY_TIMEOU
     skipped so the page has something to show before the button is pressed.
     """
     callback, callback_check = _callback_check(request)
-    checks = [_merchant_check(), callback_check, _route_check()]
+    frontend, frontend_check = _frontend_check(request)
+    checks = [_merchant_check(), callback_check, frontend_check, _route_check()]
     if live:
         checks.extend(_gateway_checks(callback, timeout))
     else:
@@ -410,6 +471,7 @@ def build_report(request=None, live: bool = False, timeout: int = GATEWAY_TIMEOU
         "sandbox": payments.is_sandbox(),
         "merchant": _mask(payments.merchant_code()),
         "callbackUrl": callback,
+        "frontendUrl": frontend,
         "amounts": {
             "minRial": payments.MIN_AMOUNT_RIAL,
             "maxRial": payments.MAX_AMOUNT_RIAL,

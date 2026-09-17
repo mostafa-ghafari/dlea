@@ -9,9 +9,10 @@ rather than Zibal's uptime.
 from datetime import timedelta
 from unittest.mock import patch
 
+from django.test import override_settings
 from django.utils import timezone
 
-from api import payments
+from api import billing_views, payments
 from api.models import (
     PAYMENT_FAILED,
     PAYMENT_PAID,
@@ -269,6 +270,70 @@ class CallbackTests(BaseTestCase):
         order.refresh_from_db()
         self.assertEqual(order.status, PAYMENT_PENDING)
         verify.assert_not_called()
+
+
+class ReturnDestinationTests(BaseTestCase):
+    """Where the buyer's browser ends up once the gateway is answered.
+
+    Production had neither `FRONTEND_URL` nor a public `CORS_ALLOWED_ORIGINS`,
+    so the fallback was the development origin and every settled payment sent
+    the buyer to `http://localhost:5173` — their own machine. These tests pin
+    the fix: a loopback destination is never chosen when we know the real host.
+    """
+
+    def setUp(self):
+        self.plan = self.make_plan(slug="pro", name="Pro", price="۲۰۰,۰۰۰")
+        self.user = self.make_user(username="buyer")
+        self.order = Payment.objects.create(
+            user="Buyer",
+            account=self.user,
+            plan=self.plan.name,
+            plan_slug=self.plan.slug,
+            cycle="monthly",
+            amount="۲۰۰,۰۰۰ تومان",
+            amount_rial=2_000_000,
+            date=timezone.localdate(),
+            status=PAYMENT_PENDING,
+            authority="track-1",
+        )
+
+    def _callback(self):
+        # `orderId` without `success` is the "someone opened the URL" path: it
+        # settles nothing and still has to redirect somewhere reachable.
+        return self.client.get(
+            "/api/billing/callback/", {"orderId": self.order.pk}, HTTP_HOST="dlea.piqagram.ir"
+        )
+
+    def test_the_dev_origin_is_never_the_destination(self):
+        with patch.dict("os.environ", {"FRONTEND_URL": ""}), override_settings(
+            CORS_ALLOWED_ORIGINS=["http://localhost:5173", "http://localhost:8000"]
+        ):
+            r = self._callback()
+
+        self.assertEqual(r.status_code, 302)
+        self.assertNotIn("localhost", r.url)
+        # The host the buyer arrived on is the only host we know they can reach.
+        self.assertTrue(r.url.startswith("http://dlea.piqagram.ir/app/billing"), r.url)
+
+    def test_the_configured_frontend_url_wins(self):
+        with patch.dict("os.environ", {"FRONTEND_URL": "https://dlea.piqagram.ir"}):
+            r = self._callback()
+        self.assertTrue(r.url.startswith("https://dlea.piqagram.ir/app/billing"), r.url)
+
+    def test_a_public_cors_origin_beats_the_request_host(self):
+        with patch.dict("os.environ", {"FRONTEND_URL": ""}), override_settings(
+            CORS_ALLOWED_ORIGINS=["http://localhost:5173", "https://app.example.com"]
+        ):
+            r = self._callback()
+        self.assertTrue(r.url.startswith("https://app.example.com/app/billing"), r.url)
+
+    def test_with_no_host_at_all_the_redirect_stays_relative(self):
+        """A relative redirect lands on the host the request itself used, which
+        is always reachable — better than any origin we would have to guess."""
+        with patch.dict("os.environ", {"FRONTEND_URL": ""}), override_settings(
+            CORS_ALLOWED_ORIGINS=["http://localhost:5173"]
+        ):
+            self.assertEqual(billing_views._frontend_url(None), "")
 
 
 class RenewalTests(BaseTestCase):

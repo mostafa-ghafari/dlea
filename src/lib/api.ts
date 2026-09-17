@@ -175,6 +175,8 @@ export type PaymentHealthReport = {
   sandbox: boolean;
   merchant: string;
   callbackUrl: string;
+  /** Where the buyer lands after the bank; empty means "same host as this one". */
+  frontendUrl: string;
   amounts: {
     minRial: number;
     maxRial: number;

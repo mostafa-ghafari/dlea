@@ -15,7 +15,7 @@ the client — a tampered request cannot buy Pro Max for a Toman.
 
 import os
 from datetime import datetime, timedelta
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urlparse
 
 from django.conf import settings
 from django.shortcuts import redirect
@@ -154,27 +154,31 @@ class BillingCallbackView(APIView):
         params = request.query_params
         payment = _find_order(params.get("orderId"), params.get("trackId"))
         if payment is None:
-            return _to_billing("unknown", reason="سفارش مربوط به این پرداخت پیدا نشد")
+            return _to_billing(
+                "unknown", reason="سفارش مربوط به این پرداخت پیدا نشد", request=request
+            )
 
         if payment.status == PAYMENT_PAID:
-            return _to_billing("success", payment)
+            return _to_billing("success", payment, request=request)
 
         if str(params.get("success", "")) != "1":
             if not str(params.get("success", "")).strip():
                 # Not a gateway return trip at all (someone opened the URL).
-                return _to_billing("pending", payment)
+                return _to_billing("pending", payment, request=request)
             payment.status = PAYMENT_FAILED
             payment.save(update_fields=["status"])
-            return _to_billing("failed", payment, reason="پرداخت در درگاه انجام نشد")
+            return _to_billing(
+                "failed", payment, reason="پرداخت در درگاه انجام نشد", request=request
+            )
 
         payment, message = _confirm(payment, params.get("trackId"))
         if payment.status == PAYMENT_PAID:
-            return _to_billing("success", payment)
+            return _to_billing("success", payment, request=request)
         if payment.status == PAYMENT_PENDING:
             # The gateway could not be reached; the order stays open so the
             # page's "بررسی مجدد" button can settle it once the gateway is up.
-            return _to_billing("pending", payment, reason=message)
-        return _to_billing("failed", payment, reason=message)
+            return _to_billing("pending", payment, reason=message, request=request)
+        return _to_billing("failed", payment, reason=message, request=request)
 
 
 class BillingOrderView(APIView):
@@ -238,15 +242,62 @@ def _callback_url(request) -> str:
     return request.build_absolute_uri(reverse("billing-callback"))
 
 
-def _frontend_url() -> str:
+# Hosts that only reach the machine the visitor is already sitting at.
+_LOOPBACK_HOSTS = {"localhost", "127.0.0.1", "0.0.0.0", "::1", "[::1]"}
+
+
+def is_loopback_url(url: str) -> bool:
+    """True for a URL that points at the visitor's own machine.
+
+    A relative URL is not loopback: it keeps the buyer on whatever host they
+    are already on, which is always reachable.
+    """
+    host = (urlparse(url or "").hostname or "").lower()
+    if not host:
+        return False
+    return host in _LOOPBACK_HOSTS or host.endswith(".localhost")
+
+
+def _request_origin(request) -> str:
+    """The public origin of an incoming request (`https://dlea.piqagram.ir`)."""
+    if request is None:
+        return ""
+    try:
+        return request.build_absolute_uri("/").rstrip("/")
+    except Exception:  # a request without host info (or a stub in tests)
+        return ""
+
+
+def _frontend_url(request=None) -> str:
+    """Where the buyer's browser is sent after the gateway answers.
+
+    `FRONTEND_URL` is the explicit answer. Without it the first *public* CORS
+    origin is used, then the host this request arrived on. Falling back to
+    `http://localhost:5173` is deliberately last (and only in DEBUG): that is a
+    development origin, so in production it sends every real buyer to their own
+    machine — an empty string means a relative redirect, which stays on the
+    host they are actually using.
+    """
     configured = os.environ.get("FRONTEND_URL", "").strip().rstrip("/")
     if configured:
         return configured
-    origins = [o.strip().rstrip("/") for o in getattr(settings, "CORS_ALLOWED_ORIGINS", []) if o.strip()]
-    return origins[0] if origins else "http://localhost:5173"
+
+    origins = [
+        o.strip().rstrip("/") for o in getattr(settings, "CORS_ALLOWED_ORIGINS", []) if o.strip()
+    ]
+    public = [o for o in origins if not is_loopback_url(o)]
+    if public:
+        return public[0]
+    if settings.DEBUG:
+        return origins[0] if origins else "http://localhost:5173"
+
+    origin = _request_origin(request)
+    if origin and not is_loopback_url(origin):
+        return origin
+    return ""
 
 
-def _to_billing(state: str, payment=None, reason: str = ""):
+def _to_billing(state: str, payment=None, reason: str = "", request=None):
     # urlencode, not f-strings: `reason` is Persian prose and a raw string in
     # a Location header is neither valid nor encodable.
     params = {"status": state}
@@ -256,7 +307,7 @@ def _to_billing(state: str, payment=None, reason: str = ""):
             params["ref"] = payment.reference_id
     if reason:
         params["reason"] = reason
-    return redirect(f"{_frontend_url()}/app/billing?{urlencode(params)}")
+    return redirect(f"{_frontend_url(request)}/app/billing?{urlencode(params)}")
 
 
 def _find_order(order_id, track_id):

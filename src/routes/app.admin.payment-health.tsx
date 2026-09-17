@@ -235,6 +235,10 @@ function Header({
 }
 
 function Summary({ report }: { report: PaymentHealthReport }) {
+  // The callback can be perfectly valid and the buyer still dead-end, so the
+  // destination gets the same visibility as the callback URL itself.
+  const destination = report.checks.find((c) => c.id === "frontend");
+  const destinationTone = STATUS_STYLE[destination?.status ?? "info"].text;
   const tiles = [
     { label: "سالم", value: report.summary.passed, tone: "text-emerald-500" },
     { label: "ناموفق", value: report.summary.failed, tone: "text-destructive" },
@@ -259,6 +263,14 @@ function Summary({ report }: { report: PaymentHealthReport }) {
         <div className="text-sm text-muted-foreground">آدرس بازگشت خریدار</div>
         <div className="mt-2 break-all text-sm" dir="ltr">
           {report.callbackUrl}
+        </div>
+      </div>
+      <div className="card-surface p-4 lg:col-span-2">
+        <div className="text-sm text-muted-foreground">
+          مقصد خریدار بعد از بازگشت
+        </div>
+        <div className={`mt-2 break-all text-sm ${destinationTone}`} dir="ltr">
+          {report.frontendUrl || "همین دامنه"}
         </div>
       </div>
       <div className="card-surface p-4 lg:col-span-2">

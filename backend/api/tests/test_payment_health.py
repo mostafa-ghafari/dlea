@@ -12,11 +12,20 @@ from unittest.mock import patch
 
 from django.utils import timezone
 
-from api import payments
+from django.test import override_settings
+
+from api import payment_health, payments
 from api.models import PAYMENT_FAILED, PAYMENT_PAID, PAYMENT_PENDING, Payment
 from api.tests.common import BaseTestCase
 
 URL = "/api/admin/payment-health/"
+
+
+class _SiteRequest:
+    """A request as the deployed site sees it (plain http behind the CDN)."""
+
+    def build_absolute_uri(self, path):
+        return f"http://dlea.piqagram.ir{path}"
 
 # What the real gateway enforces, probed on 2026-09-15. Deliberately hardcoded:
 # the fake gateway must keep answering "the real ceiling" even when a test
@@ -93,6 +102,69 @@ class OfflineReportTests(BaseTestCase):
         self.assertTrue(r.data["sandbox"])
         self.assertEqual(statuses["merchant"], "warn")
         self.assertNotIn("fail", statuses.values())
+
+
+class ReturnDestinationTests(BaseTestCase):
+    """The callback can be perfect and the buyer still dead-ends.
+
+    The deployment that broke this answered the gateway with a valid callback,
+    then redirected the buyer to `http://localhost:5173`. The page has to say
+    so — a check nobody can see is the same as no check.
+    """
+
+    def setUp(self):
+        self.auth_staff()
+
+    def test_the_buyer_is_not_reported_as_going_to_localhost(self):
+        with patch.dict("os.environ", {"FRONTEND_URL": ""}), override_settings(
+            CORS_ALLOWED_ORIGINS=["http://localhost:5173", "http://localhost:8000"]
+        ):
+            r = self.client.get(URL, HTTP_HOST="dlea.piqagram.ir")
+
+        self.assertEqual(r.data["frontendUrl"], "http://dlea.piqagram.ir")
+        check = next(c for c in r.data["checks"] if c["id"] == "frontend")
+        self.assertEqual(check["status"], "warn")  # http, not https — but reachable
+        self.assertNotIn("localhost", check["detail"])
+
+    def test_a_loopback_destination_is_a_failure_with_the_fix_named(self):
+        """`FRONTEND_URL` pointed at a local address in a real deployment."""
+        with patch.dict("os.environ", {"FRONTEND_URL": "http://localhost:5173"}):
+            target, check = payment_health._frontend_check(_SiteRequest())
+
+        self.assertEqual(target, "http://localhost:5173")
+        self.assertEqual(check["status"], "fail")
+        self.assertIn("FRONTEND_URL", check["detail"])
+
+    def test_a_loopback_callback_is_a_failure_too(self):
+        with patch.dict("os.environ", {"PUBLIC_BACKEND_URL": "http://127.0.0.1:8002"}):
+            callback, check = payment_health._callback_check(_SiteRequest())
+        self.assertEqual(callback, "http://127.0.0.1:8002/api/billing/callback/")
+        self.assertEqual(check["status"], "fail")
+
+    def test_localhost_is_fine_in_development(self):
+        """A developer running both halves locally must not see a red failure."""
+        with patch.dict("os.environ", {"FRONTEND_URL": "http://localhost:5173"}), patch.object(
+            payment_health.settings, "DEBUG", True
+        ):
+            _target, check = payment_health._frontend_check(_SiteRequest())
+        self.assertEqual(check["status"], "info")
+
+    def test_a_configured_destination_passes(self):
+        with patch.dict("os.environ", {"FRONTEND_URL": "https://dlea.piqagram.ir"}):
+            r = self.client.get(URL)
+        check = next(c for c in r.data["checks"] if c["id"] == "frontend")
+        self.assertEqual(check["status"], "pass")
+        self.assertEqual(r.data["frontendUrl"], "https://dlea.piqagram.ir")
+
+    def test_an_unknown_callback_is_unknown_not_localhost(self):
+        """Without a request and without PUBLIC_BACKEND_URL there is nothing to
+        report; inventing `http://localhost/...` would look like a broken
+        deployment instead of a missing setting."""
+        with patch.dict("os.environ", {"PUBLIC_BACKEND_URL": ""}):
+            callback, check = payment_health._callback_check(None)
+        self.assertEqual(callback, "")
+        self.assertEqual(check["status"], "warn")
+        self.assertIn("PUBLIC_BACKEND_URL", check["detail"])
 
 
 class LiveReportTests(BaseTestCase):
