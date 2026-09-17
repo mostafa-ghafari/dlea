@@ -3,6 +3,7 @@ import { ArrowLeft, LineChart } from "lucide-react";
 import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/lib/theme";
+import { todayJalali } from "@/lib/persian-calendar";
 
 /** Shared shell for the public legal / contact pages. */
 export function LegalPage({
@@ -46,7 +47,7 @@ export function LegalPage({
       </main>
 
       <footer className="border-t border-border py-8 text-center text-sm text-muted-foreground">
-        © ۱۴۰۳ Dlea AI
+        © {todayJalali().year} Dlea AI
       </footer>
     </div>
   );

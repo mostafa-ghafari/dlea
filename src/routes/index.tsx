@@ -18,6 +18,7 @@ import { Badge } from "@/components/ui/badge";
 import { ScrollReveal } from "@/components/ScrollReveal";
 import { CountUp } from "@/components/CountUp";
 import { ThemeToggle } from "@/lib/theme";
+import { todayJalali } from "@/lib/persian-calendar";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -575,7 +576,7 @@ function Landing() {
         <div className="mx-auto flex max-w-7xl flex-col items-center justify-between gap-4 px-4 text-sm text-muted-foreground md:flex-row md:px-8">
           <div className="flex items-center gap-2">
             <LineChart className="h-4 w-4 text-primary" />
-            <span>© ۱۴۰۳ Dlea AI — تمام حقوق محفوظ است.</span>
+            <span>© {todayJalali().year} Dlea AI — تمام حقوق محفوظ است.</span>
           </div>
           <div className="flex gap-6">
             <Link to="/terms" className="hover:text-foreground">
