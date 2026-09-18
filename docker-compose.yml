@@ -1,21 +1,99 @@
+# ── Dlea AI — Full Docker Stack ────────────────────────────────────
+# Usage:
+#   docker compose up -d --build        # start everything
+#   docker compose down                  # stop (keeps data)
+#   docker compose down -v               # stop + delete data
+#   docker compose logs -f backend       # tail backend logs
+
 services:
+  # ── Nginx reverse proxy ────────────────────────────────────────
+  nginx:
+    image: nginx:alpine
+    container_name: dlea-nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    volumes:
+      - ./deploy/nginx-docker.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      frontend:
+        condition: service_healthy
+      backend:
+        condition: service_healthy
+    networks:
+      - dlea-internal
+
+  # ── Frontend (Nuxt SSR) ───────────────────────────────────────
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend.Dockerfile
+    container_name: dlea-frontend
+    restart: unless-stopped
+    expose:
+      - "3000"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:3000/"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    networks:
+      - dlea-internal
+
+  # ── Backend (Django + Gunicorn) ───────────────────────────────
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: dlea-backend
+    restart: unless-stopped
+    expose:
+      - "8002"
+    env_file:
+      - ./backend/.env.docker
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - dlea-media:/app/media
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8002/api/"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    networks:
+      - dlea-internal
+
+  # ── PostgreSQL ────────────────────────────────────────────────
   db:
     image: postgres:16-alpine
     container_name: dlea-postgres
     restart: unless-stopped
+    expose:
+      - "5432"
     environment:
       POSTGRES_DB: dlea
       POSTGRES_USER: dlea
       POSTGRES_PASSWORD: dlea
-    ports:
-      - "5432:5432"
     volumes:
-      - dlea_pgdata:/var/lib/postgresql/data
+      - pgdata:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U dlea -d dlea"]
       interval: 5s
       timeout: 5s
       retries: 10
+    networks:
+      - dlea-internal
+
+# ── Networks & Volumes ──────────────────────────────────────────
+networks:
+  dlea-internal:
+    driver: bridge
 
 volumes:
-  dlea_pgdata:
+  pgdata:
+    name: dlea-pgdata
+  dlea-media:
+    name: dlea-media
