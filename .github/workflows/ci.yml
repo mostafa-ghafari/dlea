@@ -7,8 +7,56 @@ on:
     branches: [main]
 
 jobs:
+  notify-start:
+    runs-on: ubuntu-latest
+
+    outputs:
+      message_id: ${{ steps.telegram.outputs.message_id }}
+
+    steps:
+      - name: Send CI started notification
+        id: telegram
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          set -euo pipefail
+
+          MESSAGE="🚀 DLEA CI/CD
+
+          🔄 CI Pipeline Started
+
+          🌿 Branch: ${{ github.ref_name }}
+          👤 ${{ github.actor }}
+          📝 Commit: ${{ github.event.head_commit.message }}
+
+          🔵 Backend Tests    ⏳
+          🔵 Frontend Checks  ⏳
+          🔵 E2E Tests        ⏳
+
+          ⏳ Pipeline Running...
+
+          🔗 https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+
+          RESPONSE=$(curl -sS -X POST \
+            "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+            -d chat_id="${TELEGRAM_CHAT_ID}" \
+            --data-urlencode text="$MESSAGE")
+
+          MESSAGE_ID=$(echo "$RESPONSE" | jq -r '.result.message_id')
+
+          if [ "$MESSAGE_ID" = "null" ] || [ -z "$MESSAGE_ID" ]; then
+            echo "Failed to get Telegram message_id"
+            echo "$RESPONSE"
+            exit 1
+          fi
+
+          echo "message_id=$MESSAGE_ID" >> "$GITHUB_OUTPUT"
+
   backend-tests:
     runs-on: ubuntu-latest
+    needs: notify-start
+
     defaults:
       run:
         working-directory: backend
@@ -32,6 +80,7 @@ jobs:
 
   frontend-checks:
     runs-on: ubuntu-latest
+    needs: notify-start
 
     steps:
       - name: Checkout code
@@ -70,7 +119,7 @@ jobs:
 
   e2e-tests:
     runs-on: ubuntu-latest
-    needs: [backend-tests, frontend-checks]
+    needs: [notify-start, backend-tests, frontend-checks]
 
     steps:
       - name: Checkout code
@@ -87,6 +136,34 @@ jobs:
           node-version: "22"
           cache: "npm"
 
+      - name: Update Telegram - E2E Started
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          MESSAGE_ID: ${{ needs.notify-start.outputs.message_id }}
+        run: |
+          set -euo pipefail
+
+          MESSAGE="🚀 DLEA CI/CD
+
+          🌿 Branch: ${{ github.ref_name }}
+          👤 ${{ github.actor }}
+          📝 Commit: ${{ github.event.head_commit.message }}
+
+          🟢 Backend Tests    ✅
+          🟢 Frontend Checks  ✅
+          🔵 E2E Tests        ⏳
+
+          ⏳ E2E Tests Running...
+
+          🔗 https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+
+          curl -sS -X POST \
+            "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/editMessageText" \
+            -d chat_id="${TELEGRAM_CHAT_ID}" \
+            -d message_id="${MESSAGE_ID}" \
+            --data-urlencode text="$MESSAGE"
+
       - name: Install backend dependencies
         working-directory: backend
         run: |
@@ -101,3 +178,75 @@ jobs:
 
       - name: Run E2E suite (builds the app with the local API base)
         run: npm run test:e2e
+
+  final-status:
+    runs-on: ubuntu-latest
+    if: ${{ always() }}
+    needs: [notify-start, backend-tests, frontend-checks, e2e-tests]
+
+    steps:
+      - name: Update final Telegram status
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          MESSAGE_ID: ${{ needs.notify-start.outputs.message_id }}
+        run: |
+          set -euo pipefail
+
+          BACKEND_RESULT="${{ needs.backend-tests.result }}"
+          FRONTEND_RESULT="${{ needs.frontend-checks.result }}"
+          E2E_RESULT="${{ needs.e2e-tests.result }}"
+
+          if [ "$BACKEND_RESULT" = "success" ]; then
+            BACKEND_STATUS="🟢 Backend Tests    ✅"
+          else
+            BACKEND_STATUS="🔴 Backend Tests    ❌"
+          fi
+
+          if [ "$FRONTEND_RESULT" = "success" ]; then
+            FRONTEND_STATUS="🟢 Frontend Checks  ✅"
+          else
+            FRONTEND_STATUS="🔴 Frontend Checks  ❌"
+          fi
+
+          if [ "$E2E_RESULT" = "success" ]; then
+            E2E_STATUS="🟢 E2E Tests        ✅"
+          elif [ "$E2E_RESULT" = "skipped" ]; then
+            E2E_STATUS="⚪ E2E Tests        ⏭️"
+          else
+            E2E_STATUS="🔴 E2E Tests        ❌"
+          fi
+
+          if [ "$BACKEND_RESULT" = "success" ] && \
+             [ "$FRONTEND_RESULT" = "success" ] && \
+             [ "$E2E_RESULT" = "success" ]; then
+
+            TITLE="🎉 Pipeline PASSED"
+            ICON="🎉"
+
+          else
+
+            TITLE="❌ Pipeline FAILED"
+            ICON="❌"
+
+          fi
+
+          MESSAGE="${ICON} DLEA CI/CD
+
+          🌿 Branch: ${{ github.ref_name }}
+          👤 ${{ github.actor }}
+          📝 Commit: ${{ github.event.head_commit.message }}
+
+          $BACKEND_STATUS
+          $FRONTEND_STATUS
+          $E2E_STATUS
+
+          $TITLE
+
+          🔗 https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+
+          curl -sS -X POST \
+            "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/editMessageText" \
+            -d chat_id="${TELEGRAM_CHAT_ID}" \
+            -d message_id="${MESSAGE_ID}" \
+            --data-urlencode text="$MESSAGE"
