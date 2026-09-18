@@ -1,37 +1,14 @@
-# ── Dlea AI — Full Docker Stack ────────────────────────────────────
-# Usage:
-#   docker compose up -d --build        # start everything
-#   docker compose down                  # stop (keeps data)
-#   docker compose down -v               # stop + delete data
-#   docker compose logs -f backend       # tail backend logs
+# Dlea AI — Docker Stack (git-based auto-deploy)
 
 services:
-  # ── Nginx reverse proxy ────────────────────────────────────────
-  nginx:
-    image: nginx:alpine
-    container_name: dlea-nginx
-    restart: unless-stopped
-    ports:
-      - "80:80"
-    volumes:
-      - ./deploy/nginx-docker.conf:/etc/nginx/conf.d/default.conf:ro
-    depends_on:
-      frontend:
-        condition: service_healthy
-      backend:
-        condition: service_healthy
-    networks:
-      - dlea-internal
-
-  # ── Frontend (Nuxt SSR) ───────────────────────────────────────
   frontend:
     build:
       context: .
-      dockerfile: frontend.Dockerfile
+      dockerfile: docker/frontend.Dockerfile
     container_name: dlea-frontend
     restart: unless-stopped
-    expose:
-      - "3000"
+    ports:
+      - "127.0.0.1:3000:3000"
     healthcheck:
       test: ["CMD", "wget", "-q", "--spider", "http://localhost:3000/"]
       interval: 15s
@@ -41,17 +18,16 @@ services:
     networks:
       - dlea-internal
 
-  # ── Backend (Django + Gunicorn) ───────────────────────────────
   backend:
     build:
       context: ./backend
-      dockerfile: Dockerfile
+      dockerfile: ../docker/backend.Dockerfile
     container_name: dlea-backend
     restart: unless-stopped
-    expose:
-      - "8002"
+    ports:
+      - "127.0.0.1:8002:8002"
     env_file:
-      - ./backend/.env.docker
+      - docker/.env.docker
     depends_on:
       db:
         condition: service_healthy
@@ -66,7 +42,6 @@ services:
     networks:
       - dlea-internal
 
-  # ── PostgreSQL ────────────────────────────────────────────────
   db:
     image: postgres:16-alpine
     container_name: dlea-postgres
@@ -87,7 +62,6 @@ services:
     networks:
       - dlea-internal
 
-# ── Networks & Volumes ──────────────────────────────────────────
 networks:
   dlea-internal:
     driver: bridge
