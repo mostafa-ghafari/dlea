@@ -33,6 +33,7 @@ jobs:
             "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
             -d chat_id="${TELEGRAM_CHAT_ID}" \
             --data-urlencode text="$MESSAGE"
+
   backend-tests:
     runs-on: ubuntu-latest
     defaults:
@@ -119,7 +120,7 @@ jobs:
           name: dlea-build
           path: .output/
           retention-days: 7
-          
+
       - name: Notify Telegram
         if: always()
         env:
@@ -179,3 +180,29 @@ jobs:
 
       - name: Run E2E suite (builds the app with the local API base)
         run: npm run test:e2e
+
+      - name: Notify Telegram
+        if: always()
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          if [ "${{ job.status }}" = "success" ]; then
+            STATUS="✅ PASSED"
+          else
+            STATUS="❌ FAILED"
+          fi
+
+          MESSAGE="🧪 DLEA CI/CD
+
+          E2E Tests: $STATUS
+
+          🌿 Branch: ${{ github.ref_name }}
+          👤 ${{ github.actor }}
+
+          🔗 https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+
+          curl -sS -X POST \
+            "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+            -d chat_id="${TELEGRAM_CHAT_ID}" \
+            --data-urlencode text="$MESSAGE"
