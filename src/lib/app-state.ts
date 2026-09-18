@@ -78,6 +78,21 @@ export function useHasPortfolio(): [boolean, (v: boolean) => void, boolean] {
   const { data, loading } = useApi(fetchPortfolios, []);
   const hasPortfolio = manual || (data?.length ?? 0) > 0;
   const ready = lsReady && !loading;
+  // A portfolio id outlives the session that chose it: logging out (or signing
+  // in as somebody else) used to leave `dlea:active-portfolio` pointing at a
+  // portfolio this account does not own, and every scoped request — trades,
+  // journal, dashboard — then came back empty. Re-point the stored id at one of
+  // the portfolios the API just returned, or drop it when there are none.
+  useEffect(() => {
+    if (!data) return;
+    const stored = getActivePortfolioId();
+    if (stored && data.some((p) => String(p.id) === stored)) return;
+    const next = data.find((p) => p.is_active) ?? data[0];
+    const nextId = next ? String(next.id) : null;
+    // Only write when it really changes, so the effect converges instead of
+    // re-notifying every subscriber on each render.
+    if (nextId !== stored) setActivePortfolioId(nextId);
+  }, [data]);
   return [hasPortfolio, setManual, ready];
 }
 export const ACTIVE_PORTFOLIO_KEY = "dlea:active-portfolio";

@@ -17,7 +17,12 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { fullName, ONBOARDING_KEY, useCurrentUser } from "@/lib/app-state";
+import {
+  ACTIVE_PORTFOLIO_KEY,
+  fullName,
+  ONBOARDING_KEY,
+  useCurrentUser,
+} from "@/lib/app-state";
 import { useProfile, useRole, useSubscription, ROLE_NAMES } from "@/lib/api";
 import { Num } from "@/components/Num";
 
@@ -159,6 +164,7 @@ export function UserBlock({ compact = false }: { compact?: boolean }) {
             localStorage.removeItem("dlea:refresh");
             localStorage.removeItem("dlea:user");
             localStorage.removeItem(ONBOARDING_KEY);
+            localStorage.removeItem(ACTIVE_PORTFOLIO_KEY);
             window.location.href = "/login";
           }}
         >
