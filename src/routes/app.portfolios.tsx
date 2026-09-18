@@ -646,7 +646,9 @@ function Portfolios() {
                   <div className="mt-4 grid grid-cols-3 gap-2 text-xs">
                     <div>
                       <span className="text-muted-foreground">موجودی:</span>{" "}
-                      <span className="tabular">${p.balance.toLocaleString()}</span>
+                      <span className="tabular">
+                        ${p.balance.toLocaleString()}
+                      </span>
                     </div>
                     <div>
                       <span className="text-muted-foreground">معاملات:</span>{" "}
@@ -655,7 +657,8 @@ function Portfolios() {
                     <div>
                       <span className="text-muted-foreground">سود:</span>{" "}
                       <span className={`tabular ${pnl >= 0 ? "gain" : "loss"}`}>
-                        {pnl >= 0 ? "+" : ""}{pct.toFixed(1)}٪
+                        {pnl >= 0 ? "+" : ""}
+                        {pct.toFixed(1)}٪
                       </span>
                     </div>
                   </div>
