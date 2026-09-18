@@ -283,7 +283,9 @@ function SettingsPage() {
                   </Button>
                 </Link>
                 {subscription && (
-                  <Button variant="outline">مشاهده فاکتورها</Button>
+                  <Link to="/app/billing">
+                    <Button variant="outline">مشاهده فاکتورها</Button>
+                  </Link>
                 )}
               </div>
             </div>
