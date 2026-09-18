@@ -7,6 +7,32 @@ on:
     branches: [main]
 
 jobs:
+  notify-start:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Send CI started notification
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          MESSAGE="🚀 DLEA CI/CD
+
+          🔄 CI Pipeline Started
+
+          🌿 Branch: ${{ github.ref_name }}
+          👤 ${{ github.actor }}
+          📝 Commit: ${{ github.event.head_commit.message }}
+
+          🔵 Backend Tests
+          🔵 Frontend Checks
+          ⏳ E2E Tests
+
+          🔗 https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+
+          curl -sS -X POST \
+            "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+            -d chat_id="${TELEGRAM_CHAT_ID}" \
+            --data-urlencode text="$MESSAGE"
   backend-tests:
     runs-on: ubuntu-latest
     defaults:
