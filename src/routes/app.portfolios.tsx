@@ -261,6 +261,9 @@ function Portfolios() {
     setOpen(false);
   }
 
+  const activePortfolios = portfolios.filter((p) => p.status !== "آرشیو");
+  const archivedPortfolios = portfolios.filter((p) => p.status === "آرشیو");
+
   return (
     <AppShell
       title="پرتفولیوها"
@@ -400,8 +403,9 @@ function Portfolios() {
           )}
         </div>
       )}
+      {/* Active portfolios */}
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-        {portfolios.map((p) => {
+        {activePortfolios.map((p) => {
           const pnl = p.balance - p.initial;
           const pct = p.initial ? (pnl / p.initial) * 100 : 0;
           return (
@@ -523,12 +527,12 @@ function Portfolios() {
                 <Badge
                   variant="outline"
                   className={
-                    p.status === "فعال"
+                    activeId === p.id || p.is_active
                       ? "border-primary/40 bg-primary/10 text-primary"
-                      : ""
+                      : "border-muted-foreground/30 bg-muted/50 text-muted-foreground"
                   }
                 >
-                  {p.status}
+                  {activeId === p.id || p.is_active ? "فعال" : "غیر فعال"}
                 </Badge>
                 <div
                   className={`text-sm font-medium tabular ${pct >= 0 ? "gain" : "loss"}`}
@@ -581,6 +585,106 @@ function Portfolios() {
           );
         })}
       </div>
+
+      {/* Archived portfolios */}
+      {archivedPortfolios.length > 0 && (
+        <div className="mt-8">
+          <h3 className="mb-4 flex items-center gap-2 text-sm font-medium text-muted-foreground">
+            <Archive className="h-4 w-4" />
+            آرشیو شده ({archivedPortfolios.length})
+          </h3>
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+            {archivedPortfolios.map((p) => {
+              const pnl = p.balance - p.initial;
+              const pct = p.initial ? (pnl / p.initial) * 100 : 0;
+              return (
+                <div
+                  key={p.id}
+                  className="card-surface p-5 opacity-60 transition-all hover:opacity-80"
+                >
+                  <div className="flex items-start justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="grid h-11 w-11 place-items-center rounded-lg bg-muted text-muted-foreground">
+                        <Wallet className="h-5 w-5" />
+                      </div>
+                      <div>
+                        <div className="font-semibold">{p.name}</div>
+                        <div className="text-xs text-muted-foreground">
+                          {p.broker}
+                        </div>
+                      </div>
+                    </div>
+                    <DropdownMenu dir="rtl">
+                      <DropdownMenuTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8"
+                          aria-label="گزینه‌های پرتفولیو"
+                        >
+                          <MoreVertical className="h-4 w-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="start" className="w-52">
+                        <DropdownMenuLabel>{p.name}</DropdownMenuLabel>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem onSelect={() => toggleArchive(p)}>
+                          <ArchiveRestore className="ml-2 h-4 w-4" />
+                          خروج از آرشیو
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          className="text-destructive focus:text-destructive"
+                          onSelect={() => remove(p)}
+                        >
+                          <Trash2 className="ml-2 h-4 w-4" />
+                          حذف پرتفولیو
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
+
+                  <div className="mt-4 grid grid-cols-3 gap-2 text-xs">
+                    <div>
+                      <span className="text-muted-foreground">موجودی:</span>{" "}
+                      <span className="tabular">${p.balance.toLocaleString()}</span>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground">معاملات:</span>{" "}
+                      <span className="tabular">{p.trades}</span>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground">سود:</span>{" "}
+                      <span className={`tabular ${pnl >= 0 ? "gain" : "loss"}`}>
+                        {pnl >= 0 ? "+" : ""}{pct.toFixed(1)}٪
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="mt-4 flex gap-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="flex-1"
+                      onClick={() => toggleArchive(p)}
+                    >
+                      <ArchiveRestore className="ml-1 h-3 w-3" />
+                      بازگردانی
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      aria-label="حذف"
+                      onClick={() => remove(p)}
+                    >
+                      <Trash2 className="h-3 w-3" />
+                    </Button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       <Dialog open={!!editing} onOpenChange={(o) => !o && setEditing(null)}>
         <DialogContent>
