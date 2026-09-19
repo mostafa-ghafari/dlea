@@ -19,16 +19,28 @@ jobs:
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          # These travel through the environment and are never interpolated
+          # into the script body: a multi-line commit message inside `run:` is
+          # executed as shell commands, which is exactly how CI went red on a
+          # two-paragraph commit message.
+          BRANCH: ${{ github.ref_name }}
+          ACTOR: ${{ github.actor }}
+          COMMIT_SUBJECT: ${{ github.event.head_commit.message }}
+          REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.run_id }}
         run: |
           set -euo pipefail
+
+          # A Telegram card shows a subject line, not a whole commit message.
+          COMMIT_SUBJECT="${COMMIT_SUBJECT%%$'\n'*}"
 
           MESSAGE="🚀 DLEA CI/CD
 
           🔄 CI Pipeline Started
 
-          🌿 Branch: ${{ github.ref_name }}
-          👤 ${{ github.actor }}
-          📝 Commit: ${{ github.event.head_commit.message }}
+          🌿 Branch: ${BRANCH}
+          👤 ${ACTOR}
+          📝 Commit: ${COMMIT_SUBJECT}
 
           🔵 Backend Tests    ⏳
           🔵 Frontend Checks  ⏳
@@ -36,7 +48,7 @@ jobs:
 
           ⏳ Pipeline Running...
 
-          🔗 https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          🔗 https://github.com/${REPO}/actions/runs/${RUN_ID}"
 
           RESPONSE=$(curl -sS -X POST \
             "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
@@ -141,14 +153,21 @@ jobs:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           MESSAGE_ID: ${{ needs.notify-start.outputs.message_id }}
+          BRANCH: ${{ github.ref_name }}
+          ACTOR: ${{ github.actor }}
+          COMMIT_SUBJECT: ${{ github.event.head_commit.message }}
+          REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.run_id }}
         run: |
           set -euo pipefail
 
+          COMMIT_SUBJECT="${COMMIT_SUBJECT%%$'\n'*}"
+
           MESSAGE="🚀 DLEA CI/CD
 
-          🌿 Branch: ${{ github.ref_name }}
-          👤 ${{ github.actor }}
-          📝 Commit: ${{ github.event.head_commit.message }}
+          🌿 Branch: ${BRANCH}
+          👤 ${ACTOR}
+          📝 Commit: ${COMMIT_SUBJECT}
 
           🟢 Backend Tests    ✅
           🟢 Frontend Checks  ✅
@@ -156,7 +175,7 @@ jobs:
 
           ⏳ E2E Tests Running...
 
-          🔗 https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          🔗 https://github.com/${REPO}/actions/runs/${RUN_ID}"
 
           curl -sS -X POST \
             "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/editMessageText" \
@@ -190,8 +209,15 @@ jobs:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           MESSAGE_ID: ${{ needs.notify-start.outputs.message_id }}
+          BRANCH: ${{ github.ref_name }}
+          ACTOR: ${{ github.actor }}
+          COMMIT_SUBJECT: ${{ github.event.head_commit.message }}
+          REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.run_id }}
         run: |
           set -euo pipefail
+
+          COMMIT_SUBJECT="${COMMIT_SUBJECT%%$'\n'*}"
 
           BACKEND_RESULT="${{ needs.backend-tests.result }}"
           FRONTEND_RESULT="${{ needs.frontend-checks.result }}"
@@ -233,9 +259,9 @@ jobs:
 
           MESSAGE="${ICON} DLEA CI/CD
 
-          🌿 Branch: ${{ github.ref_name }}
-          👤 ${{ github.actor }}
-          📝 Commit: ${{ github.event.head_commit.message }}
+          🌿 Branch: ${BRANCH}
+          👤 ${ACTOR}
+          📝 Commit: ${COMMIT_SUBJECT}
 
           $BACKEND_STATUS
           $FRONTEND_STATUS
@@ -243,7 +269,7 @@ jobs:
 
           $TITLE
 
-          🔗 https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          🔗 https://github.com/${REPO}/actions/runs/${RUN_ID}"
 
           curl -sS -X POST \
             "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/editMessageText" \
