@@ -14,7 +14,6 @@ import { useCallback, useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { Num } from "@/components/Num";
 import {
   confirmPaymentOrder,
   fetchPaymentOrder,
@@ -252,7 +251,7 @@ function BillingPage() {
             </div>
             <Badge className="bg-primary text-primary-foreground">
               <CalendarClock className="ml-1 h-3 w-3" />
-              <Num>{sub.daysLeft}</Num> روز باقی‌مانده
+              {sub.daysLeft} روز باقی‌مانده
             </Badge>
           </div>
 

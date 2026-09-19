@@ -400,7 +400,7 @@ class SubscriptionSerializer(serializers.ModelSerializer):
     startDate = serializers.SerializerMethodField()
     endDate = serializers.SerializerMethodField()
     totalDays = serializers.IntegerField(source="total_days")
-    daysLeft = serializers.IntegerField(source="days_left")
+    daysLeft = serializers.SerializerMethodField()
 
     class Meta:
         model = Subscription
@@ -411,6 +411,11 @@ class SubscriptionSerializer(serializers.ModelSerializer):
 
     def get_endDate(self, obj):
         return jutils.to_jalali_date(obj.end_date)
+
+    def get_daysLeft(self, obj):
+        from django.utils import timezone
+        today = timezone.localdate()
+        return max(0, (obj.end_date - today).days)
 
 
 class PlatformUserSerializer(serializers.ModelSerializer):

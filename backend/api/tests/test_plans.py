@@ -37,13 +37,15 @@ class SubscriptionTests(BaseTestCase):
         self.user = self.auth(self.make_user(username="trader"))
 
     def _sub(self, user, plan="Pro"):
+        from django.utils import timezone as tz
+        today = tz.localdate()
         return Subscription.objects.create(
             user=user,
             plan=plan,
-            start_date=date(2026, 8, 1),
-            end_date=date(2026, 8, 31),
+            start_date=today,
+            end_date=today + timedelta(days=30),
             total_days=30,
-            days_left=15,
+            days_left=30,
             price="1,000,000",
         )
 
@@ -55,7 +57,7 @@ class SubscriptionTests(BaseTestCase):
         data = items[0]
         self.assertEqual(data["plan"], "Pro")
         self.assertEqual(data["totalDays"], 30)
-        self.assertEqual(data["daysLeft"], 15)
+        self.assertEqual(data["daysLeft"], 30)
         # Jalali dates
         self.assertTrue(data["startDate"].startswith("۱۴۰۵"))
         self.assertTrue(data["endDate"].startswith("۱۴۰۵"))
