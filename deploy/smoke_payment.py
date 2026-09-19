@@ -243,7 +243,14 @@ def step_config(host: str) -> str:
 
     callback = billing_views._callback_url(_FakeRequest(host))
     label = "callback URL" + ("" if public else " (تخمینی، از هدر درخواست)")
-    if callback.startswith("https://"):
+    if not callback.startswith(("http://", "https://")):
+        # استثنای زیبال: `callbackUrl` باید با http یا https شروع شود وگرنه کد ۱۰۶.
+        fail(
+            label,
+            f"{callback} — با http:// یا https:// شروع نمی‌شود؛ درگاه آن را با کد ۱۰۶ رد "
+            "می‌کند — PUBLIC_BACKEND_URL را با پروتکل کامل ست کن",
+        )
+    elif callback.startswith("https://"):
         ok(label, callback)
     else:
         warn(

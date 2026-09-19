@@ -79,6 +79,18 @@ def _callback_check(request) -> tuple[str, dict]:
             f"{callback} — آدرس محلی است و از اینترنت قابل دسترسی نیست؛ خریدار هرگز "
             "برنمی‌گردد. PUBLIC_BACKEND_URL را در .env ست کن",
         )
+    if not callback.startswith(("http://", "https://")):
+        # The gateway's own rule (کد ۱۰۶): `callbackUrl` must start with http or
+        # https. Missing scheme is one character away in .env
+        # (`PUBLIC_BACKEND_URL=dlea.piqagram.ir`) and makes *every* checkout
+        # fail, so it is a failure here rather than a warning.
+        return callback, _check(
+            "callback",
+            "آدرس بازگشت خریدار",
+            "fail",
+            f"{callback} — با http:// یا https:// شروع نمی‌شود؛ درگاه آن را با کد ۱۰۶ رد "
+            "می‌کند. PUBLIC_BACKEND_URL را با پروتکل کامل ست کن",
+        )
     if callback.startswith("https://"):
         status, detail = "pass", callback
     else:

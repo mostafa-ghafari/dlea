@@ -141,6 +141,15 @@ class ReturnDestinationTests(BaseTestCase):
         self.assertEqual(callback, "http://127.0.0.1:8002/api/billing/callback/")
         self.assertEqual(check["status"], "fail")
 
+    def test_a_callback_without_a_scheme_is_a_failure(self):
+        """`PUBLIC_BACKEND_URL=dlea.piqagram.ir` is a typo away and the gateway
+        answers 106 for it on every single checkout."""
+        with patch.dict("os.environ", {"PUBLIC_BACKEND_URL": "dlea.piqagram.ir"}):
+            callback, check = payment_health._callback_check(None)
+        self.assertEqual(callback, "dlea.piqagram.ir/api/billing/callback/")
+        self.assertEqual(check["status"], "fail")
+        self.assertIn("۱۰۶", check["detail"])
+
     def test_localhost_is_fine_in_development(self):
         """A developer running both halves locally must not see a red failure."""
         with patch.dict("os.environ", {"FRONTEND_URL": "http://localhost:5173"}), patch.object(
