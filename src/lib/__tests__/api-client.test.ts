@@ -34,6 +34,21 @@ function mockFetch(status = 200, body: unknown = {}) {
   return fn;
 }
 
+/**
+ * Await a request that must fail, returning its rejection as an `ApiError`.
+ *
+ * `.catch((e) => e)` types the result as `unknown`, which `tsc --noEmit` rejects,
+ * and it also passes silently when the request never rejects at all.
+ */
+async function rejection(promise: Promise<unknown>): Promise<ApiError> {
+  try {
+    await promise;
+  } catch (error) {
+    return error as ApiError;
+  }
+  throw new Error("expected the request to reject");
+}
+
 beforeEach(() => {
   invalidateCache(""); // wipe the module-level GET cache
   vi.restoreAllMocks();
@@ -190,9 +205,7 @@ describe("response handling", () => {
       504,
       "<html><head><title>504 Gateway Time-out</title></head></html>",
     );
-    const error = await post("coach/generate/", { scope: "weekly" }).catch(
-      (e) => e,
-    );
+    const error = await rejection(post("coach/generate/", { scope: "weekly" }));
     expect(error).toBeInstanceOf(ApiError);
     expect(error.status).toBe(504);
     expect(error.gateway).toBe(true);
@@ -206,9 +219,7 @@ describe("response handling", () => {
     // detail has to win, or a real and actionable error would be reported as a
     // proxy timeout — and the coach would tell the user to refresh instead.
     mockFetch(502, { detail: "Gemini (relay 1) مهلت انتظار تمام شد" });
-    const error = await post("coach/generate/", { scope: "weekly" }).catch(
-      (e) => e,
-    );
+    const error = await rejection(post("coach/generate/", { scope: "weekly" }));
     expect(error).toBeInstanceOf(ApiError);
     expect(error.gateway).toBe(false);
     expect(error.message).toBe("Gemini (relay 1) مهلت انتظار تمام شد");
@@ -216,7 +227,7 @@ describe("response handling", () => {
 
   it("does not mistake a plain 500 for a gateway", async () => {
     mockFetch(500, "Internal Server Error");
-    const error = await get("dashboard/").catch((e) => e);
+    const error = await rejection(get("dashboard/"));
     expect(error).toBeInstanceOf(ApiError);
     expect(error.gateway).toBe(false);
   });
