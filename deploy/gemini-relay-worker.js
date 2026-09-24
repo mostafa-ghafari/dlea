@@ -30,7 +30,9 @@ export default {
     const target = url.pathname.slice(1) + url.search;
 
     if (!target.startsWith(ALLOWED_ORIGIN)) {
-      return new Response(`only ${ALLOWED_ORIGIN} may be relayed\n`, { status: 400 });
+      return new Response(`only ${ALLOWED_ORIGIN} may be relayed\n`, {
+        status: 400,
+      });
     }
 
     const relayed = new Request(target, {
@@ -42,7 +44,9 @@ export default {
     try {
       return await fetch(relayed);
     } catch (error) {
-      return new Response(`relay could not reach Google: ${error}\n`, { status: 502 });
+      return new Response(`relay could not reach Google: ${error}\n`, {
+        status: 502,
+      });
     }
   },
 };
