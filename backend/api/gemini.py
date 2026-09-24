@@ -34,6 +34,8 @@ GEMINI_MODELS = [
     {"id": "gemini-3.1-flash-lite", "name": "Gemini 3.1 Flash Lite", "desc": "سبک و سریع — مناسب گزارشهای کوتاه"},
 ]
 
+GEMINI_API_BASE = "https://generativelanguage.googleapis.com/v1beta"
+
 SEVERITIES = ("بحرانی", "مهم", "قابل بهبود")
 
 WEEKDAYS = ["شنبه", "یکشنبه", "دوشنبه", "سه‌شنبه", "چهارشنبه", "پنج‌شنبه", "جمعه"]
@@ -61,6 +63,47 @@ def _load_dotenv() -> None:
 def get_api_key() -> str:
     _load_dotenv()
     return os.environ.get("GEMINI_API_KEY", "").strip()
+
+
+def proxy_bases() -> list:
+    """Every configured relay, in order of preference.
+
+    `GEMINI_PROXY` takes one base or several separated by commas/whitespace: a
+    sleeping or blocked relay should not take the whole coach down while a
+    second one still answers.
+    """
+    raw = os.environ.get("GEMINI_PROXY", "").replace(",", " ")
+    return [chunk.strip().rstrip("/") for chunk in raw.split() if chunk.strip()]
+
+
+def gemini_url(path: str, base: str | None = None) -> str:
+    """Absolute Google URL for ``path``, routed through ``GEMINI_PROXY`` if set.
+
+    The relay is a URL-prefix forwarder — the whole Google URL travels as the
+    path after the proxy base — not an HTTP CONNECT proxy. So ``GEMINI_PROXY``
+    must be an ``http(s)://host:port`` base that accepts that shape; a plain
+    forward proxy will answer 404/502 instead of relaying. (On nginx, put
+    ``merge_slashes off;`` in the server block, otherwise the ``//`` inside the
+    forwarded URL collapses and Google answers with an HTML 403 page.)
+    """
+    url = f"{GEMINI_API_BASE}/{path.lstrip('/')}"
+    if base is not None:
+        return f"{base.rstrip('/')}/{url}"
+    bases = proxy_bases()
+    return f"{bases[0]}/{url}" if bases else url
+
+
+def gemini_candidates(path: str, api_key: str) -> list:
+    """``[(label, url)]`` — every configured route to Google, tried in order."""
+    tail = f"{GEMINI_API_BASE}/{path.lstrip('/')}"
+    bases = proxy_bases()
+    if not bases:
+        return [("مستقیم", f"{tail}?key={api_key}")]
+    single = len(bases) == 1
+    return [
+        (f"relay {i + 1}" if not single else "relay", f"{base}/{tail}?key={api_key}")
+        for i, base in enumerate(bases)
+    ]
 
 
 def get_model(model: str | None) -> str:
@@ -255,13 +298,66 @@ Profit Factor: {stats['profitFactor']}
 - هیچ عددی را جعل نکن؛ فقط از داده‌های همین بازه استفاده کن. اعداد را در summary به صورت فارسی بنویس (مثلاً «+۵۸۸ دلار»)."""
 
 
+def _is_html(body: str) -> bool:
+    text = (body or "").lstrip()
+    return text.startswith("<") or "<html" in text.lower()
+
+
+def _explain_http_error(status: int, body: str) -> str:
+    """Name the fix instead of dumping Google's HTML page at the user.
+
+    A 403 that carries an HTML page means the request never reached the API: it
+    is a network/geo block (or a relay forwarding through a blocked IP), not a
+    key or model problem. Say so, because the raw page says nothing.
+    """
+    text = " ".join((body or "").split())
+    if status == 0:
+        return f"اتصال برقرار نشد — {text[:140] or 'بدون پاسخ'}"
+    if _is_html(text) and status in (401, 403):
+        return (
+            f"HTTP {status} با صفحهٔ HTML گوگل — درخواست هرگز به API نرسید؛ این بلاک شبکه/موقعیت "
+            "جغرافیایی است، نه مشکل کلید. روی سرور ایران GEMINI_PROXY را به relay ای بده که از "
+            "IP مجاز بیرون برود"
+        )
+    return f"HTTP {status} — {(text or 'بدون بدنه')[:200]}"
+
+
+def _worth_another_route(status: int, body: str) -> bool:
+    """Whether a second relay could plausibly answer where this one did not."""
+    if status == 0:
+        return True
+    return _is_html(body) and status in (401, 403, 502, 503, 504)
+
+
+def _no_route_error(attempts: list) -> str:
+    if len(attempts) == 1:
+        label, detail = attempts[0]
+        return f"Gemini ({label}) {detail}"
+    joined = " | ".join(f"{label}: {detail}" for label, detail in attempts)
+    return f"Gemini: هیچ‌کدام از {len(attempts)} مسیر جواب نداد — {joined}"
+
+
+def _post_gemini(url: str, payload: bytes) -> tuple:
+    """``(status, body)`` — status 0 means the request never got out."""
+    req = urllib.request.Request(
+        url,
+        data=payload,
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=120) as resp:
+            return resp.status, resp.read().decode("utf-8", errors="replace")
+    except urllib.error.HTTPError as exc:
+        return exc.code, exc.read().decode("utf-8", errors="replace")
+    except urllib.error.URLError as exc:
+        return 0, str(getattr(exc, "reason", exc))
+
+
 def call_gemini(prompt: str, model: str) -> str:
     api_key = get_api_key()
     if not api_key:
         raise RuntimeError("GEMINI_API_KEY")
-    proxy = os.environ.get("GEMINI_PROXY", "").strip().rstrip("/")
-    api_url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
-    url = f"{proxy}/{api_url}" if proxy else api_url
     payload = json.dumps(
         {
             "contents": [{"parts": [{"text": prompt}]}],
@@ -272,20 +368,19 @@ def call_gemini(prompt: str, model: str) -> str:
             },
         }
     ).encode("utf-8")
-    req = urllib.request.Request(
-        url,
-        data=payload,
-        headers={"Content-Type": "application/json"},
-        method="POST",
-    )
-    try:
-        with urllib.request.urlopen(req, timeout=120) as resp:
-            body = json.loads(resp.read().decode("utf-8"))
-    except urllib.error.HTTPError as exc:
-        detail = exc.read().decode("utf-8", errors="replace")[:300]
-        raise RuntimeError(f"Gemini HTTP {exc.code}: {detail}") from exc
-    except urllib.error.URLError as exc:
-        raise RuntimeError(f"Gemini network error: {exc.reason}") from exc
+
+    attempts: list[tuple[str, str]] = []
+    body: dict | None = None
+    for label, url in gemini_candidates(f"models/{model}:generateContent", api_key):
+        status, raw = _post_gemini(url, payload)
+        if status == 200:
+            body = json.loads(raw)
+            break
+        attempts.append((label, _explain_http_error(status, raw)))
+        if not _worth_another_route(status, raw):
+            break
+    if body is None:
+        raise RuntimeError(_no_route_error(attempts))
 
     candidates = body.get("candidates") or []
     if not candidates:

@@ -1,9 +1,14 @@
 """Tests for the AI coach: insights, generation (Gemini mocked), periods."""
 
+import io
+import json
+import os
+import urllib.error
 from unittest.mock import patch
 
 from rest_framework import status
 
+from api import gemini
 from api.models import AiApiCall, ArchivedReport, CoachInsights, CoachPeriod
 from api.tests.common import BaseTestCase
 
@@ -174,3 +179,96 @@ class CoachPeriodTests(BaseTestCase):
         items = self.get_list("/api/coach/archive/")
         self.assertEqual(items[0]["title"], "گزارش مرداد")
         self.assertEqual(items[0]["winRate"], "60%")
+
+
+class GeminiRelayTests(BaseTestCase):
+    """The Iran workaround: GEMINI_PROXY may prefix the Google URL, never rewrite it."""
+
+    PATH = "models/gemini-3.5-flash:generateContent"
+    PLAIN = f"https://generativelanguage.googleapis.com/v1beta/{PATH}"
+
+    def test_without_proxy_asks_google_directly(self):
+        with patch.dict(os.environ, {"GEMINI_PROXY": ""}):
+            self.assertEqual(gemini.gemini_url(self.PATH), self.PLAIN)
+
+    def test_proxy_prefixes_the_whole_google_url(self):
+        with patch.dict(os.environ, {"GEMINI_PROXY": "https://proxy.example:9090/"}):
+            self.assertEqual(gemini.gemini_url(self.PATH), f"https://proxy.example:9090/{self.PLAIN}")
+
+    def test_call_gemini_posts_to_the_relay(self):
+        captured = {}
+
+        def fake_urlopen(request, timeout=None):
+            captured["url"] = request.full_url
+            return self._answer()
+
+        env = {"GEMINI_PROXY": "https://proxy.example", "GEMINI_API_KEY": "k"}
+        with patch.dict(os.environ, env), patch("api.gemini.urllib.request.urlopen", fake_urlopen):
+            self.assertEqual(gemini.call_gemini("hi", "gemini-3.5-flash"), "{}")
+        self.assertEqual(captured["url"], f"https://proxy.example/{self.PLAIN}?key=k")
+
+    @staticmethod
+    def _answer():
+        class FakeResponse:
+            status = 200
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *exc):
+                return False
+
+            def read(self):
+                body = {"candidates": [{"content": {"parts": [{"text": "{}"}]}}]}
+                return json.dumps(body).encode("utf-8")
+
+        return FakeResponse()
+
+    @staticmethod
+    def _blocked(request, timeout=None):
+        """Google's generic HTML 403 page: the geo block, not a key problem."""
+        page = b"<!DOCTYPE html><html><title>Error 403 (Forbidden)!!1</title></html>"
+        raise urllib.error.HTTPError(request.full_url, 403, "Forbidden", {}, io.BytesIO(page))
+
+    def test_html_403_names_the_block_instead_of_dumping_html(self):
+        env = {"GEMINI_PROXY": "https://proxy.example", "GEMINI_API_KEY": "k"}
+        with patch.dict(os.environ, env), patch("api.gemini.urllib.request.urlopen", self._blocked):
+            with self.assertRaises(RuntimeError) as ctx:
+                gemini.call_gemini("hi", "gemini-3.5-flash")
+        message = str(ctx.exception)
+        self.assertIn("403", message)
+        self.assertIn("GEMINI_PROXY", message)
+        self.assertNotIn("<!DOCTYPE", message)
+
+    def test_blocked_relay_falls_back_to_the_next_one(self):
+        seen = []
+
+        def fake_urlopen(request, timeout=None):
+            seen.append(request.full_url)
+            if "blocked.example" in request.full_url:
+                return self._blocked(request)
+            return self._answer()
+
+        env = {
+            "GEMINI_PROXY": "https://blocked.example, https://good.example/",
+            "GEMINI_API_KEY": "k",
+        }
+        with patch.dict(os.environ, env), patch("api.gemini.urllib.request.urlopen", fake_urlopen):
+            self.assertEqual(gemini.call_gemini("hi", "gemini-3.5-flash"), "{}")
+        self.assertEqual(len(seen), 2)
+        self.assertIn("good.example", seen[1])
+
+    def test_key_error_does_not_try_the_next_relay(self):
+        seen = []
+
+        def fake_urlopen(request, timeout=None):
+            seen.append(request.full_url)
+            body = b'{"error": {"status": "INVALID_ARGUMENT", "message": "API key not valid"}}'
+            raise urllib.error.HTTPError(request.full_url, 400, "Bad Request", {}, io.BytesIO(body))
+
+        env = {"GEMINI_PROXY": "https://a.example https://b.example", "GEMINI_API_KEY": "k"}
+        with patch.dict(os.environ, env), patch("api.gemini.urllib.request.urlopen", fake_urlopen):
+            with self.assertRaises(RuntimeError) as ctx:
+                gemini.call_gemini("hi", "gemini-3.5-flash")
+        self.assertEqual(len(seen), 1)  # a bad key is bad on every route
+        self.assertIn("API key not valid", str(ctx.exception))

@@ -236,6 +236,24 @@ bash deploy/smoke-payment.sh --keep      # همان سفارش/کاربر برا
 همین تست در پایان **هر استقرار** هم از داخل `deploy/deploy.sh` اجرا می‌شود و اگر
 سبز نباشد آن استقرار «ناموفق» اعلام می‌شود (بخش ۴، مرحلهٔ ۱۲).
 
+**اسکریپت دودی هوش مصنوعی** (`deploy/smoke-gemini.sh`) همان کار را برای مسیر
+Gemini می‌کند و جوابش به IP همان ماشین بستگی دارد، پس مثل تست پرداخت خودش را روی
+سرور بالا می‌برد:
+
+```bash
+bash deploy/smoke-gemini.sh              # کلید، مسیر مستقیم، relay، یک گزارش واقعی
+bash deploy/smoke-gemini.sh --all-models # همهٔ مدل‌های لیست UI هم امتحان می‌شوند
+bash deploy/smoke-gemini.sh --site https://dlea.piqagram.ir \
+     --email you@example.com --password '…'   # + env خودِ پروسهٔ اپ (سهمیه مصرف می‌کند)
+```
+
+هیچ‌چیز نمی‌نویسد و فقط چند درخواست واقعی کوچک می‌زند. گوگل روی IP ایران
+`GET /v1beta/models` را با یک صفحهٔ **HTML** ۴۰۳ رد می‌کند در حالی که
+`:generateContent` با همان کلید و همان IP کار می‌کند؛ پس آن پروب‌ها فقط تشخیصی‌اند
+و **حکم قطعی، گزارش واقعی بخش ۴** است. اگر بخش ۴ سبز باشد ولی مسیر مستقیم بسته،
+یعنی `GEMINI_PROXY` (relay آلمان) کار خودش را می‌کند؛ اگر FAIL داد، همان بخش
+می‌گوید کدام حلقه پاره است (کلید، مدل، relay یا شبکه).
+
 **صفحهٔ «سلامت درگاه پرداخت» در پنل مدیریت**
 (`/app/admin/payment-health`، اندپوینت `GET/POST /api/admin/payment-health/`،
 فقط ادمین) همان بررسی‌ها است با یک کلیک: مرچنت‌کد و حالت آزمایشی، آدرس بازگشت
@@ -253,6 +271,68 @@ bash deploy/smoke-payment.sh --keep      # همان سفارش/کاربر برا
 درگاه ۱ بود ولی ردیف «در انتظار» ماند، یعنی verify انجام نشده: از خود صفحهٔ
 خرید اشتراک دکمهٔ «بررسی مجدد پرداخت» را بزن (بک‌اند دوباره از درگاه
 استعلام می‌گیرد) — لاگ آن در `pm2 logs dlea-api` دیده می‌شود.
+
+### هوش مصنوعی (Gemini)
+
+گزارش‌های مربی با Google Gemini ساخته می‌شوند. گوگل از IP ایران جواب نمی‌دهد و پاسخش
+یک صفحهٔ **HTML ۴۰۳** است («Error 403 (Forbidden)!!1») که هیچ ربطی به کلید ندارد:
+درخواست هرگز به API نرسیده. سه متغیر در `backend/.env`:
+
+| متغیر | کار |
+|---|---|
+| `GEMINI_API_KEY` | کلید Google AI Studio. نبودنش یعنی `POST /api/coach/generate/` کد ۴۰۰ می‌دهد |
+| `GEMINI_MODEL` | مدل پیش‌فرض گزارش‌ها؛ اگر ست نشود `gemini-3.6-flash` (بهتر است یکی از مدل‌های لیست UI باشد) |
+| `GEMINI_PROXY` | relay ای که ترافیک از طریقش بیرون می‌رود. **چند مقدار با کاما** هم قبول است و به‌ترتیب امتحان می‌شوند |
+
+**شکل relay:** آدرس کامل گوگل به‌عنوان *مسیر* بعد از relay می‌آید، یعنی
+`{GEMINI_PROXY}/https://generativelanguage.googleapis.com/v1beta/models/<model>:generateContent?key=…`.
+این یک پروکسی HTTP/CONNECT معمولی **نیست**؛ relay باید خودش این مسیر را بفهمد و فوروارد کند.
+
+**راه‌اندازی relay بدون نگهداری سرور:** یک Cloudflare Worker با فایل
+`deploy/gemini-relay-worker.js` (فقط میزبان گوگل را فوروارد می‌کند تا به پروکسی باز تبدیل نشود).
+در پنل Cloudflare: Workers & Pages → Create → Worker، محتوای آن فایل را paste کن و Deploy بزن؛
+یک آدرس مثل `https://dlea-gemini.<account>.workers.dev` می‌گیری. سپس در `backend/.env`:
+
+```bash
+GEMINI_PROXY=https://dlea-gemini.<account>.workers.dev
+pm2 restart dlea-api
+```
+
+**اگر relay روی همان VPS آلمان می‌ماند:** مهم‌ترین تله `merge_slashes` است — nginx به‌طور پیش‌فرض
+`//` را جمع می‌کند و آدرس فورواردشده به `/https:/generativelanguage…` تبدیل می‌شود (نتیجه: ۴۰۴
+یا همان ۴۰۳ HTML). این بلوک درست است:
+
+```nginx
+server {
+    listen 9090 ssl;
+    server_name _;
+    ssl_certificate     /etc/letsencrypt/live/<relay-host>/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/<relay-host>/privkey.pem;
+
+    merge_slashes off;                 # وگرنه // داخل آدرس فورواردشده جمع می‌شود
+    resolver 1.1.1.1 8.8.8.8 ipv6=off; # برای proxy_pass داینامیک لازم است
+
+    location ~ ^/(?<upstream>https?://.+)$ {
+        proxy_pass $upstream$is_args$args;
+        proxy_ssl_server_name on;
+        proxy_set_header Host $proxy_host;
+        proxy_read_timeout 120s;
+    }
+}
+```
+
+دو relay با هم (اگر اولی بلاک/خواب بود، دومی امتحان می‌شود):
+
+```bash
+GEMINI_PROXY=https://relay-vps.example:9090, https://dlea-gemini.<account>.workers.dev
+```
+
+**معنی خطاها در برنامه:** «HTTP 403 با صفحهٔ HTML گوگل» روی یک مسیر = همان مسیر از IP مجاز
+بیرون نمی‌رود؛ «HTTP 404/502» = relay شکل آدرس پیشوندی را نمی‌فهمد؛ «HTTP 400 با API key not
+valid» = مشکل کلید است، نه شبکه.
+
+> اگر روزی خود اپ بیرون ایران اجرا شد (مثلاً همان VPS آلمان)، این کل ماجرا لازم نیست:
+> `GEMINI_PROXY` را خالی بگذار.
 
 ---
 
