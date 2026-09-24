@@ -15,6 +15,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import time
 import urllib.error
 import urllib.request
 from datetime import datetime
@@ -35,6 +36,18 @@ GEMINI_MODELS = [
 ]
 
 GEMINI_API_BASE = "https://generativelanguage.googleapis.com/v1beta"
+
+# How long the whole call may take, across *every* configured route together.
+#
+# This is deliberately one budget and not one timeout per attempt. nginx sits in
+# front of gunicorn (`proxy_read_timeout` in deploy/nginx-dlea.conf) and answers
+# 504 the moment it expires, so waiting 120s on relay 1 and 120s more on relay 2
+# guarantees a gateway timeout: the user never sees the error message that says
+# which route failed, and the relay that would have answered is never reached.
+#
+# Keep this comfortably below nginx's read timeout (120s) and gunicorn's
+# `--timeout` (120s) so the app is always the one that answers.
+GEMINI_CALL_BUDGET_SECONDS = 75.0
 
 SEVERITIES = ("بحرانی", "مهم", "قابل بهبود")
 
@@ -104,6 +117,20 @@ def gemini_candidates(path: str, api_key: str) -> list:
         (f"relay {i + 1}" if not single else "relay", f"{base}/{tail}?key={api_key}")
         for i, base in enumerate(bases)
     ]
+
+
+def gemini_call_budget() -> float:
+    """Total seconds ``call_gemini`` may spend across every route.
+
+    Overridable with ``GEMINI_TIMEOUT`` so a deployment behind a slower gateway
+    can loosen it without a code change; anything unparseable or non-positive
+    falls back to the default rather than disabling the bound.
+    """
+    try:
+        value = float(os.environ.get("GEMINI_TIMEOUT", "").strip())
+    except ValueError:
+        return GEMINI_CALL_BUDGET_SECONDS
+    return value if value > 0 else GEMINI_CALL_BUDGET_SECONDS
 
 
 def get_model(model: str | None) -> str:
@@ -303,6 +330,11 @@ def _is_html(body: str) -> bool:
     return text.startswith("<") or "<html" in text.lower()
 
 
+def _is_timeout(body: str) -> bool:
+    lowered = (body or "").lower()
+    return "timed out" in lowered or "timeout" in lowered
+
+
 def _explain_http_error(status: int, body: str) -> str:
     """Name the fix instead of dumping Google's HTML page at the user.
 
@@ -312,6 +344,8 @@ def _explain_http_error(status: int, body: str) -> str:
     """
     text = " ".join((body or "").split())
     if status == 0:
+        if _is_timeout(text):
+            return "مهلت انتظار تمام شد و پاسخی نرسید (relay در دسترس نبود یا آدرسش را فوروارد نمی‌کند)"
         return f"اتصال برقرار نشد — {text[:140] or 'بدون پاسخ'}"
     if _is_html(text) and status in (401, 403):
         return (
@@ -337,7 +371,19 @@ def _no_route_error(attempts: list) -> str:
     return f"Gemini: هیچ‌کدام از {len(attempts)} مسیر جواب نداد — {joined}"
 
 
-def _post_gemini(url: str, payload: bytes) -> tuple:
+def _route_timeout(remaining: float, routes_left: int) -> float:
+    """Seconds this route may take, given the budget left and routes still to try.
+
+    Every route gets an equal share of what is left, so one blackholed relay can
+    never spend the budget the next relay needs, and a lone route still gets the
+    whole budget. ``routes_left`` counts the route being timed.
+    """
+    if routes_left <= 1:
+        return remaining
+    return remaining / routes_left
+
+
+def _post_gemini(url: str, payload: bytes, timeout: float) -> tuple:
     """``(status, body)`` — status 0 means the request never got out."""
     req = urllib.request.Request(
         url,
@@ -346,12 +392,17 @@ def _post_gemini(url: str, payload: bytes) -> tuple:
         method="POST",
     )
     try:
-        with urllib.request.urlopen(req, timeout=120) as resp:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
             return resp.status, resp.read().decode("utf-8", errors="replace")
     except urllib.error.HTTPError as exc:
         return exc.code, exc.read().decode("utf-8", errors="replace")
     except urllib.error.URLError as exc:
         return 0, str(getattr(exc, "reason", exc))
+    except (TimeoutError, OSError) as exc:
+        # Not every timeout arrives wrapped in URLError, and a timeout that
+        # escapes this function would reach the view as a 500 with no hint that
+        # the route, not the key, was the problem.
+        return 0, f"timed out after {timeout:.0f}s: {exc}"
 
 
 def call_gemini(prompt: str, model: str) -> str:
@@ -369,10 +420,22 @@ def call_gemini(prompt: str, model: str) -> str:
         }
     ).encode("utf-8")
 
+    routes = gemini_candidates(f"models/{model}:generateContent", api_key)
+    deadline = time.monotonic() + gemini_call_budget()
+
     attempts: list[tuple[str, str]] = []
     body: dict | None = None
-    for label, url in gemini_candidates(f"models/{model}:generateContent", api_key):
-        status, raw = _post_gemini(url, payload)
+    for index, (label, url) in enumerate(routes):
+        routes_left = len(routes) - index
+        remaining = deadline - time.monotonic()
+        if remaining <= 1:
+            # Out of budget: name the routes we never reached, rather than
+            # reporting one failure as if it were the whole story.
+            attempts.extend(
+                (skipped, "امتحان نشد — مهلت کل درخواست تمام شد") for skipped, _ in routes[index:]
+            )
+            break
+        status, raw = _post_gemini(url, payload, _route_timeout(remaining, routes_left))
         if status == 200:
             body = json.loads(raw)
             break

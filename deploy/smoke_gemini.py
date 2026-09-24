@@ -42,7 +42,8 @@ matters when this file is uploaded to /tmp to run on the server). Exit code is 0
 only when nothing FAILED.
 
 `--timeout` bounds the cheap probes only: step 4 calls `call_gemini`, which keeps
-its own 120-second timeout, so a black-holed network can make that step slow.
+its own budget (`GEMINI_CALL_BUDGET_SECONDS`, 75s across every route together),
+so a black-holed network can make that step slow.
 """
 
 import argparse
@@ -635,7 +636,10 @@ def parse_args(argv):
     parser.add_argument("--email", default="", help="log in as an existing account for step 5")
     parser.add_argument("--password", default="", help="password for --email")
     parser.add_argument(
-        "--timeout", type=int, default=30, help="per-probe timeout in seconds (step 4 keeps 120s)"
+        "--timeout",
+        type=int,
+        default=30,
+        help="per-probe timeout in seconds (step 4 keeps its own ~75s budget)",
     )
     parser.add_argument(
         "--all-models",

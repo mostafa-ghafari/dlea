@@ -276,13 +276,14 @@ bash deploy/smoke-gemini.sh --site https://dlea.piqagram.ir \
 
 گزارش‌های مربی با Google Gemini ساخته می‌شوند. گوگل از IP ایران جواب نمی‌دهد و پاسخش
 یک صفحهٔ **HTML ۴۰۳** است («Error 403 (Forbidden)!!1») که هیچ ربطی به کلید ندارد:
-درخواست هرگز به API نرسیده. سه متغیر در `backend/.env`:
+درخواست هرگز به API نرسیده. چهار متغیر در `backend/.env`:
 
 | متغیر | کار |
 |---|---|
 | `GEMINI_API_KEY` | کلید Google AI Studio. نبودنش یعنی `POST /api/coach/generate/` کد ۴۰۰ می‌دهد |
 | `GEMINI_MODEL` | مدل پیش‌فرض گزارش‌ها؛ اگر ست نشود `gemini-3.6-flash` (بهتر است یکی از مدل‌های لیست UI باشد) |
 | `GEMINI_PROXY` | relay ای که ترافیک از طریقش بیرون می‌رود. **چند مقدار با کاما** هم قبول است و به‌ترتیب امتحان می‌شوند |
+| `GEMINI_TIMEOUT` | مهلت کل یک فراخوانی Gemini به ثانیه (پیش‌فرض `۷۵`). بین همهٔ مسیرها **تقسیم** می‌شود، نه اینکه به هر کدام داده شود |
 
 **شکل relay:** آدرس کامل گوگل به‌عنوان *مسیر* بعد از relay می‌آید، یعنی
 `{GEMINI_PROXY}/https://generativelanguage.googleapis.com/v1beta/models/<model>:generateContent?key=…`.
@@ -330,6 +331,33 @@ GEMINI_PROXY=https://relay-vps.example:9090, https://dlea-gemini.<account>.worke
 **معنی خطاها در برنامه:** «HTTP 403 با صفحهٔ HTML گوگل» روی یک مسیر = همان مسیر از IP مجاز
 بیرون نمی‌رود؛ «HTTP 404/502» = relay شکل آدرس پیشوندی را نمی‌فهمد؛ «HTTP 400 با API key not
 valid» = مشکل کلید است، نه شبکه.
+
+#### زمان‌بندی: چرا گزارش با ۵۰۴ برمی‌گردد ولی خطای واقعی Gemini هیچ‌وقت دیده نمی‌شود
+
+خطای خود Gemini همیشه **۵۰۲** با یک پیام فارسی است (کلید، بلاک، relay). یک **۵۰۴ خالی** هیچ‌وقت
+از اپ نمی‌آید — از گیتوی می‌آید که پیش از آماده‌شدن گزارش بی‌خیال شده. سه لایهٔ تایم‌اوت باید با هم
+هم‌خوان باشند و پیش‌فرض‌ها هم‌خوان **نبودند**:
+
+| لایه | مقدار | جای تنظیم |
+|---|---|---|
+| nginx روی `dlea.piqagram.ir` (`location /api/`) | `proxy_read_timeout 120s` | `deploy/nginx-dlea.conf` |
+| gunicorn | `--timeout 120` | `deploy/deploy.sh` |
+| خود فراخوانی Gemini | `GEMINI_CALL_BUDGET_SECONDS = 75` (کل، بین مسیرها تقسیم می‌شود) | `backend/api/gemini.py` |
+
+پیش‌ترین پیش‌فرض nginx برای `proxy_read_timeout` مقدار **۶۰ ثانیه** است و در نسخهٔ قبلی این فایل
+ست نشده بود؛ یعنی هر گزارش کندتر از یک دقیقه ۵۰۴ می‌گرفت، در حالی که gunicorn تا ۱۲۰ ثانیه
+صبر می‌کرد. اگر باز هم ۵۰۴ دیدی، اول مطمئن شو نسخهٔ به‌روز این vhost روی سرور کپی شده:
+
+```bash
+sudo cp deploy/nginx-dlea.conf /etc/nginx/sites-enabled/dlea.piqagram.ir
+sudo nginx -t && sudo systemctl reload nginx
+nginx -T 2>/dev/null | grep -A2 "location /api"   # باید proxy_read_timeout 120s را ببینی
+```
+
+نکتهٔ دوم: جلوی این دامنه **ArvanCloud** است. اگر CDN خودش روی ۱۰۰ ثانیه تایم‌اوت بدهد، بالا بردن
+nginx فایده‌ای ندارد و باید `GEMINI_TIMEOUT` را پایین‌تر بیاوری؛ ۷۵ ثانیهٔ پیش‌فرض انتخاب شده تا
+زیر آن سقف بماند. توجه کن که `GEMINI_TIMEOUT` **بودجهٔ کل** است: با دو relay، هر کدام فقط سهم
+خودش (`بودجه ÷ تعداد مسیرهای باقی‌مانده`) را می‌گیرد تا یک relay مرده، relay دوم را بی‌نصیب نکند.
 
 > اگر روزی خود اپ بیرون ایران اجرا شد (مثلاً همان VPS آلمان)، این کل ماجرا لازم نیست:
 > `GEMINI_PROXY` را خالی بگذار.

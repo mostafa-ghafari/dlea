@@ -3,6 +3,7 @@
 import io
 import json
 import os
+import time
 import urllib.error
 from unittest.mock import patch
 
@@ -272,3 +273,127 @@ class GeminiRelayTests(BaseTestCase):
                 gemini.call_gemini("hi", "gemini-3.5-flash")
         self.assertEqual(len(seen), 1)  # a bad key is bad on every route
         self.assertIn("API key not valid", str(ctx.exception))
+
+
+class GeminiTimeBudgetTests(BaseTestCase):
+    """One budget for the whole call: extra relays must not add up to a 504.
+
+    nginx answers 504 the moment its `proxy_read_timeout` expires, so a per
+    attempt timeout would let two sleeping relays exceed it and hide the error
+    message that names the route that failed.
+    """
+
+    def _spy(self, seen):
+        """Google's HTML 403 page, recording the timeout each route was given."""
+
+        def fake_urlopen(request, timeout=None):
+            seen.append(timeout)
+            raise urllib.error.HTTPError(
+                request.full_url,
+                403,
+                "Forbidden",
+                {},
+                io.BytesIO(b"<!DOCTYPE html><html><title>Error 403</title></html>"),
+            )
+
+        return fake_urlopen
+
+    def test_the_first_of_two_relays_may_not_take_more_than_its_share(self):
+        seen = []
+        env = {"GEMINI_PROXY": "https://a.example, https://b.example", "GEMINI_API_KEY": "k"}
+        with patch.dict(os.environ, env), patch(
+            "api.gemini.urllib.request.urlopen", self._spy(seen)
+        ):
+            with self.assertRaises(RuntimeError):
+                gemini.call_gemini("hi", "gemini-3.5-flash")
+
+        budget = gemini.GEMINI_CALL_BUDGET_SECONDS
+        self.assertEqual(len(seen), 2)
+        # Half the budget each, so a dead first relay cannot spend the time the
+        # second one needs. (Only the last route may use all that is left.)
+        self.assertLessEqual(seen[0], budget / 2 + 0.5)
+        for timeout in seen:
+            self.assertLessEqual(timeout, budget)
+
+    def test_a_sleeping_relay_cannot_starve_the_next_one(self):
+        """A relay that burns its whole slice must still leave the next one time."""
+        seen = []
+        page = b"<!DOCTYPE html><html><title>Error 403</title></html>"
+
+        def slow_then_blocked(request, timeout=None):
+            seen.append(timeout)
+            if len(seen) == 1:
+                time.sleep(timeout)  # uses its entire slice, then dies
+                raise urllib.error.URLError("timed out")
+            raise urllib.error.HTTPError(request.full_url, 403, "Forbidden", {}, io.BytesIO(page))
+
+        env = {
+            "GEMINI_PROXY": "https://slow.example, https://good.example",
+            "GEMINI_API_KEY": "k",
+            "GEMINI_TIMEOUT": "4",
+        }
+        with patch.dict(os.environ, env), patch(
+            "api.gemini.urllib.request.urlopen", slow_then_blocked
+        ):
+            with self.assertRaises(RuntimeError):
+                gemini.call_gemini("hi", "gemini-3.5-flash")
+
+        self.assertEqual(len(seen), 2)
+        self.assertAlmostEqual(seen[0], 2.0, delta=0.2)  # half of the 4s budget
+        self.assertAlmostEqual(seen[1], 2.0, delta=0.4)  # the other half survived
+
+    def test_a_lone_route_still_gets_the_whole_budget(self):
+        seen = []
+        env = {"GEMINI_PROXY": "", "GEMINI_API_KEY": "k"}
+        with patch.dict(os.environ, env), patch(
+            "api.gemini.urllib.request.urlopen", self._spy(seen)
+        ):
+            with self.assertRaises(RuntimeError):
+                gemini.call_gemini("hi", "gemini-3.5-flash")
+
+        self.assertEqual(len(seen), 1)
+        self.assertAlmostEqual(seen[0], gemini.GEMINI_CALL_BUDGET_SECONDS, delta=0.5)
+
+    def test_a_route_out_of_budget_is_named_not_silently_skipped(self):
+        def slow(request, timeout=None):
+            time.sleep(1.6)  # burns the whole (test-sized) budget
+            raise urllib.error.URLError("timed out")
+
+        env = {
+            "GEMINI_PROXY": "https://slow.example, https://never-tried.example",
+            "GEMINI_API_KEY": "k",
+            "GEMINI_TIMEOUT": "1.5",
+        }
+        with patch.dict(os.environ, env), patch("api.gemini.urllib.request.urlopen", slow):
+            with self.assertRaises(RuntimeError) as ctx:
+                gemini.call_gemini("hi", "gemini-3.5-flash")
+
+        message = str(ctx.exception)
+        self.assertIn("relay 2", message)
+        self.assertIn("امتحان نشد", message)
+
+    def test_timeout_env_var_overrides_the_budget(self):
+        with patch.dict(os.environ, {"GEMINI_TIMEOUT": "12.5"}):
+            self.assertEqual(gemini.gemini_call_budget(), 12.5)
+
+    def test_unusable_timeout_env_var_falls_back_to_the_default(self):
+        for value in ("", "soon", "0", "-3"):
+            with patch.dict(os.environ, {"GEMINI_TIMEOUT": value}):
+                self.assertEqual(
+                    gemini.gemini_call_budget(), gemini.GEMINI_CALL_BUDGET_SECONDS
+                )
+
+    def test_a_dead_route_reports_a_timeout_in_plain_words(self):
+        def dead(request, timeout=None):
+            raise urllib.error.URLError("timed out")
+
+        env = {"GEMINI_PROXY": "https://dead.example", "GEMINI_API_KEY": "k"}
+        with patch.dict(os.environ, env), patch("api.gemini.urllib.request.urlopen", dead):
+            with self.assertRaises(RuntimeError) as ctx:
+                gemini.call_gemini("hi", "gemini-3.5-flash")
+
+        self.assertIn("مهلت", str(ctx.exception))
+
+    def test_the_budget_stays_under_nginx_read_timeout(self):
+        """A report must fail with our message, not the gateway's 504."""
+        self.assertLess(gemini.GEMINI_CALL_BUDGET_SECONDS, 120)
