@@ -37,6 +37,14 @@ GEMINI_MODELS = [
 
 GEMINI_API_BASE = "https://generativelanguage.googleapis.com/v1beta"
 
+# Sent as `User-Agent` on every call to Google.
+#
+# urllib would otherwise advertise itself as `Python-urllib/3.x`, and Cloudflare's
+# edge in front of a `*.workers.dev` relay answers that signature with
+# `403 error code: 1010` *before* the worker ever runs. That reads like a broken
+# relay, or a bad key, while the relay is in fact healthy — so name the client.
+GEMINI_USER_AGENT = "dlea-coach/1.0"
+
 # How long the whole call may take, across *every* configured route together.
 #
 # This is deliberately one budget and not one timeout per attempt. nginx sits in
@@ -335,6 +343,17 @@ def _is_timeout(body: str) -> bool:
     return "timed out" in lowered or "timeout" in lowered
 
 
+def _is_ua_block(body: str) -> bool:
+    """Cloudflare refused the caller's *signature* before any relay logic ran.
+
+    `error code: 1010` is Cloudflare's browser-integrity ban, and it is about the
+    ``User-Agent`` the caller sent — not the relay, the key, or the model. Give it
+    its own case: the generic 403 wording sends you hunting on the wrong server.
+    """
+    lowered = (body or "").lower()
+    return "error code: 1010" in lowered or ("cloudflare" in lowered and "1010" in lowered)
+
+
 def _explain_http_error(status: int, body: str) -> str:
     """Name the fix instead of dumping Google's HTML page at the user.
 
@@ -347,6 +366,11 @@ def _explain_http_error(status: int, body: str) -> str:
         if _is_timeout(text):
             return "مهلت انتظار تمام شد و پاسخی نرسید (relay در دسترس نبود یا آدرسش را فوروارد نمی‌کند)"
         return f"اتصال برقرار نشد — {text[:140] or 'بدون پاسخ'}"
+    if _is_ua_block(text):
+        return (
+            f"HTTP {status} از لبهٔ گیتوی — امضای درخواست (User-Agent) رد شد، نه کلید و نه خود relay؛ "
+            "هدر User-Agent درخواست‌های Gemini را عوض کن"
+        )
     if _is_html(text) and status in (401, 403):
         return (
             f"HTTP {status} با صفحهٔ HTML گوگل — درخواست هرگز به API نرسید؛ این بلاک شبکه/موقعیت "
@@ -388,7 +412,11 @@ def _post_gemini(url: str, payload: bytes, timeout: float) -> tuple:
     req = urllib.request.Request(
         url,
         data=payload,
-        headers={"Content-Type": "application/json"},
+        headers={
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+            "User-Agent": GEMINI_USER_AGENT,
+        },
         method="POST",
     )
     try:

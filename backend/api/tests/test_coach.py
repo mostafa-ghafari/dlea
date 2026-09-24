@@ -274,6 +274,60 @@ class GeminiRelayTests(BaseTestCase):
         self.assertEqual(len(seen), 1)  # a bad key is bad on every route
         self.assertIn("API key not valid", str(ctx.exception))
 
+    def test_the_relay_sees_a_named_user_agent(self):
+        """Cloudflare bans `Python-urllib/3.x` at its edge, before the relay runs.
+
+        urllib fills in that User-Agent whenever the request does not set one, so
+        the default is a 403 from Cloudflare that looks like a broken relay.
+        """
+        captured = {}
+
+        def fake_urlopen(request, timeout=None):
+            # urllib stores header names capitalised ("User-Agent" -> "User-agent").
+            captured["ua"] = request.get_header("User-agent")
+            return self._answer()
+
+        env = {"GEMINI_PROXY": "https://proxy.example", "GEMINI_API_KEY": "k"}
+        with patch.dict(os.environ, env), patch("api.gemini.urllib.request.urlopen", fake_urlopen):
+            gemini.call_gemini("hi", "gemini-3.5-flash")
+        self.assertEqual(captured["ua"], gemini.GEMINI_USER_AGENT)
+        self.assertNotIn("urllib", captured["ua"].lower())
+
+    @staticmethod
+    def _ua_banned(request, timeout=None):
+        """Cloudflare's browser-integrity ban: 403 before the relay's code runs."""
+        raise urllib.error.HTTPError(
+            request.full_url, 403, "Forbidden", {}, io.BytesIO(b"error code: 1010\n")
+        )
+
+    def test_a_cloudflare_user_agent_ban_names_its_cause(self):
+        env = {"GEMINI_PROXY": "https://proxy.example", "GEMINI_API_KEY": "k"}
+        with patch.dict(os.environ, env), patch(
+            "api.gemini.urllib.request.urlopen", self._ua_banned
+        ):
+            with self.assertRaises(RuntimeError) as ctx:
+                gemini.call_gemini("hi", "gemini-3.5-flash")
+        message = str(ctx.exception)
+        self.assertIn("User-Agent", message)
+        self.assertNotIn("error code: 1010", message)  # name the cause, not the raw ban
+
+    def test_a_user_agent_ban_does_not_burn_the_other_relays(self):
+        """The User-Agent is ours, so every relay would be banned identically."""
+        seen = []
+
+        def fake_urlopen(request, timeout=None):
+            seen.append(request.full_url)
+            return self._ua_banned(request)
+
+        env = {
+            "GEMINI_PROXY": "https://a.example https://b.example https://c.example",
+            "GEMINI_API_KEY": "k",
+        }
+        with patch.dict(os.environ, env), patch("api.gemini.urllib.request.urlopen", fake_urlopen):
+            with self.assertRaises(RuntimeError):
+                gemini.call_gemini("hi", "gemini-3.5-flash")
+        self.assertEqual(len(seen), 1)
+
 
 class GeminiTimeBudgetTests(BaseTestCase):
     """One budget for the whole call: extra relays must not add up to a 504.

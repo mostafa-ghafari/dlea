@@ -19,43 +19,49 @@ ArvanCloud            ← TLS اینجاست (گواهی صادرشده توسط
   │  http://37.255.212.55:80
   ▼
 nginx  (vhost: /etc/nginx/sites-enabled/dlea.piqagram.ir)
-  ├── /api/    → 127.0.0.1:8002   gunicorn  (PM2 app: dlea-api)
+  ├── /api/    → 127.0.0.1:8002   کانتینر dlea-backend   (gunicorn، از استک Docker)
   ├── /media/  → /var/www/dlea.piqagram.ir/backend/media/   (فایل‌های آپلودی)
-  └── /        → 127.0.0.1:3000   node .output/server/index.mjs  (PM2 app: dlea)
+  └── /        → 127.0.0.1:3000   کانتینر dlea-frontend  (node .output/server/index.mjs)
 ```
 
 نکات حیاتی این معماری:
 
-- **TLS روی سرور تمام نمی‌شود.** vhost فقط `listen 80` دارد؛ بلاک `listen 443`
-  اضافه نکن. روی همین ماشین سایت‌های دیگری هم روی `:443` هستند.
+- **TLS روی همین سرور هم تمام می‌شود.** certbot یک بلاک `listen 443 ssl` به همین vhost اضافه کرده
+  (گواهی `/etc/letsencrypt/live/mdf.piqagram.ir/`). پس **کل فایل vhost را از ریپو کپی نکن**: نسخهٔ `deploy/nginx-dlea.conf` فقط قطعهٔ مرجع است و بلاک ۴۴۳ ندارد — کپی‌کردنش سایت را از HTTPS می‌اندازد.
 - **پورت ۸۰۰۰ مال این پروژه نیست؛** سایت دیگری روی آن گوش می‌دهد. هیچ سرویس،
   یونیت systemd یا کانفیگی نباید `:8000` را بگیرد. بک‌اند دلئا روی **۸۰۰۲** است.
-- **پروسه‌ها مال PM2 هستند، نه systemd.** یونیت systemd برای دلئا وجود ندارد و
-  نباید ساخته شود.
+- **پروسه‌های دلئا کانتینر Docker هستند، نه PM2 و نه systemd.** استک در `/home/ghafari/dlea-git`
+  با `docker-compose` بالا می‌آید. `pm2 list` روی این سرور فقط `trader-journal` را نشان می‌دهد؛ `pm2 restart dlea-api` **چنین پروسه‌ای وجود ندارد** و خطا می‌دهد.
 
-### پروسه‌ها (PM2)
+### پروسه‌ها (Docker — استک `/home/ghafari/dlea-git`)
 
-| نام در PM2 | اجرا | cwd | آرگومان‌ها |
+| نام کانتینر | اجرا | cwd / env | پورت |
 |---|---|---|---|
-| `dlea-api` | `backend/.venv/bin/gunicorn` | `/var/www/dlea.piqagram.ir/backend` | `config.wsgi:application --bind 127.0.0.1:8002 --workers 3 --timeout 120` |
-| `dlea` | `npm start` → `node .output/server/index.mjs` | `/var/www/dlea.piqagram.ir` | `start` |
+| `dlea-backend` | image `dlea-git_backend` → gunicorn | env از `docker/.env.docker` | `--bind 0.0.0.0:8002 --workers 3 --timeout 120` → `127.0.0.1:8002` |
+| `dlea-frontend` | image `dlea-git_frontend` → `node .output/server/index.mjs` | داخل ایمیج (بیلدشده) | `127.0.0.1:3000` |
 
-- سرویس بوت: `pm2-ghafari.service` (enabled). یعنی بعد از ریبوت، PM2 دقیقاً همان
-  چیزی را برمی‌گرداند که در `~/.pm2/dump.pm2` ذخیره شده است.
-- **بعد از هر تغییر در تعریف اپ‌ها** یک بار `pm2 save` بزن، وگرنه بعد از ریبوت
-  تعریف قدیمی برمی‌گردد.
+- کانتینرها `restart: unless-stopped` دارند، پس بعد از ریبوت خودشان بالا می‌آیند.
+  `pm2-ghafari.service` هنوز برای `trader-journal` فعال است و به دلئا کاری ندارد.
+- **بعد از هر تغییر در `docker/.env.docker`** کانتینر باید بازسازی شود، نه ری‌استارت:
+  `docker rm -f dlea-backend && docker-compose up -d backend`. نسخهٔ compose این سرور v1 است و `up --force-recreate` با باگ `KeyError: 'ContainerConfig'` می‌افتد.
 
 ### مسیرها
 
 | مسیر | چیست | در استقرار دست‌خورده می‌ماند؟ |
 |---|---|---|
-| `~/dlea/releases/<timestamp>` | هر استقرار یک ریلیس کامل (کد + `pip-wheels` + `.output`) | — |
+| `~/dlea/releases/<timestamp>` | **مسیر قدیمی.** کد آرشیوی؛ در تولید اجرا نمی‌شود | — |
 | `~/dlea/current` | لینک نمادین به آخرین ریلیس (آرشیو؛ سرو نمی‌شود) | — |
-| `/var/www/dlea.piqagram.ir/backend` | **کدی که واقعاً اجرا می‌شود** (`api/`, `config/`, `manage.py`) | `api/` و `config/` آینه می‌شوند؛ `.env`، `media/` و `.venv` دست‌نخورده می‌مانند |
-| `/var/www/dlea.piqagram.ir/.output` | بیلد فرانت که PM2 سرو می‌کند | از ریلیس بازنویسی می‌شود |
-| `backend/media/` | آواتار، رسید پرداخت و … (۸ فایل در آخرین بررسی) | هرگز |
-| `backend/.env` | تنظیمات تولید (DB، کلیدها) | هرگز |
+| `/home/ghafari/dlea-git` | **کد زنده.** منبع `docker-compose.yml` و بیلد ایمیج‌های `dlea-git_*` | با `git pull` + بیلد |
+| `docker/.env.docker` | **تنظیمات تولید واقعی** (`GEMINI_PROXY`، DB، کلیدها) | هرگز در گیت نرود |
+| `/var/www/dlea.piqagram.ir/backend` | **اجرا نمی‌شود.** باقی‌ماندهٔ نسخهٔ قبل؛ nginx فقط `media/` را از اینجا سرو می‌کند | ← **`.env` اینجا بی‌اثر است**؛ عوض‌کردنش هیچ چیزی را تغییر نمی‌دهد |
+| `/var/www/dlea.piqagram.ir/.output` | اجرا نمی‌شود (بیلد فرانت داخل ایمیج `dlea-frontend` است) | — |
+| `backend/media/` | همان چیزی که nginx روی `/media/` سرو می‌کند — **۸ فایل** | هرگز |
+| volume `dlea-media` (`/app/media` داخل کانتینر) | **جایی که اپ آپلودها را می‌نویسد — ۴۷ فایل** | هرگز |
+| `backend/.env` (بیرون کانتینر) | **بی‌اثر** — هیچ پروسه‌ای این را نمی‌خواند | — |
 
+> **ناهم‌خوانی `/media/`:** اپ داخل حجم `dlea-media` می‌نویسد ولی nginx از `backend/media/` می‌خواند،
+> پس بخشی از آپلودها (۴۷ در برابر ۸ فایل) روی سایت ۴۰۴ می‌دهد. یکسان‌کردن این دو یک تسک جداگانه است.
+>
 > هر ریلیس حدود **۸۰ مگابایت** است و در آخرین بررسی ۲۸ ریلیس (۲.۲ گیگ) روی دیسک
 > بود. دیسک سرور ~۱۴ گیگ آزاد دارد؛ بخش ۹ را دوره‌ای اجرا کن.
 
@@ -458,6 +464,57 @@ nginx فایده‌ای ندارد و باید `GEMINI_TIMEOUT` را پایین�
 
 > اگر روزی خود اپ بیرون ایران اجرا شد (مثلاً همان VPS آلمان)، این کل ماجرا لازم نیست:
 > `GEMINI_PROXY` را خالی بگذار.
+
+#### قطع ۲۴ سپتامبر: relay آلمان هرگز از ایران در دسترس نبود
+
+علامت: `POST /api/coach/generate/` یک **`API 504` خالی** برمی‌گرداند، بدون `detail` فارسی.
+
+زنجیرهٔ واقعی علت:
+
+1. **کل شبکهٔ Hetzner از سرور ایران بلاک است.** خود `https://www.hetzner.com/` تایم‌اوت می‌شود،
+   در حالی که در همان لحظه Cloudflare، DigitalOcean، Linode، Netcup، OVH و Vultr همه جواب می‌دهند.
+   به `91.107.181.237` دست‌دادن TCP روی ۲۲/۴۴۳/۸۰۸۰/۹۰۹۰/۹۴۴۳ کامل می‌شود ولی **حتی یک بایت
+   داده هم رد و بدل نمی‌شود** — banner روی `:22` خالی می‌ماند، در حالی که همان تست از یک شبکهٔ
+   دیگر banner کامل می‌دهد. پس relay آلمان روی **هیچ** پورتی قابل استفاده نبود؛ نه مسئلهٔ TLS بود،
+   نه پورت، نه فایروال.
+2. اپ روی همان اتصال بی‌پاسخ تا انتهای بودجه‌اش منتظر می‌ماند.
+3. nginx پیش از آن، در ثانیهٔ ۶۰ با `proxy_read_timeout` تسلیم می‌شود.
+4. بدنهٔ پاسخ HTML است و فرانت (`src/lib/api.ts`) چون JSON نیست، `API 504: coach/generate/` می‌سازد.
+
+درس: **۵۰۴ خالی یعنی «مهلت گیتوی»، نه «باگ اپ».** اپ خطاهای خودش را همیشه با `detail` فارسی و
+کد ۴۰۰/۴۰۳/۵۰۲ برمی‌گرداند؛ پس هر ۵۰۴ با بدنهٔ HTML از لایهٔ بالای gunicorn آمده است.
+
+##### راه‌حل: Cloudflare Worker به‌جای VPS آلمان
+
+`deploy/gemini-relay-worker.js` یک URL-prefix forwarder است که فقط میزبان گوگل را رد می‌کند
+(پروکسی باز نمی‌شود) و با یک توکن محافظت می‌شود:
+
+```bash
+# در /home/ghafari/dlea-git/docker/.env.docker
+GEMINI_PROXY=https://dlea-gemini.<account>.workers.dev/<RELAY_TOKEN>
+```
+
+اندازه‌گیری از خود سرور ایران: پاسخ گوگل در **~۰٫۵ ثانیه** و درخواست واقعی اپ در **~۰٫۳ ثانیه**،
+در حالی که در همان لحظه `http://91.107.181.237:9090/` عدد `000` می‌دهد.
+
+##### تلهٔ بعدی: Cloudflare امضای `Python-urllib` را بلاک می‌کند
+
+پس از عوض‌کردن relay، خطا به `HTTP 403 — error code: 1010` تبدیل شد. `1010` بلاک
+browser-integrity کلادفلر است و **مربوط به `User-Agent` فرستنده است، نه relay و نه کلید.**
+`urllib` اگر هدر ندهی خودش را `Python-urllib/3.x` معرفی می‌کند و کلادفلر آن را پیش از اجرای
+Worker رد می‌کند. همان URL، همان POST، فقط UA فرق دارد:
+
+| User-Agent | نتیجه |
+|---|---|
+| `curl/8.5.0` | ۴۰۰ با JSON خود گوگل ✅ |
+| `Python-urllib/3.12` | ۴۰۳ با `error code: 1010` ❌ |
+| `dlea-coach/1.0` | ۴۰۰ ✅ |
+
+برای همین `_post_gemini` در `backend/api/gemini.py` حالا `GEMINI_USER_AGENT` را می‌فرستد و
+`_explain_http_error` کد `1010` را جدا نام می‌برد تا شبیه «کلید نامعتبر» به نظر نرسد.
+
+> **اگر دوباره `1010` دیدی:** اول `User-Agent` را چک کن، بعد relay را. عوض‌کردن relay فایده‌ای
+> ندارد، چون مشکل در هدر خود ماست.
 
 ---
 
