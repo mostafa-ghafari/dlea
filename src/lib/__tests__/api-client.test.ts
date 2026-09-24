@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  ApiError,
   confirmPaymentOrder,
   del,
   fetchPaymentHealth,
@@ -181,6 +182,43 @@ describe("response handling", () => {
   it("falls back to a generic message for non-JSON errors", async () => {
     mockFetch(500, "Internal Server Error");
     await expect(get("dashboard/")).rejects.toThrow("API 500: dashboard/");
+  });
+
+  it("names a gateway timeout instead of the path it was asked for", async () => {
+    // What nginx answers once proxy_read_timeout expires: HTML, not DRF's JSON.
+    mockFetch(
+      504,
+      "<html><head><title>504 Gateway Time-out</title></head></html>",
+    );
+    const error = await post("coach/generate/", { scope: "weekly" }).catch(
+      (e) => e,
+    );
+    expect(error).toBeInstanceOf(ApiError);
+    expect(error.status).toBe(504);
+    expect(error.gateway).toBe(true);
+    // The path on its own is what made this unfixable from the user's side.
+    expect(error.message).not.toContain("API 504");
+    expect(error.message).toContain("۵۰۴");
+  });
+
+  it("keeps the app's own 502 detail, which is not a gateway failure", async () => {
+    // The view answers a Gemini failure with 502 *and* a Persian detail. The
+    // detail has to win, or a real and actionable error would be reported as a
+    // proxy timeout — and the coach would tell the user to refresh instead.
+    mockFetch(502, { detail: "Gemini (relay 1) مهلت انتظار تمام شد" });
+    const error = await post("coach/generate/", { scope: "weekly" }).catch(
+      (e) => e,
+    );
+    expect(error).toBeInstanceOf(ApiError);
+    expect(error.gateway).toBe(false);
+    expect(error.message).toBe("Gemini (relay 1) مهلت انتظار تمام شد");
+  });
+
+  it("does not mistake a plain 500 for a gateway", async () => {
+    mockFetch(500, "Internal Server Error");
+    const error = await get("dashboard/").catch((e) => e);
+    expect(error).toBeInstanceOf(ApiError);
+    expect(error.gateway).toBe(false);
   });
 });
 

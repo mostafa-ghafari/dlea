@@ -26,6 +26,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
+  ApiError,
   fetchCoachPeriods,
   generateCoachReport,
   invalidateCache,
@@ -120,7 +121,18 @@ function AiCoach() {
       await periodsApi.reload();
       setIndex(0);
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "خطا در ساخت تحلیل");
+      if (e instanceof ApiError && e.gateway) {
+        // The gateway hung up, but the backend does not stop when a proxy does:
+        // gunicorn finishes the Gemini call and saves the report anyway, so it
+        // usually appears on the very next read. Refresh rather than asking for
+        // a retry, which would spend another quota slot on a report that
+        // already exists.
+        toast.error(e.message);
+        invalidateCache("coach/periods");
+        periodsApi.reload();
+      } else {
+        toast.error(e instanceof Error ? e.message : "خطا در ساخت تحلیل");
+      }
     } finally {
       setGenerating(false);
     }

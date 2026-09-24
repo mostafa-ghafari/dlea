@@ -387,10 +387,69 @@ valid» = مشکل کلید است، نه شبکه.
 صبر می‌کرد. اگر باز هم ۵۰۴ دیدی، اول مطمئن شو نسخهٔ به‌روز این vhost روی سرور کپی شده:
 
 ```bash
-sudo cp deploy/nginx-dlea.conf /etc/nginx/sites-enabled/dlea.piqagram.ir
-sudo nginx -t && sudo systemctl reload nginx
-nginx -T 2>/dev/null | grep -A2 "location /api"   # باید proxy_read_timeout 120s را ببینی
+# اسکریپت idempotent در ریپو: فقط همین دو خط را داخل بلاک موجود location /api/
+# درج می‌کند (proxy_read_timeout / proxy_send_timeout) و بقیهٔ فایل — از جمله
+# بلاک 443 که certbot خودش ساخته — را دست نمی‌زند.
+bash deploy/fix-coach-gateway-timeout.sh                 # اول: نشان بده چه چیزی عوض می‌شود
+sudo bash deploy/fix-coach-gateway-timeout.sh --apply    # بعد: اعمال کن (بکاپ + nginx -t + بازگردانی)
+grep -A12 'location /api/' /etc/nginx/sites-enabled/dlea.piqagram.ir   # باید هر دو خط را ببینی
 ```
+
+> ⚠️ `deploy/nginx-dlea.conf` را روی فایل زنده **کپی نکن**. آن فایل نسخهٔ خلاصه است و
+> بلاکی که certbot خودش به فایل زنده اضافه کرده (`listen 443 ssl` و ریدایرکت) در آن نیست،
+> پس کپی کل‌فایل، TLS این هاست را پاک می‌کند.
+
+#### تشخیص قطعی: کدام لایه ۵۰۴ داده؟
+
+اپ هیچ‌وقت بدون `detail` فارسی جواب نمی‌دهد (۴۰۰/۴۰۳/۵۰۲)، پس هر `API 504` که در UI دیده
+می‌شود از یک گیتوی آمده. برای اینکه معلوم شود **کدام** گیتوی، این دو را ببین:
+
+```bash
+# ۱) خودِ nginx اقرار می‌کند: یعنی پیش از gunicorn رها کرده
+grep 'upstream timed out' /var/log/nginx/error.log | tail -5
+# نمونهٔ واقعی از همین سرور:
+#   upstream timed out (110: Connection timed out) while reading response header
+#   from upstream, request: "POST /api/coach/generate/ HTTP/1.1",
+#   upstream: "http://127.0.0.1:8002/api/coach/generate/"
+
+# ۲) مهلت مؤثر روی سرور، نه در ریپو
+grep -A20 'location /api/' /etc/nginx/sites-enabled/dlea.piqagram.ir
+```
+
+اگر `proxy_read_timeout` در آن بلاک نبود، nginx روی پیش‌فرض **۶۰ ثانیه** است. مدت زمانی که تا
+رسیدن ۵۰۴ طول می‌کشد هم خودش مقصر را لو می‌دهد: نزدیک ۶۰ ثانیه → nginx؛ کمتر از آن → CDN جلوی
+دامنه؛ بیشتر از بودجهٔ اپ → بعید، و معمولاً یعنی relay در حال hang کردن است.
+
+`bash deploy/smoke-gemini.sh --site https://dlea.piqagram.ir` هم همین را می‌گوید: اگر
+۵۰۲/۵۰۳/۵۰۴ با بدنهٔ HTML برگردد، به‌جای یک «HTTP 504» خالی می‌نویسد که پاسخ از گیتوی آمده، چند
+ثانیه طول کشیده، و `proxy_read_timeout` باید چقدر باشد.
+
+#### گارد دیپلوی: دیگر نمی‌گذارد این انحراف تکرار شود
+
+`deploy.sh` مهلت مؤثر nginx را از کانفیگ **زنده** می‌خواند و با بودجهٔ Gemini اپ مقایسه می‌کند.
+اگر گیتوی کمتر از بودجه صبر کند، خط پایان دیپلوی `TOO SHORT` می‌شود و دیپلوی **ناموفق** اعلام
+می‌شود (ریلیس‌های قبلی برای rollback نگه داشته می‌شوند):
+
+```
+Gateway budget (coach): TOO SHORT (nginx waits 60s, app may spend 75s)
+```
+
+| متغیر | کار |
+|---|---|
+| `APPLY_NGINX_VHOST=1` | دو خط `proxy_read_timeout`/`proxy_send_timeout` را داخل بلاک زندهٔ `location /api/` **درج** می‌کند (نه کپی کل‌فایل): بکاپ، `nginx -t`، و بازگردانی در صورت خطا. پیش‌فرض خاموش است، چون این هاست سایت‌های دیگر را هم سرو می‌کند و یک ریلیس نباید ویرایش دستی کسی را بی‌صدا برگرداند |
+| `IGNORE_GATEWAY_BUDGET=1` | با آگاهی از خرابی، دیپلوی را موفق اعلام کن |
+
+#### درس اصلی این باگ: تایم‌اوت گیتوی، تایم‌اوت relay را پنهان می‌کند
+
+وقتی relay می‌خوابد (یا hang می‌کند)، درخواست معطل می‌ماند، اپ کل بودجهٔ ۷۵ ثانیه‌اش را
+می‌سوزاند و nginx در ثانیهٔ ۶۰ آن را می‌کشد. نتیجه این است که **دو نقص جدا پشت یک علامت واحد
+قایم می‌شوند** — و درست‌کردن فقط nginx، ۵۰۴ را به ۵۰۲ فارسی تبدیل می‌کند، نه به گزارش. پس
+همیشه هر دو را با هم چک کن: مهلت گیتوی (بالا) و زنده بودن relay (بخش ۵ همین سند).
+
+نکتهٔ عملی: `Connection refused` در چند میلی‌ثانیه یعنی سرویس relay روی آن پورت بالا نیست (نه
+اینکه مسیر بسته است) — چون IP آلمان از ایران RST برمی‌گرداند و مسیر IP کار می‌کند. و برای اینکه
+مرگ یک relay کل مربی را نخواباند، `GEMINI_PROXY` چند مقدار کاما-جدا قبول می‌کند؛ مسیر دوم را از
+`deploy/gemini-relay-worker.js` (Cloudflare) بگیر.
 
 نکتهٔ دوم: جلوی این دامنه **ArvanCloud** است. اگر CDN خودش روی ۱۰۰ ثانیه تایم‌اوت بدهد، بالا بردن
 nginx فایده‌ای ندارد و باید `GEMINI_TIMEOUT` را پایین‌تر بیاوری؛ ۷۵ ثانیهٔ پیش‌فرض انتخاب شده تا

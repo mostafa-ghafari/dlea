@@ -115,7 +115,7 @@ except ImportError as exc:  # a release from before the AI coach
 CONSIDERED = {"passed": 0, "failed": 0, "warned": 0, "skipped": 0}
 
 # Filled in by the steps so a later step can explain an earlier one.
-STATE = {"direct": "", "relay": "", "generate": False, "models": []}
+STATE = {"direct": "", "relay": "", "generate": False, "gateway": 0, "models": []}
 
 # urllib applies these from the environment automatically — including inside
 # `payments._post`, whose gateway calls would then leave from the proxy's IP.
@@ -191,6 +191,12 @@ def mask_url(url: str) -> str:
 def body_hint(body: str, limit: int = 160) -> str:
     text = " ".join((body or "").split())
     return text[:limit] + ("…" if len(text) > limit else "")
+
+
+def is_html(body: str) -> bool:
+    """True when a page answered, not an API: a proxy wrote this, not the app."""
+    text = (body or "").lstrip()
+    return text.startswith("<") or "<html" in text.lower()
 
 
 def _reason(exc) -> str:
@@ -559,6 +565,7 @@ def step_live(site: str, host: str, token: str, timeout: int) -> None:
         )
         return
 
+    started = time.monotonic()
     status, body = http(
         "POST",
         f"{site}/api/coach/generate/",
@@ -567,6 +574,10 @@ def step_live(site: str, host: str, token: str, timeout: int) -> None:
         host=host,
         timeout=timeout,
     )
+    # How long the gateway held the request is the diagnosis on its own: the
+    # app answers by 75s, so a 504 near 60s is nginx on its default, and an
+    # earlier one is the CDN in front of it.
+    elapsed = time.monotonic() - started
     if status == 200:
         ok("POST /api/coach/generate/", "200 — کل مسیر روی سرور زنده کار می‌کند")
     elif status == 0:
@@ -589,6 +600,27 @@ def step_live(site: str, host: str, token: str, timeout: int) -> None:
             "POST /api/coach/generate/",
             f"400 — سرور پاسخ داد ولی به Gemini نرسید (احتمالاً داده‌ای برای بازه نیست): {body_hint(body)}",
         )
+    elif status in (502, 503, 504) and is_html(body):
+        # The app never answers one of these without a JSON `detail`: its own
+        # failures are 400/403/502 with a Persian message. An HTML body on a
+        # gateway status came from the proxy in front, which gave up while the
+        # app was still building the report.
+        budget = gemini.gemini_call_budget()
+        STATE["gateway"] = status
+        fail(
+            "POST /api/coach/generate/",
+            (
+                f"HTTP {status} از گیتوی آمد، نه از اپ — اپ همیشه ۴۰۰/۴۰۳/۵۰۲ "
+                "با پیام فارسی می‌دهد. "
+                f"پس از {elapsed:.0f} ثانیه رها شد، در حالی که اپ تا {budget:.0f} ثانیه "
+                "مجاز است: proxy_read_timeout در location /api/ باید ≥ این بودجه باشد "
+                f"(زنجیره: nginx → اپ {budget:.0f}s → gunicorn 120s). "
+                "اگر عدد نزدیک ۶۰ بود، nginx هنوز روی پیش‌فرض خودش است و vhost به‌روز "
+                "نشده. روی سرور بررسی کن: "
+                "grep 'upstream timed out' /var/log/nginx/error.log — "
+                f"{body_hint(body)}"
+            ),
+        )
     else:
         fail("POST /api/coach/generate/", f"HTTP {status} — {body_hint(body)}")
 
@@ -596,6 +628,18 @@ def step_live(site: str, host: str, token: str, timeout: int) -> None:
 def step_advice(config: dict) -> None:
     """Turn the facts gathered above into one concrete next move."""
     if STATE["generate"]:
+        return
+    if STATE["gateway"]:
+        warn(
+            "راه‌حل",
+            (
+                f"مربی پاسخ HTTP {STATE['gateway']} را از گیتوی گرفت، نه از اپ — اپ همیشه "
+                "۴۰۰/۴۰۳/۵۰۲ با پیام فارسی می‌دهد. "
+                "proxy_read_timeout در location /api/ را از بودجهٔ Gemini اپ "
+                "(GEMINI_TIMEOUT، پیش‌فرض ۷۵ ثانیه) بالاتر ببر (deploy/nginx-dlea.conf) "
+                "و nginx را reload کن؛ جزئیات در DEPLOYMENT-RUNBOOK.md"
+            ),
+        )
         return
     if not config["proxies"]:
         warn(

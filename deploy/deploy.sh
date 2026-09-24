@@ -32,7 +32,52 @@ detect_nginx_backend_port() {
     done
 }
 
+# nginx answers 504 the moment its `proxy_read_timeout` expires, and it only ever
+# points at the app: the app reports its own failures as 4xx/502 with a Persian
+# detail. So a gateway that gives up *before* the app's Gemini budget does is not
+# a slow report, it is a broken coach, and from inside the app it looks like a
+# Gemini or relay problem. That is why it went unnoticed for weeks: nginx's own
+# error log was the only place that said `upstream timed out` on
+# POST /api/coach/generate/.
+#
+# This script never wrote the vhost, so `deploy/nginx-dlea.conf` could carry the
+# fix while the server kept nginx's 60s default. Read the effective value back
+# out of the live config instead of trusting the copy in the repo.
+nginx_api_read_timeout() {
+    local conf block value
+    for conf in /etc/nginx/sites-enabled/* /etc/nginx/conf.d/*.conf; do
+        [ -f "$conf" ] || continue
+        block=$(grep -A 20 "location /api/" "$conf" 2>/dev/null || true)
+        [ -n "$block" ] || continue
+        value=$(printf '%s\n' "$block" \
+            | grep -oE "proxy_read_timeout[[:space:]]+[0-9]+" \
+            | grep -oE "[0-9]+" | head -1) || true
+        # A block without the directive falls through to nginx's own default,
+        # which is the value that caused the 504s — not an unknown.
+        echo "${value:-60}"
+        return
+    done
+}
+
+# The budget the app gives a whole Gemini call: same default and same
+# GEMINI_TIMEOUT override as api/gemini.py. Read from the running .env, because
+# that is the file the app process itself loads.
+app_gemini_budget() {
+    local raw
+    raw=$(grep -E "^GEMINI_TIMEOUT=" "$RUNNING_DIR/backend/.env" 2>/dev/null \
+        | tail -1 | cut -d= -f2- | tr -d "\"' \r") || true
+    printf '%s\n' "$raw" | awk '
+        /^[0-9]+([.][0-9]+)?$/ && $1 + 0 > 0 { printf "%s\n", $1; next }
+        { printf "%s\n", 75 }
+    '
+}
+
 NGINX_BACKEND_PORT=$(detect_nginx_backend_port) || true
+
+# What the gateway will wait for a report, and what the app may spend making it.
+# Empty means no `location /api/` block was found at all, so nothing can be said.
+GATEWAY_READ_TIMEOUT=$(nginx_api_read_timeout) || true
+GEMINI_BUDGET=$(app_gemini_budget) || true
 if [ -n "$NGINX_BACKEND_PORT" ]; then
     BACKEND_PORT="$NGINX_BACKEND_PORT"
     echo "nginx proxies /api/ to port $BACKEND_PORT"
@@ -226,12 +271,18 @@ echo "Checking the API actually answers..."
 # too: appending `|| echo 000` to curl's output produced confusing values such as
 # `000000` when the connection was refused.
 http_status() {
-    curl -s -o /dev/null -w "%{http_code}" --connect-timeout 2 --max-time 10 "$1" 2>/dev/null || true
+    local url="$1" host="${2:-}"
+    if [ -n "$host" ]; then
+        curl -s -o /dev/null -w "%{http_code}" --connect-timeout 2 --max-time 10 \
+            -H "Host: $host" "$url" 2>/dev/null || true
+    else
+        curl -s -o /dev/null -w "%{http_code}" --connect-timeout 2 --max-time 10 "$url" 2>/dev/null || true
+    fi
 }
 wait_for_http_200() {
-    local url="$1" status="000"
+    local url="$1" host="${2:-}" status="000"
     for _ in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do
-        status=$(http_status "$url")
+        status=$(http_status "$url" "$host")
         if [ "$status" = "200" ]; then
             echo "$status"
             return 0
@@ -241,7 +292,12 @@ wait_for_http_200() {
     echo "$status"
     return 1
 }
-BACKEND_OK=$(wait_for_http_200 "http://127.0.0.1:$BACKEND_PORT/api/plans/") || true
+# The Host header is not optional here. Django rejects a host outside
+# ALLOWED_HOSTS with 400, and a loopback curl sends `Host: 127.0.0.1:8002`, so
+# this probe answered 400 on a perfectly healthy backend — which turned into
+# "The backend did not answer 200 on port 8002" and marked every deploy failed,
+# including the ones that worked.
+BACKEND_OK=$(wait_for_http_200 "http://127.0.0.1:$BACKEND_PORT/api/plans/" "$SITE_HOST") || true
 FRONTEND_OK=$(wait_for_http_200 "http://127.0.0.1:3000/") || true
 # 127.0.0.1:$BACKEND_PORT can be perfectly healthy while the public API is dead
 # (wrong port, dead proxy target), so also walk the path a browser walks:
@@ -249,6 +305,10 @@ FRONTEND_OK=$(wait_for_http_200 "http://127.0.0.1:3000/") || true
 # 127.0.0.1 is NOT that path — this vhost only listens on :80 (TLS is terminated
 # upstream), so the loopback TLS probe lands on whatever vhost owns :443 and
 # reports a bogus 404.
+# A 301/302 from the loopback probe is certbot's :80 → :443 redirect doing its
+# job, not a dead API: on this host the app's own vhost carries
+# `listen 443 ssl` and :80 only redirects, so a plain-HTTP probe is *expected*
+# to be redirected. Reading that as a failure would fail every deploy.
 PROXIED_OK=$(curl -s -o /dev/null -w "%{http_code}" -H "Host: $SITE_HOST" \
     "http://127.0.0.1/api/plans/" 2>/dev/null || echo "000")
 PUBLIC_OK=$(curl -sk -o /dev/null -w "%{http_code}" --max-time 20 \
@@ -289,6 +349,102 @@ fi
 
 rm -f /tmp/dlea-deploy.tar.gz /tmp/deploy.sh
 
+# ── Gateway budget: will the proxy wait for the report? ─────────────────────
+#
+# A report may take the app's whole Gemini budget. A proxy that waits less than
+# that answers 504 while gunicorn is still working, so the user gets a bare
+# gateway timeout instead of the app's own message — measured against the live
+# config, never against the copy this release ships.
+GATEWAY_BUDGET_NOTE="not checked (no 'location /api/' block found in nginx)"
+GATEWAY_BUDGET_FAILED=0
+
+evaluate_gateway_budget() {
+    if [ -z "$GATEWAY_READ_TIMEOUT" ]; then
+        GATEWAY_BUDGET_NOTE="not checked (no 'location /api/' block found in nginx)"
+        GATEWAY_BUDGET_FAILED=0
+    elif awk "BEGIN { exit !($GATEWAY_READ_TIMEOUT + 0 >= $GEMINI_BUDGET + 0) }"; then
+        GATEWAY_BUDGET_NOTE="OK (nginx waits ${GATEWAY_READ_TIMEOUT}s, app may spend ${GEMINI_BUDGET}s)"
+        GATEWAY_BUDGET_FAILED=0
+    else
+        GATEWAY_BUDGET_NOTE="TOO SHORT (nginx waits ${GATEWAY_READ_TIMEOUT}s, app may spend ${GEMINI_BUDGET}s)"
+        GATEWAY_BUDGET_FAILED=1
+    fi
+}
+
+evaluate_gateway_budget
+
+# Opt-in: put the gateway timeout back into the *live* vhost, surgically.
+#
+# Deliberately not a whole-file copy. `deploy/nginx-dlea.conf` is an excerpt of
+# the vhost for reading — the live file also carries the certbot-managed
+# `listen 443 ssl` block and a redirect server, added after this file was copied
+# by hand. Overwriting it would delete TLS for this host. Insert the directives
+# into the existing `location /api/` block, touch nothing else, and keep a
+# backup that is restored if nginx refuses the result.
+if [ "$GATEWAY_BUDGET_FAILED" = "1" ] && [ "${APPLY_NGINX_VHOST:-0}" = "1" ]; then
+    echo "APPLY_NGINX_VHOST=1 — adding the gateway timeout to the live vhost..."
+    LIVE_VHOST="/etc/nginx/sites-enabled/$SITE_HOST"
+    # At or above gunicorn's --timeout (120), so gunicorn rather than nginx is
+    # the layer that reports a failure.
+    TIMEOUT_SECONDS=120
+    if [ ! -f "$LIVE_VHOST" ]; then
+        echo "!!! $LIVE_VHOST does not exist, so there is nothing to edit." >&2
+    elif grep -A20 "location /api/" "$LIVE_VHOST" | grep -q "proxy_read_timeout"; then
+        echo "$LIVE_VHOST already sets proxy_read_timeout; nothing to apply."
+    else
+        PATCHED=$(mktemp)
+        awk -v timeout="$TIMEOUT_SECONDS" '
+            /location[[:space:]]+\/api\/[[:space:]]*\{/ { in_api = 1 }
+            in_api && !done && /^[[:space:]]*\}/ {
+                printf "        proxy_read_timeout %ss;\n", timeout
+                printf "        proxy_send_timeout %ss;\n", timeout
+                done = 1
+                in_api = 0
+            }
+            { print }
+        ' "$LIVE_VHOST" > "$PATCHED"
+        if ! grep -A20 "location /api/" "$PATCHED" | grep -q "proxy_read_timeout"; then
+            echo "!!! could not find the end of the location /api/ block; leaving it alone." >&2
+            rm -f "$PATCHED"
+        elif ! sudo -n true 2>/dev/null; then
+            echo "!!! nginx config needs a password, so it was not touched." >&2
+            echo "    The patched file is at $PATCHED — install it with:" >&2
+            echo "      sudo cp $PATCHED $LIVE_VHOST && sudo nginx -t && sudo systemctl reload nginx" >&2
+        else
+            VHOST_BACKUP="$LIVE_VHOST.bak.$(date +%Y%m%d-%H%M%S)"
+            sudo cp "$LIVE_VHOST" "$VHOST_BACKUP"
+            if sudo cp "$PATCHED" "$LIVE_VHOST" && sudo nginx -t >/dev/null 2>&1; then
+                sudo systemctl reload nginx
+                echo "Reloaded nginx with proxy_read_timeout ${TIMEOUT_SECONDS}s (backup: $VHOST_BACKUP)."
+            else
+                echo "!!! nginx rejected the patched vhost — restoring $VHOST_BACKUP." >&2
+                sudo cp "$VHOST_BACKUP" "$LIVE_VHOST"
+                sudo nginx -t >/dev/null 2>&1 \
+                    || echo "!!! nginx -t is still failing; look at it by hand." >&2
+            fi
+            rm -f "$PATCHED"
+            GATEWAY_READ_TIMEOUT=$(nginx_api_read_timeout) || true
+            evaluate_gateway_budget
+        fi
+    fi
+fi
+
+if [ "$GATEWAY_BUDGET_FAILED" = "1" ]; then
+    echo "" >&2
+    echo "!!! The gateway will give up before the coach can answer: $GATEWAY_BUDGET_NOTE" >&2
+    echo "    Any report slower than ${GATEWAY_READ_TIMEOUT}s comes back as a 504 with an HTML body," >&2
+    echo "    which the app cannot turn into its own error message." >&2
+    echo "    Fix it by adding these two lines inside the 'location /api/ {' block of" >&2
+    echo "    /etc/nginx/sites-enabled/$SITE_HOST, then: sudo nginx -t && sudo systemctl reload nginx" >&2
+    echo "        proxy_read_timeout 120s;" >&2
+    echo "        proxy_send_timeout 120s;" >&2
+    echo "    Do NOT copy $RELEASE_DIR/deploy/nginx-dlea.conf over it: that file is an" >&2
+    echo "    excerpt of the vhost and the live one also carries the certbot-managed" >&2
+    echo "    443 block, so a whole-file copy would strip TLS for this host." >&2
+    echo "    Or re-run with APPLY_NGINX_VHOST=1 to insert it from here, or" >&2
+    echo "    IGNORE_GATEWAY_BUDGET=1 to deploy anyway." >&2
+fi
+
 echo "=== Deployment summary ==="
 echo "Release: $RELEASE_DIR"
 echo "Current: $CURRENT_LINK"
@@ -296,9 +452,17 @@ echo "Backend (port $BACKEND_PORT): HTTP $BACKEND_OK"
 echo "Frontend (port 3000): HTTP $FRONTEND_OK"
 echo "API through nginx (loopback): HTTP $PROXIED_OK"
 echo "Public API (https://$SITE_HOST): HTTP $PUBLIC_OK"
+echo "Gateway budget (coach): $GATEWAY_BUDGET_NOTE"
 echo "Payment path (smoke test): $PAYMENT_SMOKE"
 
 FAILED=0
+# A coach that cannot answer is not a working deploy. Leave the old releases in
+# place until nginx is allowed to wait for the report, exactly like a failed
+# health check, so the rollback material is still there.
+if [ "$GATEWAY_BUDGET_FAILED" = "1" ] && [ "${IGNORE_GATEWAY_BUDGET:-0}" != "1" ]; then
+    echo "!!! The gateway budget check did not pass ($GATEWAY_BUDGET_NOTE)." >&2
+    FAILED=1
+fi
 if [ "$BACKEND_OK" != "200" ]; then
     echo "!!! The backend did not answer 200 on port $BACKEND_PORT." >&2
     FAILED=1
@@ -307,8 +471,8 @@ fi
 # (DNS/hairpin), which is why the loopback probe is accepted as a stand-in.
 if [ "$PUBLIC_OK" = "200" ]; then
     :
-elif [ "$PUBLIC_OK" = "000" ] && [ "$PROXIED_OK" = "200" ]; then
-    echo "(could not reach $SITE_HOST from this host; nginx answered 200 on loopback instead)"
+elif [ "$PUBLIC_OK" = "000" ] && { [ "$PROXIED_OK" = "200" ] || [ "$PROXIED_OK" = "301" ]; }; then
+    echo "(could not reach $SITE_HOST from this host; nginx answered $PROXIED_OK on loopback instead)"
 else
     echo "!!! The API is not reachable through nginx: loopback HTTP $PROXIED_OK, public HTTP $PUBLIC_OK." >&2
     FAILED=1

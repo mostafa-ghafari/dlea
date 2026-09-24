@@ -47,6 +47,54 @@ export const API_BASE =
   (import.meta.env.VITE_API_URL as string | undefined) ??
   "http://localhost:8000/api";
 
+/**
+ * Statuses that mean "a proxy in front of the app gave up", not "the app said
+ * no". The backend always answers these with a JSON `detail` (Persian) when it
+ * is the one failing, so a response on one of these without a `detail` came
+ * from a gateway — nginx, or the CDN terminating TLS — and the request died
+ * before the app could answer.
+ */
+const GATEWAY_STATUSES = new Set([502, 503, 504]);
+
+/**
+ * What a gateway timeout means for the *user*.
+ *
+ * The coach's Gemini call is allowed ~75s (`GEMINI_CALL_BUDGET_SECONDS`), so a
+ * proxy whose own `proxy_read_timeout` is shorter answers first while the
+ * backend keeps working and usually still saves the report. That is why the
+ * message asks for a refresh rather than a retry: retrying would burn another
+ * quota slot on a report that already exists. `API 504: coach/generate/` names
+ * the path, not the problem.
+ */
+function gatewayDetail(status: number): string {
+  if (status === 504) {
+    return (
+      "گیتوی پیش از آماده‌شدن گزارش درخواست را بست (۵۰۴). " +
+      "ممکن است گزارش همین حالا ساخته و ذخیره شده باشد — لیست بازه‌ها را تازه کن. " +
+      "اگر تکرار شد، سقف زمان درخواست در nginx یا CDN کمتر از مهلت ساخت گزارش است."
+    );
+  }
+  return `سرور موقتاً پاسخ نمی‌دهد (${status}) — چند لحظه بعد دوباره تلاش کن.`;
+}
+
+/**
+ * An error the API returned, keeping the status so a caller can tell a gateway
+ * timeout (retryable, and often already saved server-side) from the app's own
+ * refusal (which carries an actionable Persian message).
+ */
+export class ApiError extends Error {
+  readonly status: number;
+  /** True when a proxy answered instead of the app. */
+  readonly gateway: boolean;
+
+  constructor(message: string, status: number, gateway = false) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+    this.gateway = gateway;
+  }
+}
+
 /* ------------------------------------------------------------------ */
 /* Types — API contract                                                */
 /* ------------------------------------------------------------------ */
@@ -344,13 +392,24 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   }).then(async (res) => {
     if (!res.ok) {
       let detail = `API ${res.status}: ${path}`;
+      let gateway = false;
+      let appDetail: string | undefined;
       try {
         const body = (await res.json()) as { detail?: string };
-        if (body?.detail) detail = body.detail;
+        appDetail = body?.detail;
       } catch {
-        /* non-JSON error body */
+        /* non-JSON error body — an HTML page, which the app never writes */
       }
-      throw new Error(detail);
+      if (appDetail) {
+        detail = appDetail;
+      } else if (GATEWAY_STATUSES.has(res.status)) {
+        // No DRF `detail` on a gateway status: the proxy gave up on a request
+        // the app was still working on. Say that, instead of showing the user
+        // a path they cannot act on.
+        detail = gatewayDetail(res.status);
+        gateway = true;
+      }
+      throw new ApiError(detail, res.status, gateway);
     }
     if (res.status === 204) {
       return undefined as T;
