@@ -160,7 +160,7 @@ def login_view(request):
     from api.models import UserProfile
     auto_role = _compute_auto_role(user)
     profile, _ = UserProfile.objects.get_or_create(user=user)
-    effective = _effective_role(auto_role, profile.role)
+    effective = _effective_role(auto_role, profile.role, user.is_staff)
 
     return JsonResponse({
         "access": str(refresh.access_token),
@@ -356,7 +356,7 @@ def google_callback(request):
     from api.models import UserProfile
     auto_role = _compute_auto_role(user)
     profile, _ = UserProfile.objects.get_or_create(user=user)
-    effective = _effective_role(auto_role, profile.role)
+    effective = _effective_role(auto_role, profile.role, user.is_staff)
 
     refresh = RefreshToken.for_user(user)
 

@@ -18,9 +18,8 @@ test("admin login → dashboard → user management", async ({ page }) => {
   await page.getByPlaceholder("••••••••").fill("AdminPass123");
   await page.getByRole("button", { name: "ورود", exact: true }).click();
 
-  // Logins land on the dashboard; admins then open the admin area.
-  await page.waitForURL(/\/app\/dashboard/, { timeout: 20_000 });
-  await page.goto("/app/admin/dashboard");
+  // An admin's login response carries role "admin", so login.tsx sends them
+  // straight to the admin dashboard rather than the trader dashboard.
   await page.waitForURL(/\/app\/admin\/dashboard/, { timeout: 20_000 });
   await expect(page.getByText("مدیریت کاربران").first()).toBeVisible({
     timeout: 20_000,

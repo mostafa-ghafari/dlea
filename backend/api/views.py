@@ -584,7 +584,7 @@ class PlatformUserViewSet(viewsets.ModelViewSet):
         for u in users_page:
             profile, _ = UserProfile.objects.get_or_create(user=u)
             auto_role = _compute_auto_role(u)
-            effective = _effective_role(auto_role, profile.role)
+            effective = _effective_role(auto_role, profile.role, u.is_staff)
             rows.append({
                 "id": str(u.id),
                 "name": f"{u.first_name} {u.last_name}".strip() or u.username,
@@ -648,7 +648,7 @@ class PlatformUserViewSet(viewsets.ModelViewSet):
                 details="، ".join(changes),
             )
         auto_role = _compute_auto_role(user)
-        effective = _effective_role(auto_role, profile.role)
+        effective = _effective_role(auto_role, profile.role, user.is_staff)
         return Response({
             "id": str(user.id),
             "name": f"{user.first_name} {user.last_name}".strip() or user.username,
@@ -1435,12 +1435,15 @@ def _compute_auto_role(user):
 _ADMIN_ONLY_ROLES = {"admin", "vip", "trader-vip", "professional-vip", "master-vip"}
 
 
-def _effective_role(auto_role: str, admin_role: str) -> str:
+def _effective_role(auto_role: str, admin_role: str, is_staff: bool = False) -> str:
     """Resolve the effective role.
+    - Django staff are admin in the UI too, exactly as `_is_admin_user` treats them.
     - VIP / admin roles always win (admin-only).
     - If admin explicitly set professional or master, that overrides auto.
     - Default 'trader' does NOT override auto (it's just the DB default).
     """
+    if is_staff:
+        return "admin"
     if admin_role in _ADMIN_ONLY_ROLES:
         return admin_role
     if admin_role in ("professional", "master"):
@@ -1460,7 +1463,7 @@ class RoleView(APIView):
         return Response({
             "autoRole": auto_role,
             "adminRole": admin_role,
-            "effective": _effective_role(auto_role, admin_role),
+            "effective": _effective_role(auto_role, admin_role, request.user.is_staff),
         })
 
     def put(self, request):
@@ -1499,7 +1502,7 @@ class ProfileView(APIView):
             "lastName": user.last_name,
             "phone": profile.phone,
             "avatar": avatar_url,
-            "role": _effective_role(auto_role, profile.role),
+            "role": _effective_role(auto_role, profile.role, user.is_staff),
         })
 
     def put(self, request):
@@ -1529,7 +1532,7 @@ class ProfileView(APIView):
             "lastName": user.last_name,
             "phone": profile.phone,
             "avatar": avatar_url,
-            "role": _effective_role(auto_role, profile.role),
+            "role": _effective_role(auto_role, profile.role, user.is_staff),
         })
 
     def post(self, request):

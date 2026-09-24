@@ -69,6 +69,20 @@ class EffectiveRoleTests(BaseTestCase):
     def test_default_trader_does_not_override_auto(self):
         self.assertEqual(_effective_role("professional", "trader"), "professional")
 
+    def test_staff_is_admin_regardless_of_profile_role(self):
+        """`_is_admin_user` grants staff the admin APIs, so the UI gate must agree.
+
+        `/api/role/`'s `effective` is what exempts an admin from the portfolio
+        gate in AppShell, so a staff user without it is locked out of the admin
+        area the API already lets them use.
+        """
+        self.assertEqual(_effective_role("trader", "trader", is_staff=True), "admin")
+        self.assertEqual(_effective_role("master", "trader", is_staff=True), "admin")
+
+    def test_only_staff_changes_the_answer(self):
+        self.assertEqual(_effective_role("trader", "trader"), "trader")
+        self.assertEqual(_effective_role("trader", "trader", is_staff=False), "trader")
+
 
 class RoleViewTests(BaseTestCase):
     def test_get_returns_auto_admin_and_effective(self):
@@ -80,6 +94,15 @@ class RoleViewTests(BaseTestCase):
         self.assertEqual(data["autoRole"], "trader")
         self.assertEqual(data["adminRole"], "master")
         self.assertEqual(data["effective"], "master")
+
+    def test_get_reports_staff_as_admin(self):
+        """The admin dashboard's portfolio gate keys off `effective === "admin"`."""
+        self.auth_staff()
+        r = self.client.get("/api/role/")
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.data["autoRole"], "trader")
+        self.assertEqual(r.data["adminRole"], "trader")
+        self.assertEqual(r.data["effective"], "admin")
 
     def test_anonymous_role_returns_401(self):
         r = self.client.get("/api/role/")
