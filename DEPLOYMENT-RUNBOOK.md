@@ -299,28 +299,66 @@ GEMINI_PROXY=https://dlea-gemini.<account>.workers.dev
 pm2 restart dlea-api
 ```
 
-**اگر relay روی همان VPS آلمان می‌ماند:** مهم‌ترین تله `merge_slashes` است — nginx به‌طور پیش‌فرض
-`//` را جمع می‌کند و آدرس فورواردشده به `/https:/generativelanguage…` تبدیل می‌شود (نتیجه: ۴۰۴
-یا همان ۴۰۳ HTML). این بلوک درست است:
+**اگر relay روی VPS آلمان می‌ماند:** از اسکریپت استفاده کن، بلوک را دستی کپی نکن.
+
+```bash
+# روی خود VPS آلمان، بعد از اینکه یک A record مثل relay.example.com به آن اشاره کرد:
+sudo bash deploy/setup-gemini-relay.sh --host relay.example.com --email you@example.com
+# IP خروجی سرور ایران اگر فرق دارد:
+sudo bash deploy/setup-gemini-relay.sh --host relay.example.com --allow <iran-outbound-ip>
+```
+
+اسکریپت خودش certbot را می‌گیرد، کانفیگ را می‌نویسد، `nginx -t` می‌زند و در پایان از
+**همان ماشین** یک self-test واقعی می‌زند تا مطمئن شود شکل مسیر فوروارد می‌شود.
+
+> **چرا کپی دستی توصیه نمی‌شود؟** این کار دو تا اشتباه دارد که اسکریپت جلوشان را می‌گیرد:
+> **۱) open proxy شدن.** الگوی `^/(?<upstream>https?://.+)$` هر میزانی را فوروارد می‌کند؛
+> یعنی هر کس آدرس این باکس را پیدا کند می‌تواند آن را روی هر سایتی به‌کار ببرد. اسکریپت فقط
+> میزبان `generativelanguage.googleapis.com` را رد می‌کند و بقیه را ۴۰۴ می‌دهد.
+> **۲) باز بودن به روی همه.** بدون `allow`/`deny` هیچ‌کس را محدود نکرده‌ای؛ اسکریپت به‌طور
+> پیش‌فرض فقط `127.0.0.1` (برای self-test) و IP سرور ایران را قبول می‌کند.
+
+اگر خواستی خودت کانفیگ را بفهمی، اجزایش این‌هاست (کات‌نشدهٔ کامل در
+`deploy/setup-gemini-relay.sh` است):
 
 ```nginx
 server {
     listen 9090 ssl;
-    server_name _;
-    ssl_certificate     /etc/letsencrypt/live/<relay-host>/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/<relay-host>/privkey.pem;
+    ssl_protocols TLSv1.2 TLSv1.3;
 
-    merge_slashes off;                 # وگرنه // داخل آدرس فورواردشده جمع می‌شود
-    resolver 1.1.1.1 8.8.8.8 ipv6=off; # برای proxy_pass داینامیک لازم است
+    # تلهٔ اصلی: بدون این، // داخل آدرس فورواردشده به /https:/… جمع می‌شود
+    # و نتیجه همان ۴۰۴ یا ۴۰۳ HTML است.
+    merge_slashes off;
 
-    location ~ ^/(?<upstream>https?://.+)$ {
-        proxy_pass $upstream$is_args$args;
+    # proxy_pass با متغیر، هر درخواست را resolve می‌کند.
+    resolver 1.1.1.1 8.8.8.8 valid=300s ipv6=off;
+    resolver_timeout 5s;
+
+    allow 127.0.0.1;
+    allow <iran-outbound-ip>;
+    deny all;
+
+    # فقط میزبان گوگل؛ نه یک پروکسی باز.
+    location ~ ^/(?<gemini_target>https://generativelanguage\.googleapis\.com/.*)$ {
+        proxy_pass $gemini_target$is_args$args;
         proxy_ssl_server_name on;
-        proxy_set_header Host $proxy_host;
+        proxy_set_header Host generativelanguage.googleapis.com;
         proxy_read_timeout 120s;
+        access_log off;      # چون کلید API داخل URL فورواردشده است
     }
+
+    location / { return 404; }
 }
 ```
+
+دو نکتهٔ دیگر در همین کانفیگ که مهم‌اند:
+
+**الف) TLS اجباری است، نه تشریفاتی.** کلید API داخل URL فورواردشده سفر می‌کند
+(`?key=…`)، پس HTTP ساده آن را روی اینترنت لو می‌دهد. به همین دلیل `--host` (یک دامنه با
+A record) اجباری است: گواهی خودامضا با یک IP خالی هیچ‌وقت validate نمی‌شود.
+
+**ب) `access_log off` عمدی است.** لاگ پیش‌فرض nginx مقدار `$request` را می‌نویسد که خودِ
+مسیر فورواردشده است — یعنی `?key=…` در فایل لاگ ذخیره می‌شود.
 
 دو relay با هم (اگر اولی بلاک/خواب بود، دومی امتحان می‌شود):
 
@@ -455,6 +493,10 @@ pm2 save
 `deploy/setup-server.sh` است و **قابل اجرای مکرر** است: چیزی را بدون
 `--force` بازنویسی نمی‌کند، قبل از `reload` با `nginx -t` تست می‌کند و به فایل
 سایت‌های دیگر دست نمی‌زند.
+
+> `deploy/setup-gemini-relay.sh` عمداً در همین فهرست نیست: آن یکی روی **VPS خارجی**
+> (آلمان) اجرا می‌شود، نه روی این سرور. اشتباه گرفتن‌شان یعنی ساخت یک پروکسی باز روی
+> همان بکسی که اپ رویش است.
 
 ---
 
