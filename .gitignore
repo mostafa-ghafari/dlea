@@ -9,6 +9,10 @@ dist/
 .env.*.local
 backend/.env
 
+# The running Docker stack's env file — holds the real production keys.
+# `docker/` itself is not tracked yet; this keeps the secret out when it is.
+docker/.env.docker
+
 # Backend
 __pycache__/
 _cache/
