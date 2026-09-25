@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { englishDigits, scopeLabels } from "@/lib/ai-coach-data";
+import {
+  englishDigits,
+  moneySignFirst,
+  scopeLabels,
+} from "@/lib/ai-coach-data";
 
 describe("scopeLabels", () => {
   it("maps every coach scope to its Persian label", () => {
@@ -22,5 +26,20 @@ describe("englishDigits", () => {
     expect(englishDigits("Win Rate: 60%")).toBe("Win Rate: 60%");
     expect(englishDigits("EURUSD")).toBe("EURUSD");
     expect(englishDigits("")).toBe("");
+  });
+});
+
+describe("moneySignFirst", () => {
+  it("moves a trailing dollar sign in front of the amount", () => {
+    expect(moneySignFirst("+1,326$")).toBe("+$1,326");
+    expect(moneySignFirst("-220$")).toBe("-$220");
+    expect(moneySignFirst("+10$")).toBe("+$10");
+  });
+
+  it("leaves already-correct money and non-money values alone", () => {
+    expect(moneySignFirst("+$1,326")).toBe("+$1,326");
+    expect(moneySignFirst("62.5%")).toBe("62.5%");
+    expect(moneySignFirst("EURUSD")).toBe("EURUSD");
+    expect(moneySignFirst("4")).toBe("4");
   });
 });

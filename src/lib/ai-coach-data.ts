@@ -49,3 +49,12 @@ export const scopeLabels: Record<CoachScope, string> = {
 export function englishDigits(input: string): string {
   return faDigitsToLatin(input).replace(/٪/g, "%");
 }
+
+/**
+ * Some stored reports were written with the currency sign on the far side
+ * (`+1,326$`). The page shows money as sign-then-amount (`+$1,326`), so old
+ * rows are normalised on the way out; anything else passes through untouched.
+ */
+export function moneySignFirst(input: string): string {
+  return input.replace(/^([+-])([\d.,]+)\$$/, "$1$$$2");
+}

@@ -543,7 +543,8 @@ def normalize_report(raw: dict[str, Any], scope: str, period: dict[str, Any], st
             )
         return out
 
-    net_txt = f"{'+' if stats['net'] >= 0 else ''}{_en_num(f'{stats['net']:,.0f}')}$"
+    net_amount = _en_num(f"{abs(stats['net']):,.0f}")
+    net_txt = f"{'+' if stats['net'] >= 0 else '-'}${net_amount}"
     win_txt = f"{stats['winRate']:g}%"
 
     stats_list = [
@@ -605,7 +606,9 @@ def generate_coach_report(scope: str, model: str | None, trades: list | None = N
             "scope": scope,
             "label": period["label"],
             "range": period["range"],
-            "net": report["stats"][1]["value"] if len(report["stats"]) > 1 else f"{stats['net']:+.0f}$",
+            "net": report["stats"][1]["value"]
+            if len(report["stats"]) > 1
+            else f"{'+' if stats['net'] >= 0 else '-'}${abs(stats['net']):,.0f}",
             "winRate": report["stats"][2]["value"] if len(report["stats"]) > 2 else f"{stats['winRate']:g}%",
         }
     )

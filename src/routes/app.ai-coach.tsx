@@ -36,6 +36,7 @@ import {
 } from "@/lib/api";
 import {
   englishDigits,
+  moneySignFirst,
   scopeLabels,
   type CoachScope,
 } from "@/lib/ai-coach-data";
@@ -316,7 +317,7 @@ function AiCoach() {
                     variant="outline"
                     className={`tabular ${period.net.startsWith("-") ? "loss" : "gain"}`}
                   >
-                    <Num>{englishDigits(period.net)}</Num>
+                    <Num>{englishDigits(moneySignFirst(period.net))}</Num>
                   </Badge>
                   <Badge variant="outline" className="tabular">
                     Win Rate: {englishDigits(period.winRate)}
@@ -361,8 +362,11 @@ function AiCoach() {
                   <div className="text-[11px] text-muted-foreground">
                     {s.label}
                   </div>
-                  <div className="mt-1 text-sm font-bold tabular">
-                    <Num>{englishDigits(s.value)}</Num>
+                  <div
+                    dir="ltr"
+                    className="mt-1 text-right text-sm font-bold tabular"
+                  >
+                    {englishDigits(moneySignFirst(s.value))}
                   </div>
                 </div>
               ))}
