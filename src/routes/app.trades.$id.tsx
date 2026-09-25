@@ -29,6 +29,11 @@ export const Route = createFileRoute("/app/trades/$id")({
   component: TradeDetail,
 });
 
+/** `$-0.08` looks wrong in an RTL row — sign belongs in front of `$`. */
+function usdPlain(value: number): string {
+  return formatUsd(value, String).replace("+", "");
+}
+
 function Row({
   label,
   value,
@@ -150,9 +155,9 @@ function TradeDetail() {
               value={String(trade.pips)}
               tone={trade.pips >= 0 ? "gain" : "loss"}
             />
-            <Row label="کمیسیون" value={`$${trade.commission}`} />
-            <Row label="سواپ" value={`$${trade.swap}`} />
-            <Row label="مالیات" value={`$${trade.taxes}`} />
+            <Row label="کمیسیون" value={usdPlain(trade.commission)} />
+            <Row label="سواپ" value={usdPlain(trade.swap)} />
+            <Row label="مالیات" value={usdPlain(trade.taxes)} />
             <Row label="زمان باز شدن" value={trade.openTime} />
             <Row label="زمان بسته شدن" value={trade.closeTime} />
             <Row label="مدت" value={trade.duration} />
