@@ -23,7 +23,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import * as XLSX from "xlsx";
 import {
   bulkImportTrades,
   get,
@@ -31,6 +30,13 @@ import {
   usePortfolios,
   type TradeInput,
 } from "@/lib/api";
+import {
+  normalizeMtDate,
+  parseStatement,
+  parseWorkbook,
+  readStatementText,
+  type ParsedTrade,
+} from "@/lib/mt-statement";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/app/trades/new")({
@@ -65,156 +71,6 @@ type MtStatus = {
 
 const ACCEPT = ".csv,.htm,.html,.xlsx,.xls";
 
-type ParsedTrade = {
-  ticket: string;
-  symbol: string;
-  side: string;
-  volume: string;
-  openTime: string;
-  closeTime: string;
-  profit: string;
-};
-
-function splitCsvLine(line: string) {
-  const out: string[] = [];
-  let cur = "";
-  let quoted = false;
-  for (let i = 0; i < line.length; i++) {
-    const ch = line[i]!;
-    if (ch === '"') {
-      if (quoted && line[i + 1] === '"') {
-        cur += '"';
-        i++;
-      } else quoted = !quoted;
-    } else if ((ch === "," || ch === ";" || ch === "\t") && !quoted) {
-      out.push(cur.trim());
-      cur = "";
-    } else cur += ch;
-  }
-  out.push(cur.trim());
-  return out;
-}
-
-/** Extracts closed-deal rows from a MetaTrader CSV or HTML statement. */
-function parseStatement(text: string, isHtml: boolean): ParsedTrade[] {
-  const rows: string[][] = [];
-
-  if (isHtml) {
-    const trs = text.match(/<tr[\s\S]*?<\/tr>/gi) ?? [];
-    trs.forEach((tr) => {
-      const cells = (tr.match(/<t[dh][\s\S]*?<\/t[dh]>/gi) ?? []).map((c) =>
-        c
-          .replace(/<[^>]+>/g, "")
-          .replace(/&nbsp;/g, " ")
-          .trim(),
-      );
-      if (cells.length >= 6) rows.push(cells);
-    });
-  } else {
-    text
-      .split(/\r?\n/)
-      .filter((l) => l.trim().length > 0)
-      .forEach((l) => rows.push(splitCsvLine(l)));
-  }
-
-  const num = (v: string) => Number(String(v).replace(/[^\d.-]/g, ""));
-  const trades: ParsedTrade[] = [];
-
-  rows.forEach((c) => {
-    const symbolIdx = c.findIndex((v) =>
-      /^[A-Za-z]{6}(\.[a-z]+)?$|^(XAUUSD|XAGUSD|US30|NAS100)/i.test(v.trim()),
-    );
-    const sideIdx = c.findIndex((v) => /^(buy|sell)$/i.test(v.trim()));
-    if (symbolIdx === -1 || sideIdx === -1) return;
-
-    const ticket = c.find((v) => /^\d{6,}$/.test(v.trim())) ?? "-";
-    const times = c.filter((v) =>
-      /\d{4}[./-]\d{2}[./-]\d{2}[ T]\d{2}:\d{2}/.test(v),
-    );
-    // Only import closed positions (require both open and close times)
-    if (times.length < 2) return;
-    const numbers = c.filter(
-      (v) => /^-?[\d\s,]*\.?\d+$/.test(v.trim()) && v.trim() !== ticket,
-    );
-    const profitRaw = numbers.length ? numbers[numbers.length - 1]! : "0";
-    const volumeRaw =
-      c[sideIdx + 1] && num(c[sideIdx + 1]!)
-        ? c[sideIdx + 1]!
-        : (numbers[0] ?? "0");
-
-    trades.push({
-      ticket,
-      symbol: c[symbolIdx]!.toUpperCase(),
-      side: c[sideIdx]!.toLowerCase() === "buy" ? "خرید" : "فروش",
-      volume: String(num(volumeRaw) || 0),
-      openTime: times[0] ?? "-",
-      closeTime: times[1] ?? "-",
-      profit: String(num(profitRaw) || 0),
-    });
-  });
-
-  return trades;
-}
-
-function normalizeMtDate(raw: string): string {
-  const cleaned = raw.replace(/\./g, "-").trim();
-  if (/^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}/.test(cleaned)) {
-    // MetaTrader timestamps have no seconds — Django needs them.
-    const withSeconds = /:\d{2}$/.test(cleaned) ? cleaned : `${cleaned}:00`;
-    return withSeconds.replace(" ", "T");
-  }
-  return new Date().toISOString();
-}
-
-/** Parse XLSX file and extract trade rows as string arrays. */
-function parseXlsx(buffer: ArrayBuffer): ParsedTrade[] {
-  const wb = XLSX.read(buffer, { type: "array" });
-  const ws = wb.Sheets[wb.SheetNames[0]];
-  const raw = XLSX.utils.sheet_to_json(ws, { header: 1, defval: "" });
-  // Convert all cell values to strings (XLSX can return numbers)
-  const rows: string[][] = (raw as unknown[][])
-    .map((r) => r.map((v) => (v == null ? "" : String(v))))
-    .filter((r: string[]) => r.length >= 6);
-  const num = (v: string) => Number(String(v).replace(/[^\d.-]/g, ""));
-  const trades: ParsedTrade[] = [];
-
-  rows.forEach((c) => {
-    const symbolIdx = c.findIndex((v) =>
-      /^[A-Za-z]{6}(\.[a-z]+)?$|^(XAUUSD|XAGUSD|US30|NAS100)/i.test(v.trim()),
-    );
-    const sideIdx = c.findIndex((v) => /^(buy|sell)$/i.test(v.trim()));
-    if (symbolIdx === -1 || sideIdx === -1) return;
-
-    const ticket = c.find((v) => /^\d{6,}$/.test(v.trim())) || "-";
-    const times = c.filter((v) =>
-      /\d{4}[./-]\d{2}[./-]\d{2}[ T]\d{2}:\d{2}/.test(v),
-    );
-    // Only import closed positions (require both open and close times)
-    if (times.length < 2) return;
-    const numbers = c.filter(
-      (v) => /^-?[\d\s,]*\.?\d+$/.test(v.trim()) && v.trim() !== ticket,
-    );
-
-    const profitRaw = numbers.length ? numbers[numbers.length - 1]! : "0";
-    const volumeRaw =
-      c[sideIdx + 1] && num(c[sideIdx + 1]!)
-        ? c[sideIdx + 1]!
-        : numbers[0] || "0";
-
-    trades.push({
-      ticket,
-      symbol: c[symbolIdx]!.toUpperCase(),
-      side: c[sideIdx]!.toLowerCase() === "buy" ? "خرید" : "فروش",
-      volume: String(num(volumeRaw) || 0),
-      openTime: times[0] || "-",
-      closeTime: times[1] || "-",
-      profit: String(num(profitRaw) || 0),
-    });
-  });
-
-  return trades;
-}
-
 function ImportPanel() {
   const inputRef = useRef<HTMLInputElement>(null);
   const navigate = useNavigate();
@@ -236,7 +92,7 @@ function ImportPanel() {
 
     if (/\.(csv|html?)$/i.test(f.name)) {
       try {
-        const text = await f.text();
+        const text = await readStatementText(f);
         const rows = parseStatement(text, /\.html?$/i.test(f.name));
         setParsed(rows);
         if (rows.length === 0) {
@@ -252,7 +108,7 @@ function ImportPanel() {
     } else if (/\.xlsx?$/i.test(f.name)) {
       try {
         const buffer = await f.arrayBuffer();
-        const rows = parseXlsx(buffer);
+        const rows = parseWorkbook(buffer);
         setParsed(rows);
         if (rows.length === 0) {
           toast.warning(
@@ -290,18 +146,19 @@ function ImportPanel() {
           ? `IMP-${Date.now().toString(36)}-${Math.floor(Math.random() * 1000)}`
           : t.ticket,
       symbol: t.symbol,
-      side: t.side === "خرید" ? "buy" : "sell",
+      side: t.side,
       volume: Number(t.volume) || 0,
       pnl: Number(t.profit) || 0,
-      entry: 0,
-      exit: 0,
-      sl: 0,
-      tp: 0,
+      entry: Number(t.entry) || 0,
+      exit: Number(t.exit) || 0,
+      sl: Number(t.sl) || 0,
+      tp: Number(t.tp) || 0,
+      // The server derives R:R from entry/exit/sl when it is left at zero.
       rr: 0,
       pips: 0,
-      commission: 0,
-      swap: 0,
-      taxes: 0,
+      commission: Number(t.commission) || 0,
+      swap: Number(t.swap) || 0,
+      taxes: Number(t.taxes) || 0,
       open_time: normalizeMtDate(t.openTime),
       close_time: normalizeMtDate(t.closeTime),
       magic: 0,
@@ -416,7 +273,9 @@ function ImportPanel() {
                         {t.ticket}
                       </td>
                       <td className="py-2 font-medium">{t.symbol}</td>
-                      <td className="py-2">{t.side}</td>
+                      <td className="py-2">
+                        {t.side === "buy" ? "خرید" : "فروش"}
+                      </td>
                       <td className="py-2 tabular">{t.volume}</td>
                       <td className="py-2 text-xs tabular text-muted-foreground">
                         {t.openTime}
