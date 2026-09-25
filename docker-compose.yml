@@ -31,8 +31,15 @@ services:
     depends_on:
       db:
         condition: service_healthy
+    # nginx serves /media/ straight off this host directory, so the app must
+    # write to the same place. group_add grants the container's uid (999) write
+    # access through the host group that owns the directory (gid 1000), exactly
+    # as nginx's `location /media/` alias in deploy/nginx-dlea.conf expects.
+    # See DEPLOYMENT-RUNBOOK.md -> mismatched /media/.
+    group_add:
+      - "1000"
     volumes:
-      - dlea-media:/app/media
+      - /var/www/dlea.piqagram.ir/backend/media:/app/media
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8002/api/"]
       interval: 15s
@@ -69,5 +76,3 @@ networks:
 volumes:
   pgdata:
     name: dlea-pgdata
-  dlea-media:
-    name: dlea-media
