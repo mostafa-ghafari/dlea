@@ -117,8 +117,8 @@ export function UserBlock({ compact = false }: { compact?: boolean }) {
                 <span className="text-muted-foreground">
                   اشتراک {subscription?.plan ?? "—"}
                 </span>
-                <span className="font-medium text-primary tabular" style={{textAlign:"right", direction:"rtl"}}>
-                  روز باقی‌مانده {daysLeft}
+                <span dir="ltr" className="font-medium text-primary tabular">
+                  {daysLeft} روز باقی‌مانده
                 </span>
               </div>
               <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-secondary">
