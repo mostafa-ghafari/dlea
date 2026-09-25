@@ -389,7 +389,9 @@ function AiCoach() {
                 >
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-destructive" />
-                    <span className="font-medium">{englishDigits(w.title)}</span>
+                    <span className="font-medium">
+                      {englishDigits(w.title)}
+                    </span>
                     <Badge
                       variant="outline"
                       className={severityStyle[w.severity]}
@@ -418,7 +420,9 @@ function AiCoach() {
                         <div className="grid h-4 w-4 shrink-0 place-items-center rounded-full bg-destructive/20 text-[10px] font-bold text-destructive tabular">
                           {i + 1}
                         </div>
-                        <span className="text-foreground/90">{englishDigits(st)}</span>
+                        <span className="text-foreground/90">
+                          {englishDigits(st)}
+                        </span>
                       </li>
                     ))}
                   </ul>
@@ -447,7 +451,9 @@ function AiCoach() {
                 >
                   <div className="flex gap-2">
                     <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-primary" />
-                    <span className="text-sm font-medium">{englishDigits(s.title)}</span>
+                    <span className="text-sm font-medium">
+                      {englishDigits(s.title)}
+                    </span>
                   </div>
                   <div className="mt-2 flex items-start gap-2 rounded-md bg-background/40 p-2.5 text-xs text-foreground/90">
                     <ShieldCheck className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
@@ -477,7 +483,9 @@ function AiCoach() {
                     className="flex items-start gap-2 rounded-lg border border-border bg-secondary/30 p-3"
                   >
                     <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-primary" />
-                    <span className="text-foreground/90">{englishDigits(h)}</span>
+                    <span className="text-foreground/90">
+                      {englishDigits(h)}
+                    </span>
                   </li>
                 ))}
               </ul>
@@ -497,7 +505,9 @@ function AiCoach() {
                     <div className="grid h-5 w-5 shrink-0 place-items-center rounded-full bg-accent/20 text-[10px] font-bold text-accent tabular">
                       {i + 1}
                     </div>
-                    <span className="text-foreground/90">{englishDigits(a)}</span>
+                    <span className="text-foreground/90">
+                      {englishDigits(a)}
+                    </span>
                   </li>
                 ))}
               </ul>
