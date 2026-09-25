@@ -24,14 +24,14 @@ import { Badge } from "@/components/ui/badge";
 import { useAchievements, type Achievement } from "@/lib/api";
 
 export const Route = createFileRoute("/app/achievements")({
-  head: () => ({ meta: [{ title: "نشانها" }] }),
+  head: () => ({ meta: [{ title: "نشان‌ها" }] }),
   component: AchievementsPage,
 });
 
 /**
- * The badges section renders without Persian half-spaces (ZWNJ) or trailing
- * periods, so normalize the catalog titles and whatever the API returns
- * before matching and rendering.
+ * The badges section is authored without Persian half-spaces (ZWNJ) or
+ * trailing periods, so normalize the catalog titles and whatever the API
+ * returns before matching and rendering.
  */
 const stripZwnj = (s: string) => s.replace(/\u200c/g, "");
 const cleanDesc = (s: string) => stripZwnj(s).replace(/\.+$/, "");
@@ -68,7 +68,7 @@ const achievementStyle: Record<
     bgLocked: "bg-purple-500/10 text-purple-500/40",
     badgeClass: "border-purple-500/30 bg-purple-500/10 text-purple-600",
   },
-  "۱۰۰ معامله ثبتشده": {
+  "۱۰۰ معامله ثبت شده": {
     icon: BarChart3,
     iconColor: "text-amber-500",
     bgGradient: "bg-gradient-to-br from-amber-500 to-amber-600 text-white",
@@ -96,14 +96,14 @@ const achievementStyle: Record<
     bgLocked: "bg-yellow-500/10 text-yellow-500/40",
     badgeClass: "border-yellow-500/30 bg-yellow-500/10 text-yellow-600",
   },
-  "۳۰ روز متوالی ژورالنویسی": {
+  "۳۰ روز متوالی ژورال نویسی": {
     icon: BookOpen,
     iconColor: "text-indigo-500",
     bgGradient: "bg-gradient-to-br from-indigo-500 to-indigo-600 text-white",
     bgLocked: "bg-indigo-500/10 text-indigo-500/40",
     badgeClass: "border-indigo-500/30 bg-indigo-500/10 text-indigo-600",
   },
-  "ماه سودده": {
+  "ماه سود ده": {
     icon: Star,
     iconColor: "text-orange-500",
     bgGradient: "bg-gradient-to-br from-orange-500 to-orange-600 text-white",
@@ -152,7 +152,7 @@ const achievementStyle: Record<
     bgLocked: "bg-blue-500/10 text-blue-500/40",
     badgeClass: "border-blue-500/30 bg-blue-500/10 text-blue-600",
   },
-  "استاد چکلیست": {
+  "استاد چک لیست": {
     icon: CheckCircle2,
     iconColor: "text-fuchsia-500",
     bgGradient: "bg-gradient-to-br from-fuchsia-500 to-fuchsia-600 text-white",
@@ -183,22 +183,22 @@ const defaultStyle = {
 // server didn't return (empty portfolio / API hiccup) so the section never
 // silently drops badges — earned state still comes from the API.
 const FALLBACK_DESCS = [
-  "یک هفته کامل طبق قوانین ترید کردی.",
-  "حداکثر دراودان را نصف کردی.",
-  "کنترل احساسات درجه یک.",
-  "قهرمان ژورالنویسی.",
-  "استراتژی سودده اثبات‌شده.",
-  "روانشناسی طلایی.",
-  "سفرت را شروع کردی.",
-  "عادت طلایی ساخته شد.",
-  "یک ماه کامل با سود مثبت.",
-  "دقت شکار درجه یک.",
-  "مدیر ریسک واقعی.",
-  "صبر یعنی همین.",
-  "سرمایه اولیه‌ات را دو برابر کردی.",
-  "فقط ست‌آپ‌های تمیز.",
-  "همگام‌سازی خودکار فعال شد.",
-  "۵۰ چک‌لیست کامل قبل از ورود.",
+  "یک هفته کامل طبق قوانین ترید کردی",
+  "حداکثر دراودان را نصف کردی",
+  "کنترل احساسات درجه یک",
+  "قهرمان ژورال نویسی",
+  "استراتژی سود ده اثبات‌ شده",
+  "روانشناسی طلایی",
+  "سفرت را شروع کردی",
+  "عادت طلایی ساخته شد",
+  "یک ماه کامل با سود مثبت",
+  "دقت شکار درجه یک",
+  "مدیر ریسک واقعی",
+  "صبر یعنی همین",
+  "سرمایه اولیه‌ات را دو برابر کردی",
+  "فقط ست‌آپ‌های تمیز",
+  "همگام‌سازی خودکار فعال شد",
+  "۵۰ چک‌ لیست کامل قبل از ورود",
 ];
 
 /**
@@ -220,7 +220,7 @@ function resolveBadgeList(apiBadges: Achievement[]): Achievement[] {
       api ?? {
         id: title,
         title,
-        desc: cleanDesc(FALLBACK_DESCS[i] ?? ""),
+        desc: FALLBACK_DESCS[i] ?? "",
         earned: false,
         rule: "",
       }
