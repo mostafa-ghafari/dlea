@@ -1,17 +1,11 @@
 import { Link, createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
-import {
-  LineChart,
-  ArrowLeft,
-  Loader2,
-  Mail,
-  KeyRound,
-  Lock,
-} from "lucide-react";
+import { ArrowLeft, Loader2, Mail, KeyRound, Lock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
+import { BrandLogo } from "@/components/BrandLogo";
 
 export const Route = createFileRoute("/forgot-password")({
   head: () => ({ meta: [{ title: "بازیابی رمز عبور — Dlea AI" }] }),
@@ -190,9 +184,7 @@ function ForgotPasswordPage() {
     <div className="hero-bg flex min-h-screen items-center justify-center px-4">
       <div className="w-full max-w-md">
         <Link to="/" className="mb-8 flex items-center justify-center gap-2">
-          <div className="grid h-10 w-10 place-items-center rounded-lg bg-gradient-to-br from-primary to-primary/60 text-primary-foreground shadow-[var(--shadow-glow)]">
-            <LineChart className="h-5 w-5" />
-          </div>
+          <BrandLogo className="h-10 w-10" />
           <span className="text-lg font-bold">
             Dlea <span className="text-primary">AI</span>
           </span>

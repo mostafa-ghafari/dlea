@@ -4,7 +4,6 @@ import {
   BarChart3,
   Brain,
   CheckCircle2,
-  LineChart,
   Shield,
   Sparkles,
   Target,
@@ -17,6 +16,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ScrollReveal } from "@/components/ScrollReveal";
 import { CountUp } from "@/components/CountUp";
+import { BrandLogo } from "@/components/BrandLogo";
 import { ThemeToggle } from "@/lib/theme";
 import { todayJalali } from "@/lib/persian-calendar";
 
@@ -129,9 +129,7 @@ function Landing() {
       <header className="sticky top-0 z-40 border-b border-border/60 bg-background/70 backdrop-blur-xl">
         <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 md:px-8">
           <Link to="/" className="flex items-center gap-2">
-            <div className="grid h-9 w-9 place-items-center rounded-lg bg-gradient-to-br from-primary to-primary/60 text-primary-foreground shadow-[var(--shadow-glow)]">
-              <LineChart className="h-5 w-5" />
-            </div>
+            <BrandLogo className="h-9 w-9" />
             <span className="font-bold">
               Dlea <span className="text-primary">AI</span>
             </span>
@@ -575,7 +573,7 @@ function Landing() {
       <footer className="border-t border-border py-8">
         <div className="mx-auto flex max-w-7xl flex-col items-center justify-between gap-4 px-4 text-sm text-muted-foreground md:flex-row md:px-8">
           <div className="flex items-center gap-2">
-            <LineChart className="h-4 w-4 text-primary" />
+            <BrandLogo className="h-5 w-5" />
             <span>© {todayJalali().year} Dlea AI — تمام حقوق محفوظ است.</span>
           </div>
           <div className="flex gap-6">

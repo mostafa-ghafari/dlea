@@ -1,7 +1,6 @@
 import { Link, createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import {
-  LineChart,
   ArrowLeft,
   CheckCircle2,
   Mail,
@@ -18,6 +17,7 @@ import {
   InputOTPSlot,
 } from "@/components/ui/input-otp";
 import { toast } from "sonner";
+import { BrandLogo } from "@/components/BrandLogo";
 
 export const Route = createFileRoute("/signup")({
   head: () => ({ meta: [{ title: "ثبت‌نام — Dlea AI" }] }),
@@ -231,9 +231,7 @@ function SignupPage() {
     <div className="hero-bg flex min-h-screen items-center justify-center px-4 py-12">
       <div className="w-full max-w-4xl">
         <Link to="/" className="mb-8 flex items-center justify-center gap-2">
-          <div className="grid h-10 w-10 place-items-center rounded-lg bg-gradient-to-br from-primary to-primary/60 text-primary-foreground shadow-[var(--shadow-glow)]">
-            <LineChart className="h-5 w-5" />
-          </div>
+          <BrandLogo className="h-10 w-10" />
           <span className="text-lg font-bold">
             Dlea <span className="text-primary">AI</span>
           </span>

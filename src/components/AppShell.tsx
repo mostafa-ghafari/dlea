@@ -1,11 +1,5 @@
 import { Link, useLocation } from "@tanstack/react-router";
-import {
-  LineChart,
-  Plus,
-  Menu,
-  PanelRightClose,
-  PanelRightOpen,
-} from "lucide-react";
+import { Plus, Menu, PanelRightClose, PanelRightOpen } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -31,6 +25,7 @@ import { NavList } from "@/components/layout/NavList";
 import { NotificationsMenu } from "@/components/layout/NotificationsMenu";
 import { GlobalSearch } from "@/components/layout/GlobalSearch";
 import { PortfolioGate } from "@/components/layout/PortfolioGate";
+import { BrandLogo } from "@/components/BrandLogo";
 
 export function AppShell({
   children,
@@ -91,9 +86,7 @@ export function AppShell({
               collapsed && "justify-center px-2",
             )}
           >
-            <div className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-gradient-to-br from-primary to-primary/60 text-primary-foreground shadow-[var(--shadow-glow)]">
-              <LineChart className="h-5 w-5" />
-            </div>
+            <BrandLogo className="h-9 w-9" />
             {!collapsed && (
               <div className="flex flex-col leading-tight">
                 <span className="text-sm font-bold">Dlea AI</span>
@@ -178,9 +171,7 @@ export function AppShell({
               >
                 <SheetTitle className="sr-only">منوی اصلی</SheetTitle>
                 <div className="flex h-16 items-center gap-2 border-b border-sidebar-border px-5">
-                  <div className="grid h-9 w-9 place-items-center rounded-lg bg-gradient-to-br from-primary to-primary/60 text-primary-foreground shadow-[var(--shadow-glow)]">
-                    <LineChart className="h-5 w-5" />
-                  </div>
+                  <BrandLogo className="h-9 w-9" />
                   <div className="flex flex-col leading-tight">
                     <span className="text-sm font-bold">Dlea AI</span>
                     <span className="text-[10px] text-muted-foreground">
