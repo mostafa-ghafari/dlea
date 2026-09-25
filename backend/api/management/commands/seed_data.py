@@ -290,6 +290,11 @@ def seed_goals():
         Goal.objects.create(title=title, progress=progress)
 
 
+def _clean_achievement_text(text):
+    """Achievements render without ZWNJ half-spaces or a trailing period."""
+    return text.replace("\u200c", "").rstrip(".")
+
+
 def seed_achievements():
     data = [
         ("۷ روز پایبند به پلن", "یک هفته کامل طبق قوانین ترید کردی.", True, "۷ روز کاری متوالی که همه معاملات آن روز followedPlan = true باشند."),
@@ -310,17 +315,22 @@ def seed_achievements():
         ("استاد چکلیست", "۵۰ چکلیست کامل قبل از ورود.", False, "۵۰ چکلیست پیش از معامله با همه آیتمهای تیک‌خورده در ماه جاری."),
     ]
     for title, desc, earned, rule in data:
-        Achievement.objects.create(title=title, desc=desc, earned=earned, rule=rule)
+        Achievement.objects.create(
+            title=_clean_achievement_text(title),
+            desc=_clean_achievement_text(desc),
+            earned=earned,
+            rule=rule,
+        )
 
     AchievementHistory.objects.create(
         month="مهر ۱۴۰۳", count=9,
-        earned=["۷ روز پایبند به پلن", "۱۰۰ معامله ثبت‌شده", "ماه سودده", "اولین معامله ثبت‌شده", "اتصال موفق متاتریدر", "Win Rate بالای ۷۰٪", "ریسک زیر ۱٪ در ۵۰ معامله", "۳۰ روز متوالی ژورنال‌نویسی", "Profit Factor بالای ۲"],
+        earned=[_clean_achievement_text(t) for t in ["۷ روز پایبند به پلن", "۱۰۰ معامله ثبت‌شده", "ماه سودده", "اولین معامله ثبت‌شده", "اتصال موفق متاتریدر", "Win Rate بالای ۷۰٪", "ریسک زیر ۱٪ در ۵۰ معامله", "۳۰ روز متوالی ژورنال‌نویسی", "Profit Factor بالای ۲"]],
     )
     AchievementHistory.objects.create(
         month="شهریور ۱۴۰۳", count=5,
-        earned=["اولین معامله ثبت‌شده", "اتصال موفق متاتریدر", "۷ روز پایبند به پلن", "ماه سودده", "کاهش دراودان ۵٪"],
+        earned=[_clean_achievement_text(t) for t in ["اولین معامله ثبت‌شده", "اتصال موفق متاتریدر", "۷ روز پایبند به پلن", "ماه سودده", "کاهش دراودان ۵٪"]],
     )
-    AchievementHistory.objects.create(month="مرداد ۱۴۰۳", count=2, earned=["اولین معامله ثبت‌شده", "اتصال موفق متاتریدر"])
+    AchievementHistory.objects.create(month="مرداد ۱۴۰۳", count=2, earned=[_clean_achievement_text(t) for t in ["اولین معامله ثبت‌شده", "اتصال موفق متاتریدر"]])
 
 
 def seed_plans():

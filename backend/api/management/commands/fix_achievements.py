@@ -1,35 +1,28 @@
-"""Fix achievement descriptions with correct Persian spelling."""
+"""Normalize achievement text so the UI never shows ZWNJ or a trailing period."""
+
 from django.core.management.base import BaseCommand
+
 from api.models import Achievement
 
-FIXES = {
-    "ژورالنویسی": "ژورنال‌نویسی",
-    "ثبتشده": "ثبت‌شده",
-    "اثباتشده": "اثبات‌شده",
-    "قوائمث تربد": "قوانین ترید",
-    "حداقل درآمدان": "حداقل درآمدتان",
-    "تصیف": "تضمین",
-    "اقیابیده": "ایجاد کردید",
-    "تیکخورده": "تیک‌خورده",
-    "ستآپهای": "ستاپ‌های",
-    "ثبت شده باشد": "ثبت‌شده باشد",
-    "ثبت نشده": "ثبت‌نشده",
-}
+ZWNJ = "\u200c"
+
+
+def _clean(text: str) -> str:
+    return text.replace(ZWNJ, "").rstrip(".")
+
 
 class Command(BaseCommand):
-    help = "Fix Persian spelling in achievement descriptions"
+    help = "Remove ZWNJ half-spaces and trailing periods from achievement text"
 
     def handle(self, *args, **options):
         updated = 0
         for a in Achievement.objects.all():
-            original = a.desc
-            for old, new in FIXES.items():
-                a.desc = a.desc.replace(old, new)
-            # Remove trailing period
-            if a.desc.endswith("."):
-                a.desc = a.desc[:-1]
-            if a.desc != original:
-                a.save(update_fields=["desc"])
+            title = _clean(a.title)
+            desc = _clean(a.desc)
+            if title != a.title or desc != a.desc:
+                a.title = title
+                a.desc = desc
+                a.save(update_fields=["title", "desc"])
                 updated += 1
-                self.stdout.write(f"  Fixed: {a.title}")
+                self.stdout.write(f"  Fixed: {title}")
         self.stdout.write(f"Updated {updated} achievements")

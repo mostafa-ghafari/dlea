@@ -24,9 +24,17 @@ import { Badge } from "@/components/ui/badge";
 import { useAchievements, type Achievement } from "@/lib/api";
 
 export const Route = createFileRoute("/app/achievements")({
-  head: () => ({ meta: [{ title: "نشان‌ها" }] }),
+  head: () => ({ meta: [{ title: "نشانها" }] }),
   component: AchievementsPage,
 });
+
+/**
+ * The badges section renders without Persian half-spaces (ZWNJ) or trailing
+ * periods, so normalize the catalog titles and whatever the API returns
+ * before matching and rendering.
+ */
+const stripZwnj = (s: string) => s.replace(/\u200c/g, "");
+const cleanDesc = (s: string) => stripZwnj(s).replace(/\.+$/, "");
 
 /** Each achievement gets its own icon + color scheme for visual variety */
 const achievementStyle: Record<
@@ -153,6 +161,14 @@ const achievementStyle: Record<
   },
 };
 
+/** Style lookup keyed by the normalized (half-space-free) title. */
+const styleByTitle = Object.fromEntries(
+  Object.entries(achievementStyle).map(([title, style]) => [
+    stripZwnj(title),
+    style,
+  ]),
+);
+
 const defaultStyle = {
   icon: Trophy,
   iconColor: "text-primary",
@@ -191,22 +207,30 @@ const FALLBACK_DESCS = [
  * otherwise) and any extra server-defined badge is appended.
  */
 function resolveBadgeList(apiBadges: Achievement[]): Achievement[] {
-  const known = Object.keys(achievementStyle);
-  const byTitle = new Map(apiBadges.map((a) => [a.title, a]));
+  const known = Object.keys(achievementStyle).map(stripZwnj);
+  const byTitle = new Map(
+    apiBadges.map((a) => [
+      stripZwnj(a.title),
+      { ...a, title: stripZwnj(a.title), desc: cleanDesc(a.desc) },
+    ]),
+  );
   const merged = known.map((title, i) => {
     const api = byTitle.get(title);
     return (
       api ?? {
         id: title,
         title,
-        desc: FALLBACK_DESCS[i] ?? "",
+        desc: cleanDesc(FALLBACK_DESCS[i] ?? ""),
         earned: false,
         rule: "",
       }
     );
   });
   for (const a of apiBadges) {
-    if (!known.includes(a.title)) merged.push(a);
+    const title = stripZwnj(a.title);
+    if (!known.includes(title)) {
+      merged.push({ ...a, title, desc: cleanDesc(a.desc) });
+    }
   }
   return merged;
 }
@@ -217,12 +241,12 @@ function AchievementsPage() {
 
   return (
     <AppShell
-      title="نشان‌ها"
-      subtitle={`${earned} از ${achievements.length} نشان کسب‌شده`}
+      title="نشانها"
+      subtitle={`${earned} از ${achievements.length} نشان کسبشده`}
     >
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {achievements.map((a) => {
-          const style = achievementStyle[a.title] ?? defaultStyle;
+          const style = styleByTitle[a.title] ?? defaultStyle;
           const Icon = style.icon;
           return (
             <div
@@ -254,7 +278,7 @@ function AchievementsPage() {
                     : "border-border text-muted-foreground"
                 }`}
               >
-                {a.earned ? "✓ کسب‌شده" : "قفل"}
+                {a.earned ? "✓ کسبشده" : "قفل"}
               </Badge>
             </div>
           );

@@ -81,7 +81,7 @@ export const nav = [
   {
     to: "/app/achievements",
     icon: Trophy,
-    label: "نشان‌ها",
+    label: "نشانها",
     feature: "achievements" as PlanFeature,
     admin: false,
   },

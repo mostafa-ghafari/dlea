@@ -337,7 +337,9 @@ class AchievementSerializer(serializers.ModelSerializer):
         portfolio_count = Portfolio.objects.filter(user=user).count()
         has_mt = portfolio_count > 0 and trades.count() > 0
         # Map achievement titles to simple heuristic checks
-        title = obj.title
+        # Achievement titles render without ZWNJ, so normalize both the stored
+        # title and the rule keys before matching.
+        title = obj.title.replace("\u200c", "")
         rules = {
             "۷ روز پایبند به پلن": count >= 10,
             "کاهش دراودان ۵٪": total_pnl > 0,
@@ -356,7 +358,8 @@ class AchievementSerializer(serializers.ModelSerializer):
             "اتصال موفق متاتریدر": has_mt,
             "استاد چکلیست": count >= 50,
         }
-        return rules.get(title, count >= 1)
+        normalized = {k.replace("\u200c", ""): v for k, v in rules.items()}
+        return normalized.get(title, count >= 1)
 
 
 class AchievementHistorySerializer(serializers.ModelSerializer):

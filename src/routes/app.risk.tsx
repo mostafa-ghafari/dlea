@@ -40,6 +40,11 @@ function faNum(n: number): string {
   );
 }
 
+/** Persian digits with no grouping — for calendar parts like `۳ مهر ۱۴۰۵`. */
+function faDigits(n: number): string {
+  return String(n).replace(/\d/g, (d) => "۰۱۲۳۴۵۶۷۸۹"[Number(d)]!);
+}
+
 function RiskPage() {
   const [portfolioId] = useActivePortfolioId();
   const portfolios = usePortfolios();
@@ -76,7 +81,7 @@ function RiskPage() {
     [trades, caps, balance],
   );
   const today = useMemo(() => todayJalali(), []);
-  const todayTitle = `${faNum(today.day)} ${jalaliMonthName(today.month)} ${faNum(today.year)}`;
+  const todayTitle = `${faDigits(today.day)} ${jalaliMonthName(today.month)} ${faDigits(today.year)}`;
 
   function updateCap(key: keyof RiskCaps, value: number) {
     setEdited((prev) => ({ ...prev, [key]: Math.max(0, value) }));
