@@ -148,8 +148,8 @@ def get_model(model: str | None) -> str:
     return model
 
 
-def _fa_num(raw: str) -> str:
-    """`1234.5` → `۱,۲۳۴.۵` (grouped thousands, Persian digits)."""
+def _en_num(raw: str) -> str:
+    """`1234.5` → `1,234.5` (grouped thousands, English digits)."""
     raw = raw.strip()
     sign = ""
     if raw.startswith("-"):
@@ -162,7 +162,7 @@ def _fa_num(raw: str) -> str:
         body = f"{int(value):,}"
     else:
         body = f"{value:,.2f}".rstrip("0").rstrip(".")
-    return sign + jutils._fa(body)
+    return sign + body
 
 
 # ---------------------------------------------------------------------------
@@ -296,12 +296,12 @@ def build_prompt(scope: str, period: dict[str, Any], stats: dict[str, Any], trad
 بازه: {period['label']} ({period['range']})
 تعداد معاملات: {stats['count']}
 سود خالص: {stats['net']:+.2f} دلار
-Win Rate: {stats['winRate']}٪
+Win Rate: {stats['winRate']}%
 Profit Factor: {stats['profitFactor']}
 میانگین R:R: {stats['avgRr']}
-حداکثر دراودان: {stats['maxDrawdown']}٪
+حداکثر دراودان: {stats['maxDrawdown']}%
 بهترین نماد: {stats['bestSymbol']} | بدترین نماد: {stats['worstSymbol']}
-پایبندی به پلن: {stats['planAdherence']}٪
+پایبندی به پلن: {stats['planAdherence']}%
 احساس غالب: {stats['topEmotion']}
 
 معاملات این بازه:
@@ -311,13 +311,13 @@ Profit Factor: {stats['profitFactor']}
 {{
   "summary": "خلاصه ۳ تا ۵ جمله‌ای از عملکرد این بازه، صادقانه و بر اساس داده‌ها",
   "scores": [
-    {{"label": "نظم معاملاتی", "value": عدد ۰ تا ۱۰۰}},
-    {{"label": "مدیریت سرمایه", "value": عدد ۰ تا ۱۰۰}},
-    {{"label": "روانشناسی", "value": عدد ۰ تا ۱۰۰}},
-    {{"label": "پایبندی به پلن", "value": عدد ۰ تا ۱۰۰}}
+    {{"label": "نظم معاملاتی", "value": عدد 0 تا 100}},
+    {{"label": "مدیریت سرمایه", "value": عدد 0 تا 100}},
+    {{"label": "روانشناسی", "value": عدد 0 تا 100}},
+    {{"label": "پایبندی به پلن", "value": عدد 0 تا 100}}
   ],
   "weaknesses": [
-    {{"title": "عنوان ضعف", "impact": "اثر آن روی حساب", "severity": "بحرانی یا مهم یا قابل بهبود", "solution": "راهکار عملی", "steps": ["قدم ۱", "قدم ۲", "قدم ۳"]}}
+    {{"title": "عنوان ضعف", "impact": "اثر آن روی حساب", "severity": "بحرانی یا مهم یا قابل بهبود", "solution": "راهکار عملی", "steps": ["قدم 1", "قدم 2", "قدم 3"]}}
   ],
   "strengths": [
     {{"title": "عنوان نقطه قوت", "keepDoing": "چه چیزی را ادامه دهد"}}
@@ -330,7 +330,7 @@ Profit Factor: {stats['profitFactor']}
 - همه متن‌ها فارسی، طبیعی و مستقیم (مثل یک مربی واقعی) باشند.
 - ۲ تا ۳ ضعف با شدت‌بندی درست (بحرانی = ضرر مالی واقعی یا تکرارشونده، مهم = تأثیر محسوس، قابل بهبود = عادت‌های جزئی).
 - هر ضعف دقیقاً ۳ قدم عملی و مشخص داشته باشد.
-- هیچ عددی را جعل نکن؛ فقط از داده‌های همین بازه استفاده کن. اعداد را در summary به صورت فارسی بنویس (مثلاً «+۵۸۸ دلار»)."""
+- هیچ عددی را جعل نکن؛ فقط از داده‌های همین بازه استفاده کن. همه اعداد را با ارقام انگلیسی (لاتین) بنویس، نه فارسی (مثلاً «+588 دلار»)."""
 
 
 def _is_html(body: str) -> bool:
@@ -543,14 +543,14 @@ def normalize_report(raw: dict[str, Any], scope: str, period: dict[str, Any], st
             )
         return out
 
-    net_txt = f"{'+' if stats['net'] >= 0 else ''}{_fa_num(f'{stats['net']:,.0f}')}$"
-    win_txt = f"{jutils._fa(f'{stats['winRate']:g}')}٪"
+    net_txt = f"{'+' if stats['net'] >= 0 else ''}{_en_num(f'{stats['net']:,.0f}')}$"
+    win_txt = f"{stats['winRate']:g}%"
 
     stats_list = [
-        {"label": "تعداد معامله", "value": jutils._fa(str(stats["count"]))},
+        {"label": "تعداد معامله", "value": str(stats["count"])},
         {"label": "سود خالص", "value": net_txt},
         {"label": "Win Rate", "value": win_txt},
-        {"label": "Profit Factor", "value": jutils._fa(f"{stats['profitFactor']:g}")},
+        {"label": "Profit Factor", "value": f"{stats['profitFactor']:g}"},
     ]
     if scope in ("weekly", "monthly", "yearly"):
         stats_list += [
@@ -558,12 +558,12 @@ def normalize_report(raw: dict[str, Any], scope: str, period: dict[str, Any], st
             {"label": "بدترین نماد", "value": stats["worstSymbol"]},
         ]
     if scope in ("monthly", "yearly"):
-        stats_list += [{"label": "Max Drawdown", "value": f"{jutils._fa(f'{stats['maxDrawdown']:g}')}٪"}]
+        stats_list += [{"label": "Max Drawdown", "value": f"{stats['maxDrawdown']:g}%"}]
 
     summary = str(raw.get("summary") or "").strip()
     if not summary:
         summary = (
-            f"{jutils._fa(str(stats['count']))} معامله در این بازه ثبت شد؛ سود خالص {net_txt} "
+            f"{stats['count']} معامله در این بازه ثبت شد؛ سود خالص {net_txt} "
             f"با Win Rate {win_txt}."
         )
 
@@ -606,7 +606,7 @@ def generate_coach_report(scope: str, model: str | None, trades: list | None = N
             "label": period["label"],
             "range": period["range"],
             "net": report["stats"][1]["value"] if len(report["stats"]) > 1 else f"{stats['net']:+.0f}$",
-            "winRate": report["stats"][2]["value"] if len(report["stats"]) > 2 else f"{stats['winRate']:g}٪",
+            "winRate": report["stats"][2]["value"] if len(report["stats"]) > 2 else f"{stats['winRate']:g}%",
         }
     )
     return report

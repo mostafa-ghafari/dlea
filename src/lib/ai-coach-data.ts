@@ -3,6 +3,8 @@
  * Mock data has been removed — all coach data now comes from the backend API.
  */
 
+import { faDigitsToLatin } from "@/lib/persian-calendar";
+
 export type CoachScope = "daily" | "weekly" | "monthly" | "yearly";
 
 export type CoachWeakness = {
@@ -37,3 +39,13 @@ export const scopeLabels: Record<CoachScope, string> = {
   monthly: "ماهانه",
   yearly: "سالانه",
 };
+
+/**
+ * Numbers on the coach page are shown with English (Latin) digits — the backend
+ * emits Persian ones. Only the Jalali date cells (`label` / `range`) keep their
+ * Persian form, so every other value on the page goes through this helper.
+ * The Persian percent sign becomes `%` to match the Latin digits.
+ */
+export function englishDigits(input: string): string {
+  return faDigitsToLatin(input).replace(/٪/g, "%");
+}
