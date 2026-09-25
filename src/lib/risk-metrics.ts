@@ -107,9 +107,6 @@ export function computeTodayAdherence(
   const tradeCount = dayTrades.length;
   const netPnl = dayTrades.reduce((s, t) => s + (t.pnl || 0), 0);
   const planFollowed = dayTrades.filter((t) => t.followedPlan).length;
-  const planAdherencePct = hasTrades
-    ? Math.round((planFollowed / tradeCount) * 100)
-    : 0;
 
   // Longest losing streak within today, in close-time order.
   let streak = 0;
@@ -176,6 +173,17 @@ export function computeTodayAdherence(
         longestStreak < caps.maxConsecutiveLosses,
     },
   ];
+
+  // «پایبندی به پلن» must reflect the weakest area of the day: a broken risk
+  // rule (or trades taken off-plan) has to pull adherence below 100%, otherwise
+  // the headline number contradicts the rule list rendered right under it.
+  const respectedRules = rules.filter((r) => r.safe).length;
+  const planAdherencePct = hasTrades
+    ? Math.round(
+        Math.min(planFollowed / tradeCount, respectedRules / rules.length) *
+          100,
+      )
+    : 0;
 
   return {
     todayLabel,

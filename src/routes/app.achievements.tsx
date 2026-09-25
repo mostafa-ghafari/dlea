@@ -89,7 +89,7 @@ const achievementStyle: Record<
     bgLocked: "bg-rose-500/10 text-rose-500/40",
     badgeClass: "border-rose-500/30 bg-rose-500/10 text-rose-600",
   },
-  "اولین معامله ثبتشده": {
+  "اولین معامله ثبت شده": {
     icon: Zap,
     iconColor: "text-yellow-500",
     bgGradient: "bg-gradient-to-br from-yellow-500 to-yellow-600 text-white",
@@ -241,8 +241,8 @@ function AchievementsPage() {
 
   return (
     <AppShell
-      title="نشانها"
-      subtitle={`${earned} از ${achievements.length} نشان کسبشده`}
+      title="نشان‌ها"
+      subtitle={`${earned} از ${achievements.length} نشان کسب شده`}
     >
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {achievements.map((a) => {
@@ -278,7 +278,7 @@ function AchievementsPage() {
                     : "border-border text-muted-foreground"
                 }`}
               >
-                {a.earned ? "✓ کسبشده" : "قفل"}
+                {a.earned ? "✓ کسب شده" : "قفل"}
               </Badge>
             </div>
           );

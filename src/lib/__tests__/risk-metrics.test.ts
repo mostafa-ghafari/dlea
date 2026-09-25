@@ -125,6 +125,17 @@ describe("computeTodayAdherence", () => {
     expect(streak.safe).toBe(false);
   });
 
+  it("caps adherence below 100% whenever a risk rule is broken", () => {
+    // Both trades followed the plan, but the 2% single loss breaks the 1% risk
+    // cap — so adherence is limited by the 3 of 4 rules that held.
+    const trades = [
+      mkTrade({ id: "a", pnl: -20, closeTime: `${label} 10:00` }),
+      mkTrade({ id: "b", pnl: 10, closeTime: `${label} 11:00` }),
+    ];
+    const r = computeTodayAdherence(trades, DEFAULT_RISK_CAPS, 1000);
+    expect(r.planAdherencePct).toBe(75);
+  });
+
   it("orders today's trades by close time before measuring the streak", () => {
     // Two losses (10:00, 12:00) with a winner between (11:00) — passed in a
     // jumbled order. A naive adjacency scan would see the two losses as one
