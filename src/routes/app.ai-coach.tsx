@@ -362,7 +362,7 @@ function AiCoach() {
                     {s.label}
                   </div>
                   <div className="mt-1 text-sm font-bold tabular">
-                    {englishDigits(s.value)}
+                    <Num>{englishDigits(s.value)}</Num>
                   </div>
                 </div>
               ))}
