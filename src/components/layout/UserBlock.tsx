@@ -118,7 +118,7 @@ export function UserBlock({ compact = false }: { compact?: boolean }) {
                   اشتراک {subscription?.plan ?? "—"}
                 </span>
                 <span className="font-medium text-primary tabular">
-                  {daysLeft} روز باقی‌مانده
+                   روز باقی‌مانده {daysLeft}
                 </span>
               </div>
               <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-secondary">
