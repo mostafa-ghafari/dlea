@@ -33,6 +33,7 @@ import {
 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Num } from "@/components/Num";
+import { formatUsd } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -491,9 +492,7 @@ function DashboardPage() {
                     <td
                       className={`py-3 tabular font-medium ${t.pnl >= 0 ? "gain" : "loss"}`}
                     >
-                      <Num>
-                        {t.pnl >= 0 ? "+" : ""}${t.pnl}
-                      </Num>
+                      <Num>{formatUsd(t.pnl)}</Num>
                     </td>
                     <td className="py-3 text-xs text-muted-foreground tabular">
                       {t.date}
@@ -535,9 +534,7 @@ function DashboardPage() {
                   <span
                     className={`text-lg font-bold tabular ${t.pnl >= 0 ? "gain" : "loss"}`}
                   >
-                    <Num>
-                      {t.pnl >= 0 ? "+" : ""}${t.pnl}
-                    </Num>
+                    <Num>{formatUsd(t.pnl)}</Num>
                   </span>
                 </div>
                 <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">

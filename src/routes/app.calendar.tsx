@@ -11,6 +11,7 @@ import {
   todayJalali,
 } from "@/lib/persian-calendar";
 import { Num } from "@/components/Num";
+import { formatUsd } from "@/lib/utils";
 
 export const Route = createFileRoute("/app/calendar")({
   head: () => ({ meta: [{ title: "تقویم معاملاتی" }] }),
@@ -115,9 +116,7 @@ function CalendarPage() {
           <div
             className={`mt-2 text-2xl font-bold tabular ${stats.totalPnl >= 0 ? "gain" : "loss"}`}
           >
-            <Num>
-              {stats.totalPnl >= 0 ? "+" : ""}${stats.totalPnl.toFixed(0)}
-            </Num>
+            <Num>{formatUsd(stats.totalPnl, (n) => n.toFixed(0))}</Num>
           </div>
         </div>
         <div className="card-surface p-4">
@@ -135,9 +134,7 @@ function CalendarPage() {
         <div className="card-surface p-4">
           <div className="text-xs text-muted-foreground">بهترین روز</div>
           <div className="mt-2 text-2xl font-bold tabular gain">
-            <Num>
-              {stats.bestDay > 0 ? "+" : ""}${stats.bestDay.toFixed(0)}
-            </Num>
+            <Num>{formatUsd(stats.bestDay, (n) => n.toFixed(0))}</Num>
           </div>
         </div>
       </div>
@@ -168,9 +165,7 @@ function CalendarPage() {
               <div
                 key={i}
                 title={
-                  pnl !== 0
-                    ? `${pnl > 0 ? "+" : ""}$${pnl} — ${trades} معامله`
-                    : undefined
+                  pnl !== 0 ? `${formatUsd(pnl)} — ${trades} معامله` : undefined
                 }
                 className="flex aspect-square min-w-0 flex-col justify-between overflow-hidden rounded-md border border-border p-1 transition-all hover:border-primary/50 sm:rounded-lg sm:p-2 sm:hover:scale-105"
                 style={{ background: bg }}
@@ -184,10 +179,9 @@ function CalendarPage() {
                       className={`truncate text-[9px] font-bold leading-tight tabular sm:text-xs ${pnl > 0 ? "gain" : "loss"}`}
                     >
                       <Num>
-                        {pnl > 0 ? "+" : ""}$
-                        {Math.abs(pnl) >= 1000
-                          ? `${(pnl / 1000).toFixed(1)}k`
-                          : pnl}
+                        {formatUsd(pnl, (n) =>
+                          n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n),
+                        )}
                       </Num>
                     </div>
                     <div className="mt-0.5 hidden text-[10px] text-muted-foreground sm:block">

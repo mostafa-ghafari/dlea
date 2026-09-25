@@ -53,7 +53,7 @@ import {
   usePlanLimits,
 } from "@/lib/api";
 import { toast } from "sonner";
-import { cn } from "@/lib/utils";
+import { cn, formatUsd } from "@/lib/utils";
 import { useHasPortfolio, useActivePortfolioId } from "@/lib/app-state";
 import { Num } from "@/components/Num";
 
@@ -501,9 +501,7 @@ function Portfolios() {
                   <div
                     className={`mt-1 text-lg font-bold tabular ${pnl >= 0 ? "gain" : "loss"}`}
                   >
-                    <Num>
-                      {pnl >= 0 ? "+" : ""}${pnl.toLocaleString()}
-                    </Num>
+                    <Num>{formatUsd(pnl, (n) => n.toLocaleString())}</Num>
                   </div>
                 </div>
               </div>

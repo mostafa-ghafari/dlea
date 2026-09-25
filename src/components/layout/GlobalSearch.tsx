@@ -1,7 +1,7 @@
 import { useNavigate } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { Search, BookOpen, Users } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { cn, formatUsd } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
 import {
   Dialog,
@@ -166,7 +166,7 @@ function GlobalSearchContent({
                   {t.symbol} • {t.id}
                 </span>
                 <span className={cn("tabular", t.pnl >= 0 ? "gain" : "loss")}>
-                  <Num>${t.pnl}</Num>
+                  <Num>{formatUsd(t.pnl)}</Num>
                 </span>
               </button>
             ))}

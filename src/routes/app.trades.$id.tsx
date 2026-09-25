@@ -1,4 +1,5 @@
 import { useSetTitle } from "@/lib/page-context";
+import { formatUsd } from "@/lib/utils";
 import { AppShell } from "@/components/AppShell";
 import { Link, createFileRoute, useParams } from "@tanstack/react-router";
 import { ArrowRight, CheckCircle2, XCircle, Images } from "lucide-react";
@@ -134,7 +135,7 @@ function TradeDetail() {
             dir="ltr"
             className={`mt-4 text-3xl font-bold tabular ${trade.pnl >= 0 ? "gain" : "loss"}`}
           >
-            {trade.pnl >= 0 ? "+" : ""}${trade.pnl}
+            {formatUsd(trade.pnl)}
           </div>
 
           <div className="mt-6 grid gap-x-8 sm:grid-cols-2">
