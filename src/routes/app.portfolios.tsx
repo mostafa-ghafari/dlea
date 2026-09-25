@@ -10,7 +10,6 @@ import {
   Link2,
   Trash2,
   Copy,
-  BarChart3,
   Zap,
 } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -443,23 +442,14 @@ function Portfolios() {
                       <Edit className="ml-2 h-4 w-4" />
                       ویرایش پرتفولیو
                     </DropdownMenuItem>
-                    <DropdownMenuItem
-                      onSelect={() =>
-                        toast.success(`اتصال ${p.name} به متاتریدر شروع شد`)
-                      }
-                    >
-                      <Link2 className="ml-2 h-4 w-4" />
-                      اتصال به متاتریدر
-                    </DropdownMenuItem>
-                    <DropdownMenuItem
-                      onSelect={() =>
-                        toast.info(
-                          `گزارش عملکرد ${p.name} در حال آماده‌سازی است`,
-                        )
-                      }
-                    >
-                      <BarChart3 className="ml-2 h-4 w-4" />
-                      گزارش عملکرد
+                    <DropdownMenuItem asChild>
+                      <Link
+                        to="/app/settings"
+                        search={{ tab: "mt", portfolio: String(p.id) }}
+                      >
+                        <Link2 className="ml-2 h-4 w-4" />
+                        اتصال به متاتریدر
+                      </Link>
                     </DropdownMenuItem>
                     <DropdownMenuItem onSelect={() => duplicate(p)}>
                       <Copy className="ml-2 h-4 w-4" />

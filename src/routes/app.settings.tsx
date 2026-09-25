@@ -41,6 +41,13 @@ import type { UserProfile } from "@/lib/api";
 
 export const Route = createFileRoute("/app/settings")({
   head: () => ({ meta: [{ title: "تنظیمات" }] }),
+  validateSearch: (
+    search: Record<string, unknown>,
+  ): { tab?: string; portfolio?: string } => ({
+    tab: typeof search.tab === "string" ? search.tab : undefined,
+    portfolio:
+      typeof search.portfolio === "string" ? search.portfolio : undefined,
+  }),
   component: SettingsPage,
 });
 
@@ -63,6 +70,7 @@ type MtStatus = {
 const FOLLOW_ACTIVE = "active";
 
 function SettingsPage() {
+  const { tab, portfolio } = Route.useSearch();
   const user = useCurrentUser();
   const subscription = useSubscription();
   const [profile, setProfile] = useState<UserProfile | null>(null);
@@ -124,7 +132,7 @@ function SettingsPage() {
 
   return (
     <AppShell title="تنظیمات" subtitle="مدیریت حساب، اشتراک و اتصالات">
-      <Tabs defaultValue="profile" dir="rtl">
+      <Tabs defaultValue={tab ?? "profile"} dir="rtl">
         <TabsList>
           <TabsTrigger value="profile">
             <User className="ml-1 h-4 w-4" />
@@ -307,7 +315,7 @@ function SettingsPage() {
         </TabsContent>
 
         <TabsContent value="mt" className="mt-6">
-          <MetaTraderTab />
+          <MetaTraderTab pinnedPortfolioId={portfolio} />
         </TabsContent>
 
         <TabsContent value="notifications" className="mt-6">
@@ -348,7 +356,11 @@ function SettingsPage() {
   );
 }
 
-function MetaTraderTab() {
+function MetaTraderTab({
+  pinnedPortfolioId,
+}: {
+  pinnedPortfolioId?: string;
+}) {
   const portfolios = usePortfolios();
   const [mt, setMt] = useState<MtStatus | null>(null);
   const [loading, setLoading] = useState(true);
@@ -358,7 +370,9 @@ function MetaTraderTab() {
   const [server, setServer] = useState("");
   const [account, setAccount] = useState("");
   // Follows the active portfolio unless a specific one is pinned.
-  const [portfolioId, setPortfolioId] = useState<string>(FOLLOW_ACTIVE);
+  const [portfolioId, setPortfolioId] = useState<string>(
+    pinnedPortfolioId ?? FOLLOW_ACTIVE,
+  );
   const [copied, setCopied] = useState("");
 
   useEffect(() => {
