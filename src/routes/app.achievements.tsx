@@ -24,17 +24,17 @@ import { Badge } from "@/components/ui/badge";
 import { useAchievements, type Achievement } from "@/lib/api";
 
 export const Route = createFileRoute("/app/achievements")({
-  head: () => ({ meta: [{ title: "نشان‌ها" }] }),
+  head: () => ({ meta: [{ title: "نشان ها" }] }),
   component: AchievementsPage,
 });
 
 /**
- * The badges section is authored without Persian half-spaces (ZWNJ) or
- * trailing periods, so normalize the catalog titles and whatever the API
- * returns before matching and rendering.
+ * The badges section spells compound words with a normal space instead of a
+ * Persian half-space (ZWNJ) and drops the trailing period, so normalize the
+ * catalog titles and whatever the API returns before matching and rendering.
  */
-const stripZwnj = (s: string) => s.replace(/\u200c/g, "");
-const cleanDesc = (s: string) => stripZwnj(s).replace(/\.+$/, "");
+const normalizeHalfSpaces = (s: string) => s.replace(/\u200c/g, " ");
+const cleanDesc = (s: string) => normalizeHalfSpaces(s).replace(/\.+$/, "");
 
 /** Each achievement gets its own icon + color scheme for visual variety */
 const achievementStyle: Record<
@@ -164,7 +164,7 @@ const achievementStyle: Record<
 /** Style lookup keyed by the normalized (half-space-free) title. */
 const styleByTitle = Object.fromEntries(
   Object.entries(achievementStyle).map(([title, style]) => [
-    stripZwnj(title),
+    normalizeHalfSpaces(title),
     style,
   ]),
 );
@@ -187,7 +187,7 @@ const FALLBACK_DESCS = [
   "حداکثر دراودان را نصف کردی",
   "کنترل احساسات درجه یک",
   "قهرمان ژورال نویسی",
-  "استراتژی سود ده اثبات‌ شده",
+  "استراتژی سود ده اثبات شده",
   "روانشناسی طلایی",
   "سفرت را شروع کردی",
   "عادت طلایی ساخته شد",
@@ -195,10 +195,10 @@ const FALLBACK_DESCS = [
   "دقت شکار درجه یک",
   "مدیر ریسک واقعی",
   "صبر یعنی همین",
-  "سرمایه اولیه‌ات را دو برابر کردی",
-  "فقط ست‌آپ‌های تمیز",
-  "همگام‌سازی خودکار فعال شد",
-  "۵۰ چک‌ لیست کامل قبل از ورود",
+  "سرمایه اولیه ات را دو برابر کردی",
+  "فقط ست آپ های تمیز",
+  "همگام سازی خودکار فعال شد",
+  "۵۰ چک لیست کامل قبل از ورود",
 ];
 
 /**
@@ -207,11 +207,11 @@ const FALLBACK_DESCS = [
  * otherwise) and any extra server-defined badge is appended.
  */
 function resolveBadgeList(apiBadges: Achievement[]): Achievement[] {
-  const known = Object.keys(achievementStyle).map(stripZwnj);
+  const known = Object.keys(achievementStyle).map(normalizeHalfSpaces);
   const byTitle = new Map(
     apiBadges.map((a) => [
-      stripZwnj(a.title),
-      { ...a, title: stripZwnj(a.title), desc: cleanDesc(a.desc) },
+      normalizeHalfSpaces(a.title),
+      { ...a, title: normalizeHalfSpaces(a.title), desc: cleanDesc(a.desc) },
     ]),
   );
   const merged = known.map((title, i) => {
@@ -227,7 +227,7 @@ function resolveBadgeList(apiBadges: Achievement[]): Achievement[] {
     );
   });
   for (const a of apiBadges) {
-    const title = stripZwnj(a.title);
+    const title = normalizeHalfSpaces(a.title);
     if (!known.includes(title)) {
       merged.push({ ...a, title, desc: cleanDesc(a.desc) });
     }
@@ -241,7 +241,7 @@ function AchievementsPage() {
 
   return (
     <AppShell
-      title="نشان‌ها"
+      title="نشان ها"
       subtitle={`${earned} از ${achievements.length} نشان کسب شده`}
     >
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">

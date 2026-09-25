@@ -1,4 +1,4 @@
-"""Normalize achievement text so the UI never shows ZWNJ or a trailing period."""
+"""Normalize achievement text so the UI shows a space instead of ZWNJ, no trailing period."""
 
 from django.core.management.base import BaseCommand
 
@@ -8,11 +8,11 @@ ZWNJ = "\u200c"
 
 
 def _clean(text: str) -> str:
-    return text.replace(ZWNJ, "").rstrip(".")
+    return text.replace(ZWNJ, " ").rstrip(".")
 
 
 class Command(BaseCommand):
-    help = "Remove ZWNJ half-spaces and trailing periods from achievement text"
+    help = "Replace ZWNJ half-spaces with a space and drop trailing periods"
 
     def handle(self, *args, **options):
         updated = 0

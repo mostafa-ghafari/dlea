@@ -291,8 +291,8 @@ def seed_goals():
 
 
 def _clean_achievement_text(text):
-    """Achievements render without ZWNJ half-spaces or a trailing period."""
-    return text.replace("\u200c", "").rstrip(".")
+    """Achievements render with a normal space instead of ZWNJ, no trailing period."""
+    return text.replace("\u200c", " ").rstrip(".")
 
 
 def seed_achievements():
