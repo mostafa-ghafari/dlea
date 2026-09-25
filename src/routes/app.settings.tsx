@@ -356,11 +356,7 @@ function SettingsPage() {
   );
 }
 
-function MetaTraderTab({
-  pinnedPortfolioId,
-}: {
-  pinnedPortfolioId?: string;
-}) {
+function MetaTraderTab({ pinnedPortfolioId }: { pinnedPortfolioId?: string }) {
   const portfolios = usePortfolios();
   const [mt, setMt] = useState<MtStatus | null>(null);
   const [loading, setLoading] = useState(true);
