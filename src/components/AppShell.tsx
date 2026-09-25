@@ -225,7 +225,7 @@ export function AppShell({
           </header>
 
           {/* Page header */}
-          <div className="overflow-hidden border-b border-border bg-background/40 px-4 py-6 md:px-8">
+          <div className="overflow-hidden border-b border-border bg-background/40 px-4 py-6 md:px-8 md:py-[13.5px]">
             <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-4 overflow-hidden sm:flex sm:items-center sm:justify-between">
               <div className="min-w-0">
                 <h1 className="truncate text-2xl font-bold tracking-tight">
