@@ -38,16 +38,22 @@ function Row({
   label,
   value,
   tone,
+  /** Numeric/currency values need LTR or bidi moves their sign around. */
+  numeric = false,
 }: {
   label: string;
   value: string;
   tone?: "gain" | "loss";
+  numeric?: boolean;
 }) {
   useSetTitle("معامله پیدا نشد", "شناسه معامله معتبر نیست");
   return (
     <div className="flex items-center justify-between border-b border-border/50 py-2.5 last:border-0">
       <span className="text-sm text-muted-foreground">{label}</span>
-      <span className={`text-sm font-medium tabular ${tone ?? ""}`}>
+      <span
+        dir={numeric ? "ltr" : undefined}
+        className={`text-sm font-medium tabular ${tone ?? ""}`}
+      >
         {value}
       </span>
     </div>
@@ -144,20 +150,21 @@ function TradeDetail() {
           </div>
 
           <div className="mt-6 grid gap-x-8 sm:grid-cols-2">
-            <Row label="قیمت ورود" value={String(trade.entry)} />
-            <Row label="قیمت خروج" value={String(trade.exit)} />
-            <Row label="Stop Loss" value={String(trade.sl)} />
-            <Row label="Take Profit" value={String(trade.tp)} />
-            <Row label="حجم (Lot)" value={String(trade.volume)} />
-            <Row label="R:R" value={String(trade.rr)} />
+            <Row label="قیمت ورود" value={String(trade.entry)} numeric />
+            <Row label="قیمت خروج" value={String(trade.exit)} numeric />
+            <Row label="Stop Loss" value={String(trade.sl)} numeric />
+            <Row label="Take Profit" value={String(trade.tp)} numeric />
+            <Row label="حجم (Lot)" value={String(trade.volume)} numeric />
+            <Row label="R:R" value={String(trade.rr)} numeric />
             <Row
               label="پیپ"
               value={String(trade.pips)}
               tone={trade.pips >= 0 ? "gain" : "loss"}
+              numeric
             />
-            <Row label="کمیسیون" value={usdPlain(trade.commission)} />
-            <Row label="سواپ" value={usdPlain(trade.swap)} />
-            <Row label="مالیات" value={usdPlain(trade.taxes)} />
+            <Row label="کمیسیون" value={usdPlain(trade.commission)} numeric />
+            <Row label="سواپ" value={usdPlain(trade.swap)} numeric />
+            <Row label="مالیات" value={usdPlain(trade.taxes)} numeric />
             <Row label="زمان باز شدن" value={trade.openTime} />
             <Row label="زمان بسته شدن" value={trade.closeTime} />
             <Row label="مدت" value={trade.duration} />
