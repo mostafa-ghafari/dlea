@@ -4,9 +4,10 @@ from django.db import connection
 from django.db.migrations.executor import MigrationExecutor
 from django.test import TransactionTestCase
 
-from api.models import Portfolio
+from api.models import ArchivedReport, CoachPeriod, Portfolio
 
 TARGET_0013 = ("api", "0013_coachinsights_portfolio_coachperiod_portfolio_and_more")
+TARGET_0020 = ("api", "0020_backfill_plan_features")
 
 
 class PortfolioActiveMigrationTests(TransactionTestCase):
@@ -54,3 +55,64 @@ class PortfolioActiveMigrationTests(TransactionTestCase):
         self.assertIs(state[(None, "demo-a")], True)
         self.assertIs(state[(None, "demo-b")], False)
         self.assertEqual(Portfolio.objects.filter(is_active=True).count(), 3)
+
+
+class CoachNumberMigrationTests(TransactionTestCase):
+    """Migration 0021 repairs reports saved with Persian digits and a `$` at the end."""
+
+    def test_0021_normalizes_stored_coach_numbers(self):
+        executor = MigrationExecutor(connection)
+        executor.migrate([TARGET_0020])
+
+        old_apps = executor.loader.project_state([TARGET_0020]).apps
+        OldPeriod = old_apps.get_model("api", "CoachPeriod")
+        OldArchive = old_apps.get_model("api", "ArchivedReport")
+
+        OldPeriod.objects.create(
+            id="AI-W-1405-7-1",
+            scope="weekly",
+            sort_key=1,
+            label="هفته ۱ مهر",
+            range="۱۴۰۵/۰۷/۰۲ تا ۱۴۰۵/۰۷/۰۳",
+            summary="خلاصه",
+            net="+۱۰$",
+            win_rate="۳۳.۳٪",
+            scores=[],
+            stats=[
+                {"label": "سود خالص", "value": "+۱۰$"},
+                {"label": "تعداد معامله", "value": "۹"},
+                {"label": "Win Rate", "value": "۳۳.۳٪"},
+            ],
+            weaknesses=[],
+            strengths=[],
+            highlights=[],
+            action_plan=[],
+        )
+        OldArchive.objects.create(
+            id="W-1405-07-1",
+            kind="weekly",
+            year="۱۴۰۵",
+            month="مهر",
+            title="گزارش هفته ۱ مهر",
+            range="۱۴۰۵/۰۷/۰۲ تا ۱۴۰۵/۰۷/۰۳",
+            net="+۹۹۰$",
+            win_rate="۴۰٪",
+            lines=[],
+            sort_key=1,
+        )
+
+        executor = MigrationExecutor(connection)
+        executor.migrate(executor.loader.graph.leaf_nodes())
+
+        period = CoachPeriod.objects.get(id="AI-W-1405-7-1")
+        self.assertEqual(period.net, "+$10")
+        self.assertEqual(period.win_rate, "33.3%")
+        self.assertEqual([s["value"] for s in period.stats], ["+$10", "9", "33.3%"])
+        # Jalali labels and ranges keep their Persian form.
+        self.assertEqual(period.label, "هفته ۱ مهر")
+        self.assertEqual(period.range, "۱۴۰۵/۰۷/۰۲ تا ۱۴۰۵/۰۷/۰۳")
+
+        report = ArchivedReport.objects.get(id="W-1405-07-1")
+        self.assertEqual(report.net, "+$990")
+        self.assertEqual(report.win_rate, "40%")
+        self.assertEqual(report.year, "۱۴۰۵")

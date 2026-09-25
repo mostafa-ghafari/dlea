@@ -51,10 +51,12 @@ export function englishDigits(input: string): string {
 }
 
 /**
- * Some stored reports were written with the currency sign on the far side
- * (`+1,326$`). The page shows money as sign-then-amount (`+$1,326`), so old
- * rows are normalised on the way out; anything else passes through untouched.
+ * One numeric cell from a coach report (`۳۳.۳٪`, `+۱,۳۲۶$`) → the form the page
+ * shows: Latin digits, `%` for `٪`, and money as sign-then-amount (`+$1,326`).
+ * It composes `englishDigits` because a stored row may still hold Persian
+ * digits, and the sign cannot be moved until they are Latin. Prose keeps using
+ * `englishDigits` on its own.
  */
-export function moneySignFirst(input: string): string {
-  return input.replace(/^([+-])([\d.,]+)\$$/, "$1$$$2");
+export function coachNumber(input: string): string {
+  return englishDigits(input).replace(/^([+-])([\d.,]+)\$$/, "$1$$$2");
 }
