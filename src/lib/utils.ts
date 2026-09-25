@@ -21,3 +21,16 @@ export function formatUsd(
 ): string {
   return `${value < 0 ? "-" : "+"}$${formatMagnitude(Math.abs(value))}`;
 }
+
+/**
+ * Build a CSV document from rows (RFC 4180 quoting) with a leading BOM so
+ * spreadsheet apps open UTF-8 (Persian) text correctly.
+ */
+export function toCsv(rows: (string | number)[][]): string {
+  const body = rows
+    .map((row) =>
+      row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(","),
+    )
+    .join("\r\n");
+  return "\uFEFF" + body;
+}

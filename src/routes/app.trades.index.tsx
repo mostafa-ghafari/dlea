@@ -42,7 +42,8 @@ import {
 import { useTrades, usePlanLimits } from "@/lib/api";
 import { useLocalState } from "@/lib/app-state";
 import { Num } from "@/components/Num";
-import { formatUsd } from "@/lib/utils";
+import { formatUsd, toCsv } from "@/lib/utils";
+import type { Trade } from "@/lib/types";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/app/trades/")({
@@ -139,6 +140,41 @@ function TradesPage() {
   }, [query, side, plan, result]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+
+  function exportTrades() {
+    if (!filtered.length) {
+      toast.error("معامله‌ای برای خروجی وجود ندارد");
+      return;
+    }
+    const cols = ALL_COL_KEYS.filter((k) => visibleColumns.includes(k));
+    const cell = (t: Trade, key: (typeof ALL_COL_KEYS)[number]): string => {
+      switch (key) {
+        case "side":
+          return t.side === "buy" ? "خرید" : "فروش";
+        case "followedPlan":
+          return t.followedPlan ? "بله" : "خیر";
+        case "screenshots":
+          return String(t.screenshots.length);
+        default:
+          return String(t[key] ?? "");
+      }
+    };
+    const rows: string[][] = [
+      cols.map((k) => COL_LABELS[k] ?? k),
+      ...filtered.map((t) => cols.map((k) => cell(t, k))),
+    ];
+    const blob = new Blob([toCsv(rows)], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `dlea-trades-${new Date().toISOString().slice(0, 10)}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+    toast.success(`${filtered.length} معامله در فایل CSV ذخیره شد`);
+  }
+
   const safePage = Math.min(page, totalPages);
   const paginated = filtered.slice(
     (safePage - 1) * PAGE_SIZE,
@@ -149,12 +185,10 @@ function TradesPage() {
     <AppShell
       title="معاملات"
       subtitle="لیست تمام معاملات ثبت‌شده"
+      showNewTradeAction={false}
       actions={
         <div className="flex gap-2">
-          <Button
-            variant="outline"
-            onClick={() => toast.success("خروجی CSV به‌زودی آماده می‌شود")}
-          >
+          <Button variant="outline" onClick={exportTrades}>
             <Download className="ml-1 h-4 w-4" />
             خروجی
           </Button>

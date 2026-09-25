@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { cn, formatUsd } from "@/lib/utils";
+import { cn, formatUsd, toCsv } from "@/lib/utils";
 
 describe("cn", () => {
   it("joins class names", () => {
@@ -32,5 +32,20 @@ describe("formatUsd", () => {
 
   it("formats the magnitude with a custom formatter", () => {
     expect(formatUsd(-12.4, (n) => n.toFixed(0))).toBe("-$12");
+  });
+});
+
+describe("toCsv", () => {
+  it("quotes every cell and starts with a BOM", () => {
+    expect(
+      toCsv([
+        ["نماد", "سود/زیان"],
+        ["EURUSD", -4.49],
+      ]),
+    ).toBe('\uFEFF"نماد","سود/زیان"\r\n"EURUSD","-4.49"');
+  });
+
+  it("escapes embedded double quotes", () => {
+    expect(toCsv([['a"b']])).toBe('\uFEFF"a""b"');
   });
 });

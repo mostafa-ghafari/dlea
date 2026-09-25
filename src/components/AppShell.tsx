@@ -37,11 +37,14 @@ export function AppShell({
   title,
   subtitle,
   actions,
+  showNewTradeAction = true,
 }: {
   children: ReactNode;
   title: string;
   subtitle?: string;
   actions?: ReactNode;
+  /** Pages that render their own guarded "new trade" action pass `false`. */
+  showNewTradeAction?: boolean;
 }) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [collapsed, setCollapsed] = useLocalState<boolean>(
@@ -205,7 +208,7 @@ export function AppShell({
                 <ThemeToggle />
                 <GuideTour path={location.pathname} locked={locked} />
                 <NotificationsMenu />
-                {roleLoaded && !isAdminUser && (
+                {roleLoaded && !isAdminUser && showNewTradeAction && (
                   <>
                     <Link to="/app/trades/new" className="hidden sm:block">
                       <Button
