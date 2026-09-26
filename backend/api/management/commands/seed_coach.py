@@ -1,6 +1,41 @@
 """AI coach seed data — insights payload, coach periods, and archived reports."""
 
+import re
+
+from api.gemini import PLAN_ADHERENCE_LABEL
 from api.models import ArchivedReport, CoachInsights, CoachPeriod
+
+FA_DIGITS = str.maketrans("۰۱۲۳۴۵۶۷۸۹", "0123456789")
+PERCENT = re.compile(r"^([0-9]+(?:\.[0-9]+)?)%$")
+
+
+def _plan_adherence(period):
+    """The «پایبندی به پلن» of the «آمار بازه» rows (`۷۵٪` → 75), else None."""
+    for item in period["stats"]:
+        if item["label"] != PLAN_ADHERENCE_LABEL:
+            continue
+        text = str(item["value"]).translate(FA_DIGITS).replace("٪", "%")
+        match = PERCENT.match(text)
+        if match:
+            return int(round(float(match.group(1))))
+    return None
+
+
+def _sync_plan_score(period):
+    """Make the seeded card agree with the seeded «آمار بازه» row.
+
+    The demo data obeys the app's one definition of «پایبندی به پلن»: the
+    score card shows the same number as the table row, so the stat is the
+    source. Report templates that carry no such row keep the score they had.
+    """
+    value = _plan_adherence(period)
+    if value is None:
+        return period
+    scores = [
+        {**item, "value": value} if item["label"] == PLAN_ADHERENCE_LABEL else item
+        for item in period["scores"]
+    ]
+    return {**period, "scores": scores}
 
 
 def _s(a, b, c, d):
@@ -479,6 +514,7 @@ def _seed_periods():
         },
     ]
     for i, p in enumerate(periods):
+        p = _sync_plan_score(p)
         CoachPeriod.objects.create(
             id=p["id"], scope=p["scope"], sort_key=p.get("sort_key", i), label=p["label"], range=p["range"],
             summary=p["summary"], net=p["net"], win_rate=p["win_rate"], scores=p["scores"], stats=p["stats"],

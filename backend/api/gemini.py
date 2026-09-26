@@ -251,15 +251,15 @@ def _risk_lines(trades, risk: dict[str, float] | None, balance: float) -> list[s
     def verdict(ok: bool) -> str:
         return "رعایت شده" if ok else "نقض شده"
 
-    days = _day_buckets(trades)
     net = sum(pnls)
-    worst_trade = max([-p for p in pnls if p < 0], default=0.0)
-    worst_day_loss = max(
-        [-sum(float(t.pnl) for t in rows) for _, rows in days], default=0.0
-    )
+    # One worst-case pass, shared with the adherence number.
+    metrics = _rule_metrics(trades, balance)
+    verdicts = rule_verdicts(trades, risk, balance)
+    worst_trade = metrics["worstTradeLoss"]
+    worst_day_loss = metrics["worstDayLoss"]
     period_loss = max(0.0, -net)
-    busiest_day = max(len(rows) for _, rows in days)
-    streak = _longest_loss_streak(pnls)
+    busiest_day = metrics["busiestDay"]
+    streak = metrics["longestStreak"]
 
     lines = [
         "## قوانین مدیریت ریسک خود کاربر (تنظیمات صفحهٔ «ژورنال و مدیریت ریسک») "
@@ -270,17 +270,16 @@ def _risk_lines(trades, risk: dict[str, float] | None, balance: float) -> list[s
         def pct(amount: float) -> str:
             return _en_num_str(round(amount / balance * 100, 2)) + "%"
 
-        daily_pct = worst_day_loss / balance * 100
         period_pct = period_loss / balance * 100
         lines.append(
             f"- {RISK_RULE_LABELS['maxRiskPct']}: سقف {_en_num_str(risk['maxRiskPct'])}% از موجودی "
             f"— بدترین معاملهٔ این بازه {pct(worst_trade)} "
-            f"({verdict(worst_trade / balance * 100 < risk['maxRiskPct'])})"
+            f"({verdict(verdicts['maxRiskPct'])})"
         )
         lines.append(
             f"- {RISK_RULE_LABELS['maxDailyLossPct']}: سقف {_en_num_str(risk['maxDailyLossPct'])}% "
             f"— بدترین روز این بازه {pct(worst_day_loss)} "
-            f"({verdict(daily_pct < risk['maxDailyLossPct'])})"
+            f"({verdict(verdicts['maxDailyLossPct'])})"
         )
         lines.append(
             f"- {RISK_RULE_LABELS['maxWeeklyLossPct']}: سقف {_en_num_str(risk['maxWeeklyLossPct'])}% "
@@ -296,12 +295,12 @@ def _risk_lines(trades, risk: dict[str, float] | None, balance: float) -> list[s
     lines.append(
         f"- {RISK_RULE_LABELS['maxDailyTrades']}: سقف {_en_num_str(risk['maxDailyTrades'])} "
         f"— پرترافیک‌ترین روز این بازه {_en_num_str(busiest_day)} معامله "
-        f"({verdict(busiest_day < risk['maxDailyTrades'])})"
+        f"({verdict(verdicts['maxDailyTrades'])})"
     )
     lines.append(
         f"- {RISK_RULE_LABELS['maxConsecutiveLosses']}: سقف "
         f"{_en_num_str(risk['maxConsecutiveLosses'])} — بلندترین زنجیرهٔ ضرر این بازه "
-        f"{_en_num_str(streak)} ({verdict(streak < risk['maxConsecutiveLosses'])})"
+        f"{_en_num_str(streak)} ({verdict(verdicts['maxConsecutiveLosses'])})"
     )
     rrs = [float(t.rr or 0) for t in ordered]
     below = [rr for rr in rrs if rr < risk["minRR"]]
@@ -350,7 +349,9 @@ def _journal_lines(trades, journal_entries) -> list[str]:
         "## ژورنال این بازه",
         f"- {_en_num_str(len(entries))} یادداشت ژورنال | "
         f"{_en_num_str(len(entries) - len(followed))} مورد خارج از پلن",
-        f"- پایبندی به پلن بر اساس ژورنال: "
+        # A different question from the app's «پایبندی به پلن» number (that one
+        # is computed from the trades) — label it as the self-report it is.
+        f"- یادداشت‌های طبق پلن در ژورنال (خودگزارشی؛ عدد رسمی پایبندی نیست): "
         f"{_en_num_str(round(len(followed) / len(entries) * 100, 1))}%",
     ]
     mistakes = _unique_texts((e.mistakes for e in entries), limit=6)
@@ -487,7 +488,77 @@ def period_for_scope(scope: str, trades) -> dict[str, Any] | None:
 # Real statistics
 # ---------------------------------------------------------------------------
 
-def compute_stats(trades) -> dict[str, Any]:
+# «پایبندی به پلن» — the app's one definition of this number.
+#
+# Adherence is the weakest link, never a self-reported tick on its own:
+#
+#     adherence = min(share of trades taken «طبق پلن»,
+#                     share of the trader's own daily rules that held)
+#
+# A tick alone can no longer claim 100% while a cap was broken, and a clean
+# rule sheet cannot hide trades taken off-plan. A rule that cannot be measured
+# (a percentage cap with no known balance) drops out of the denominator
+# instead of counting as respected. The browser runs the same formula for
+# today's trades — `planAdherencePct` in `src/lib/risk-metrics.ts` — so the
+# coach card, the «آمار بازه» row and the risk page agree by construction.
+PLAN_ADHERENCE_LABEL = "پایبندی به پلن"
+
+
+def _rule_metrics(trades, balance: float) -> dict[str, float]:
+    """Worst case of the period for the four daily rules of the risk page."""
+    pnls = [float(t.pnl) for t in trades]
+    days = _day_buckets(trades)
+    return {
+        "worstTradeLoss": max([-p for p in pnls if p < 0], default=0.0),
+        "worstDayLoss": max(
+            [-sum(float(t.pnl) for t in rows) for _, rows in days], default=0.0
+        ),
+        "busiestDay": float(max(len(rows) for _, rows in days)),
+        "longestStreak": float(_longest_loss_streak(pnls)),
+    }
+
+
+def rule_verdicts(trades, risk: dict[str, float] | None, balance: float) -> dict[str, bool]:
+    """`{rule: respected}` for every measurable daily rule, keyed like `risk`.
+
+    These are the four rules the risk page draws as bars. Both the prompt's
+    «قوانین مدیریت ریسک» section and `plan_adherence` read them from here, so
+    the prose and the percentage can never measure the period differently.
+    """
+    if not risk or not trades:
+        return {}
+    metrics = _rule_metrics(trades, balance)
+    verdicts: dict[str, bool] = {}
+    if balance > 0:
+        verdicts["maxRiskPct"] = metrics["worstTradeLoss"] / balance * 100 < risk["maxRiskPct"]
+        verdicts["maxDailyLossPct"] = (
+            metrics["worstDayLoss"] / balance * 100 < risk["maxDailyLossPct"]
+        )
+    verdicts["maxDailyTrades"] = metrics["busiestDay"] < risk["maxDailyTrades"]
+    verdicts["maxConsecutiveLosses"] = metrics["longestStreak"] < risk["maxConsecutiveLosses"]
+    return verdicts
+
+
+def plan_adherence(trades, risk: dict[str, float] | None = None, balance: float = 0.0) -> int:
+    """This app's «پایبندی به پلن» number, 0–100 (see the note above)."""
+    count = len(trades)
+    if not count:
+        return 0
+    on_plan = sum(1 for t in trades if t.followed_plan) / count
+    verdicts = rule_verdicts(trades, risk, balance)
+    rules = sum(verdicts.values()) / len(verdicts) if verdicts else 1.0
+    return int(round(min(on_plan, rules) * 100))
+
+
+def compute_stats(
+    trades, risk: dict[str, float] | None = None, balance: float = 0.0
+) -> dict[str, Any]:
+    """Real numbers for a period.
+
+    `risk` and `balance` feed «پایبندی به پلن»: the trader's own caps decide
+    that number as much as the trades do, so a caller that knows them passes
+    them along (see `plan_adherence`).
+    """
     count = len(trades)
     pnls = [float(t.pnl) for t in trades]
     net = sum(pnls)
@@ -497,17 +568,18 @@ def compute_stats(trades) -> dict[str, Any]:
     profit_factor = (
         round(sum(winners) / abs(sum(losers)), 2) if losers and sum(losers) != 0 else (round(sum(winners), 2) if winners else 0.0)
     )
-    followed = [t for t in trades if t.followed_plan]
     avg_rr = round(sum(float(t.rr or 0) for t in trades) / count, 2) if count else 0.0
 
     # Simple equity curve from closes (sorted oldest → newest) for max drawdown.
+    # `equity`, not `balance`: the account balance is a parameter of this
+    # function and the adherence number below needs it intact.
     ordered = sorted(trades, key=lambda t: t.close_time)
-    balance, peak, max_dd = 0.0, 0.0, 0.0
+    equity, peak, max_dd = 0.0, 0.0, 0.0
     for t in ordered:
-        balance += float(t.pnl)
-        peak = max(peak, balance)
+        equity += float(t.pnl)
+        peak = max(peak, equity)
         if peak:
-            max_dd = max(max_dd, (peak - balance) / peak * 100)
+            max_dd = max(max_dd, (peak - equity) / peak * 100)
     max_dd = round(max_dd, 1)
 
     by_symbol: dict[str, float] = {}
@@ -531,7 +603,7 @@ def compute_stats(trades) -> dict[str, Any]:
         "maxDrawdown": max_dd,
         "bestSymbol": best_sym,
         "worstSymbol": worst_sym,
-        "planAdherence": round(len(followed) / count * 100, 1) if count else 0.0,
+        "planAdherence": plan_adherence(trades, risk, balance),
         "topEmotion": top_emotion,
     }
 
@@ -565,7 +637,7 @@ Profit Factor: {stats['profitFactor']}
 میانگین R:R: {stats['avgRr']}
 حداکثر دراودان: {stats['maxDrawdown']}%
 بهترین نماد: {stats['bestSymbol']} | بدترین نماد: {stats['worstSymbol']}
-پایبندی به پلن: {stats['planAdherence']}%
+پایبندی به پلن: {stats['planAdherence']}% (عدد رسمی اپ — تیک «طبق پلن» معاملات و رعایت قوانین ریسک را با هم می‌سنجد؛ همین عدد باید در امتیاز «پایبندی به پلن» بیاید و تغییرش نده)
 احساس غالب: {stats['topEmotion']}
 
 معاملات این بازه:
@@ -578,7 +650,7 @@ Profit Factor: {stats['profitFactor']}
     {{"label": "نظم معاملاتی", "value": عدد 0 تا 100}},
     {{"label": "مدیریت سرمایه", "value": عدد 0 تا 100}},
     {{"label": "روانشناسی", "value": عدد 0 تا 100}},
-    {{"label": "پایبندی به پلن", "value": عدد 0 تا 100}}
+    {{"label": "پایبندی به پلن", "value": {stats['planAdherence']}}}
   ],
   "weaknesses": [
     {{"title": "عنوان ضعف", "impact": "اثر آن روی حساب", "severity": "بحرانی یا مهم یا قابل بهبود", "solution": "راهکار عملی", "steps": ["قدم 1", "قدم 2", "قدم 3"]}}
@@ -595,7 +667,8 @@ Profit Factor: {stats['profitFactor']}
 - ۲ تا ۳ ضعف با شدت‌بندی درست (بحرانی = ضرر مالی واقعی یا تکرارشونده، مهم = تأثیر محسوس، قابل بهبود = عادت‌های جزئی).
 - هر ضعف دقیقاً ۳ قدم عملی و مشخص داشته باشد.
 - هیچ عددی را جعل نکن؛ فقط از داده‌های همین بازه استفاده کن. همه اعداد را با ارقام انگلیسی (لاتین) بنویس، نه فارسی (مثلاً «+588 دلار»).
-- اگر بخش «زمینه» (قوانین ریسک / ژورنال / گزارش‌های گذشته) آمده، حتماً به آن استناد کن: هر قانون ریسکی که «نقض شده» باید در weaknesses با راهکار عملی بیاید، اشتباهات ژورنال را ریشه‌یابی کن، و اگر ضعفی از گزارش قبلی تکرار شده صریح بگو."""
+- اگر بخش «زمینه» (قوانین ریسک / ژورنال / گزارش‌های گذشته) آمده، حتماً به آن استناد کن: هر قانون ریسکی که «نقض شده» باید در weaknesses با راهکار عملی بیاید، اشتباهات ژورنال را ریشه‌یابی کن، و اگر ضعفی از گزارش قبلی تکرار شده صریح بگو.
+- امتیاز «پایبندی به پلن» را خودت حدس نزن؛ همان عدد پایبندی به پلن بالاست."""
 
 
 def _is_html(body: str) -> bool:
@@ -761,7 +834,7 @@ def normalize_report(raw: dict[str, Any], scope: str, period: dict[str, Any], st
     """Coerce Gemini's JSON into the CoachPeriod contract, keeping numbers real."""
 
     def clamp_scores(scores: Any) -> list[dict[str, Any]]:
-        labels = ["نظم معاملاتی", "مدیریت سرمایه", "روانشناسی", "پایبندی به پلن"]
+        labels = ["نظم معاملاتی", "مدیریت سرمایه", "روانشناسی", PLAN_ADHERENCE_LABEL]
         out: list[dict[str, Any]] = []
         for item in _as_list(scores)[:4]:
             if not isinstance(item, dict):
@@ -773,6 +846,19 @@ def normalize_report(raw: dict[str, Any], scope: str, period: dict[str, Any], st
             out.append({"label": str(item.get("label") or labels[len(out)]), "value": value})
         while len(out) < 4:
             out.append({"label": labels[len(out)], "value": 50})
+        # «پایبندی به پلن» is not the model's to estimate: the card shows the
+        # same computed number as the «آمار بازه» row, so the two can never
+        # contradict each other. Matched by label, with the prompt's fixed
+        # order as the fallback slot.
+        idx = next(
+            (
+                i
+                for i, item in enumerate(out)
+                if str(item["label"]).strip() == PLAN_ADHERENCE_LABEL
+            ),
+            len(out) - 1,
+        )
+        out[idx] = {"label": PLAN_ADHERENCE_LABEL, "value": int(stats["planAdherence"])}
         return out
 
     def clean_weaknesses(items: Any) -> list[dict[str, Any]]:
@@ -828,7 +914,7 @@ def normalize_report(raw: dict[str, Any], scope: str, period: dict[str, Any], st
     # Appended last on purpose: the caller reads `net`/`winRate` by position
     # (stats[1], stats[2]), so a new row must never shift those.
     stats_list += [
-        {"label": "پایبندی به پلن", "value": f"{stats['planAdherence']:g}%"},
+        {"label": PLAN_ADHERENCE_LABEL, "value": f"{stats['planAdherence']}%"},
         {"label": "میانگین R:R", "value": f"{stats['avgRr']:g}"},
     ]
 
@@ -875,10 +961,11 @@ def generate_coach_report(
     period = period_for_scope(scope, trades)
     if not period:
         raise LookupError(f"no trades in scope {scope}")
-    stats = compute_stats(period["trades"])
-
     if balance is None:
         balance = portfolio_balance(period["trades"])
+    # Balance and caps both feed «پایبندی به پلن» and the risk section, so they
+    # have to be resolved before the numbers are computed.
+    stats = compute_stats(period["trades"], risk, balance)
     context = build_context(
         period["trades"],
         risk=risk,

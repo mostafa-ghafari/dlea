@@ -8,6 +8,7 @@ from api.models import ArchivedReport, CoachPeriod, Portfolio
 
 TARGET_0013 = ("api", "0013_coachinsights_portfolio_coachperiod_portfolio_and_more")
 TARGET_0020 = ("api", "0020_backfill_plan_features")
+TARGET_0021 = ("api", "0021_normalize_coach_numbers")
 
 
 class PortfolioActiveMigrationTests(TransactionTestCase):
@@ -116,3 +117,71 @@ class CoachNumberMigrationTests(TransactionTestCase):
         self.assertEqual(report.net, "+$990")
         self.assertEqual(report.win_rate, "40%")
         self.assertEqual(report.year, "۱۴۰۵")
+
+
+class CoachPlanScoreMigrationTests(TransactionTestCase):
+    """Migration 0022 syncs the score card with the «آمار بازه» row.
+
+    Those reports were generated while the card was still the model's own
+    estimate — 35/100 next to a computed 100% — so the stored card is brought
+    in line with the stored percentage.
+    """
+
+    def _old_period(self, OldPeriod, **extra):
+        defaults = {
+            "scope": "monthly",
+            "sort_key": 1,
+            "label": "مهر ۱۴۰۵",
+            "range": "۱۴۰۵/۰۶/۰۱ تا ۱۴۰۵/۰۶/۳۰",
+            "summary": "خلاصه",
+            "net": "+$10",
+            "win_rate": "30%",
+            "scores": [],
+            "stats": [],
+            "weaknesses": [],
+            "strengths": [],
+            "highlights": [],
+            "action_plan": [],
+        }
+        defaults.update(extra)
+        return OldPeriod.objects.create(**defaults)
+
+    def test_0022_makes_the_stored_plan_numbers_agree(self):
+        executor = MigrationExecutor(connection)
+        executor.migrate([TARGET_0021])
+
+        old_apps = executor.loader.project_state([TARGET_0021]).apps
+        OldPeriod = old_apps.get_model("api", "CoachPeriod")
+
+        self._old_period(
+            OldPeriod,
+            id="AI-M-1405-06",
+            scores=[
+                {"label": "نظم معاملاتی", "value": 30},
+                {"label": "پایبندی به پلن", "value": 35},
+            ],
+            stats=[
+                {"label": "سود خالص", "value": "+$8"},
+                {"label": "پایبندی به پلن", "value": "100%"},
+            ],
+        )
+        # Persian digits are what the oldest rows carry; a report without the
+        # card has no second number to disagree with.
+        self._old_period(
+            OldPeriod,
+            id="AI-M-1405-05",
+            scores=[{"label": "نظم معاملاتی", "value": 30}],
+            stats=[{"label": "پایبندی به پلن", "value": "۷۵٪"}],
+        )
+
+        executor = MigrationExecutor(connection)
+        executor.migrate(executor.loader.graph.leaf_nodes())
+
+        period = CoachPeriod.objects.get(id="AI-M-1405-06")
+        self.assertEqual([s["value"] for s in period.scores], [30, 100])
+        self.assertEqual(period.scores[0]["label"], "نظم معاملاتی")
+        # The «آمار بازه» row is the source and stays as it was.
+        self.assertEqual([s["value"] for s in period.stats], ["+$8", "100%"])
+
+        untouched = CoachPeriod.objects.get(id="AI-M-1405-05")
+        self.assertEqual([s["value"] for s in untouched.scores], [30])

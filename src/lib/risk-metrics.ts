@@ -64,6 +64,7 @@ export type TodayAdherence = {
   hasTrades: boolean;
   tradeCount: number;
   netPnl: number;
+  /** Today's «پایبندی به پلن» — see `planAdherencePct` for the definition. */
   planAdherencePct: number;
   /** Percent of account lost/risked today, for the empty-state copy. */
   rules: RiskRuleState[];
@@ -78,6 +79,35 @@ function faNum(n: number): string {
 
 function usagePercent(used: number, cap: number): number {
   return cap > 0 ? (used / cap) * 100 : 0;
+}
+
+/**
+ * «پایبندی به پلن» — the one definition this app uses.
+ *
+ * The weakest link wins: adherence is the lower of
+ *
+ * - the share of trades taken «طبق پلن», and
+ * - the share of the trader's own risk rules that held.
+ *
+ * So a self-reported tick can never claim 100% while a cap was broken, and a
+ * clean rule sheet cannot hide trades taken off-plan. A rule that cannot be
+ * measured is left out of the denominator instead of counting as respected.
+ *
+ * The backend runs the same formula over a whole period (`plan_adherence` in
+ * `backend/api/gemini.py`), so the AI coach's score card, the coach's
+ * «آمار بازه» row and the risk page can never report three different numbers.
+ */
+export function planAdherencePct(
+  onPlanTrades: number,
+  tradeCount: number,
+  ruleChecks: boolean[],
+): number {
+  if (tradeCount <= 0) return 0;
+  const onPlan = onPlanTrades / tradeCount;
+  const rules = ruleChecks.length
+    ? ruleChecks.filter(Boolean).length / ruleChecks.length
+    : 1;
+  return Math.round(Math.min(onPlan, rules) * 100);
 }
 
 /**
@@ -174,23 +204,24 @@ export function computeTodayAdherence(
     },
   ];
 
-  // «پایبندی به پلن» must reflect the weakest area of the day: a broken risk
-  // rule (or trades taken off-plan) has to pull adherence below 100%, otherwise
-  // the headline number contradicts the rule list rendered right under it.
-  const respectedRules = rules.filter((r) => r.safe).length;
-  const planAdherencePct = hasTrades
-    ? Math.round(
-        Math.min(planFollowed / tradeCount, respectedRules / rules.length) *
-          100,
-      )
-    : 0;
+  // Only the rules this day can actually be judged against count: with no
+  // balance the two percentage caps are unmeasurable, so they leave the
+  // denominator instead of passing as respected.
+  const measurableRules = rules.filter(
+    (r) => balanceOk || (r.key !== "maxRiskPerTrade" && r.key !== "dailyLoss"),
+  );
+  const adherencePct = planAdherencePct(
+    planFollowed,
+    tradeCount,
+    measurableRules.map((r) => r.safe),
+  );
 
   return {
     todayLabel,
     hasTrades,
     tradeCount,
     netPnl,
-    planAdherencePct,
+    planAdherencePct: adherencePct,
     rules,
   };
 }

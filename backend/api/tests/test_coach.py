@@ -335,6 +335,119 @@ class RiskRuleTests(BaseTestCase):
         self.assertIn("بلندترین زنجیرهٔ ضرر این بازه 3 (نقض شده)", joined)
 
 
+class PlanAdherenceTests(BaseTestCase):
+    """«پایبندی به پلن» has ONE definition, and it is not a checkbox.
+
+    The number is the weakest link between the trades' «طبق پلن» tick and the
+    trader's own daily risk rules — the same formula the browser runs for
+    today's trades (`planAdherencePct` in `src/lib/risk-metrics.ts`).
+    """
+
+    LABEL = gemini.PLAN_ADHERENCE_LABEL
+    CAPS = dict(gemini.DEFAULT_RISK_RULES)
+
+    @staticmethod
+    def _trade(pnl, followed_plan=True, hour=10, day=0, rr=2.0):
+        return SimpleNamespace(
+            pnl=pnl,
+            rr=rr,
+            volume=0.1,
+            side="buy",
+            symbol="XAUUSD",
+            emotion="",
+            followed_plan=followed_plan,
+            close_time=datetime(2026, 9, 1, hour, tzinfo=timezone.utc)
+            + timedelta(days=day),
+        )
+
+    def test_off_plan_trades_cap_the_number(self):
+        trades = [
+            self._trade(10),
+            self._trade(10, followed_plan=False),
+            self._trade(10),
+            self._trade(10, followed_plan=False),
+        ]
+        self.assertEqual(gemini.plan_adherence(trades, self.CAPS, 1000), 50)
+
+    def test_a_broken_rule_caps_the_number(self):
+        # Every trade is «طبق پلن», but a 20$ loss is 2% of a 1000$ account —
+        # twice the 1% per-trade cap, so 3 of the 4 rules held.
+        trades = [self._trade(-20), self._trade(10)]
+        self.assertEqual(gemini.plan_adherence(trades, self.CAPS, 1000), 75)
+
+    def test_unmeasurable_rules_leave_the_denominator(self):
+        # No balance: the two percentage caps cannot be judged, so only the
+        # trade count (6 against a cap of 5) and the streak are counted — 1 of 2.
+        trades = [self._trade(10, hour=10 + i) for i in range(6)]
+        self.assertEqual(gemini.plan_adherence(trades, self.CAPS, 0), 50)
+
+    def test_without_caps_only_the_tick_ratio_counts(self):
+        trades = [self._trade(10), self._trade(10, followed_plan=False)]
+        self.assertEqual(gemini.plan_adherence(trades, None, 0), 50)
+
+    def test_a_period_without_trades_is_zero(self):
+        self.assertEqual(gemini.plan_adherence([], self.CAPS, 1000), 0)
+
+    def test_the_prompt_hands_the_model_the_fixed_number(self):
+        trades = [self._trade(-20), self._trade(10)]
+        stats = gemini.compute_stats(trades, self.CAPS, 1000)
+        prompt = gemini.build_prompt(
+            "weekly", {"label": "هفته", "range": "x"}, stats, trades
+        )
+        self.assertIn("عدد رسمی اپ", prompt)
+        self.assertIn('"value": 75', prompt)
+
+    def test_the_score_card_shows_the_computed_number_not_the_models_guess(self):
+        report = gemini.normalize_report(
+            {"scores": [{"label": self.LABEL, "value": 12}]},
+            "weekly",
+            {"label": "هفته", "range": "x"},
+            {
+                "count": 2,
+                "net": -10.0,
+                "winRate": 50.0,
+                "profitFactor": 0.5,
+                "avgRr": 2.0,
+                "maxDrawdown": 1.0,
+                "bestSymbol": "XAUUSD",
+                "worstSymbol": "XAUUSD",
+                "planAdherence": 75,
+            },
+        )
+        card = next(s for s in report["scores"] if s["label"] == self.LABEL)
+        row = next(s for s in report["stats"] if s["label"] == self.LABEL)
+        self.assertEqual(card["value"], 75)
+        self.assertEqual(row["value"], "75%")
+
+    def test_a_generated_report_never_shows_two_plan_numbers(self):
+        user = self.auth(self.make_user(username="adherent"))
+        portfolio = self.make_portfolio(user=user, initial=1000)
+        self.make_trade(portfolio, pnl=-20, followed_plan=True)
+        self.make_trade(portfolio, pnl=10, followed_plan=True)
+        answer = json.dumps(
+            {
+                "summary": "خلاصه",
+                "scores": [{"label": self.LABEL, "value": 3}],
+                "weaknesses": [],
+                "strengths": [],
+                "highlights": [],
+                "actionPlan": [],
+            }
+        )
+        with patch("api.gemini.call_gemini", return_value=answer):
+            report = gemini.generate_coach_report(
+                "weekly",
+                "gemini-2.0-flash",
+                list(Trade.objects.all()),
+                risk=self.CAPS,
+                balance=1000,
+            )
+        card = next(s for s in report["scores"] if s["label"] == self.LABEL)
+        row = next(s for s in report["stats"] if s["label"] == self.LABEL)
+        self.assertEqual(card["value"], 75)
+        self.assertEqual(row["value"], "75%")
+
+
 class CoachPeriodTests(BaseTestCase):
     def setUp(self):
         self.user = self.auth(self.make_user(username="trader"))

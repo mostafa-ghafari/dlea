@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { computeTodayAdherence, DEFAULT_RISK_CAPS } from "@/lib/risk-metrics";
+import {
+  computeTodayAdherence,
+  planAdherencePct,
+  DEFAULT_RISK_CAPS,
+} from "@/lib/risk-metrics";
 import {
   formatJalaliDate,
   gregorianDateToJalali,
@@ -42,6 +46,26 @@ function mkTrade(over: Partial<Trade>): Trade {
   };
   return { ...base, ...over };
 }
+
+describe("planAdherencePct", () => {
+  it("is the lowest of the on-plan share and the respected-rule share", () => {
+    expect(planAdherencePct(4, 4, [true, true, true, true])).toBe(100);
+    expect(planAdherencePct(2, 4, [true, true, true, true])).toBe(50);
+    expect(planAdherencePct(4, 4, [true, true, true, false])).toBe(75);
+    expect(planAdherencePct(3, 4, [true, true, false, false])).toBe(50);
+  });
+
+  it("measures only the rules it was given", () => {
+    // Unmeasurable rules are absent, not passed: 1 of 2 held.
+    expect(planAdherencePct(2, 2, [true, false])).toBe(50);
+    // No rule to judge at all → the tick ratio stands alone.
+    expect(planAdherencePct(2, 4, [])).toBe(50);
+  });
+
+  it("is neutral on a day without trades", () => {
+    expect(planAdherencePct(0, 0, [true, true, true, true])).toBe(0);
+  });
+});
 
 describe("computeTodayAdherence", () => {
   const label = todayLabel();
@@ -134,6 +158,18 @@ describe("computeTodayAdherence", () => {
     ];
     const r = computeTodayAdherence(trades, DEFAULT_RISK_CAPS, 1000);
     expect(r.planAdherencePct).toBe(75);
+  });
+
+  it("drops the percentage rules from the denominator without a balance", () => {
+    // No balance, so the per-trade and daily-loss caps cannot be judged. Only
+    // the trade count (6 against a cap of 5) and the streak are measurable —
+    // 1 of 2 held, and the tick alone must not claim 100%.
+    const trades = Array.from({ length: 6 }, (_, i) =>
+      mkTrade({ id: `t${i}`, pnl: 10, closeTime: `${label} 1${i}:00` }),
+    );
+    const r = computeTodayAdherence(trades, DEFAULT_RISK_CAPS, 0);
+    expect(r.rules).toHaveLength(4); // all four stay visible on the page
+    expect(r.planAdherencePct).toBe(50);
   });
 
   it("orders today's trades by close time before measuring the streak", () => {
