@@ -5,12 +5,20 @@ import json
 import os
 import time
 import urllib.error
+from datetime import datetime, timedelta, timezone
+from types import SimpleNamespace
 from unittest.mock import patch
 
 from rest_framework import status
 
 from api import gemini
-from api.models import AiApiCall, ArchivedReport, CoachInsights, CoachPeriod
+from api.models import (
+    AiApiCall,
+    ArchivedReport,
+    CoachInsights,
+    CoachPeriod,
+    Trade,
+)
 from api.tests.common import BaseTestCase
 
 REPORT = {
@@ -123,6 +131,208 @@ class CoachGenerateTests(BaseTestCase):
         ):
             r = self.client.post("/api/coach/generate/", {"scope": "weekly"}, format="json")
         self.assertEqual(r.status_code, 502)
+
+
+class CoachContextTests(BaseTestCase):
+    """The prompt must carry the trader's own risk rules, journal and history.
+
+    These are the parts of the request the numbers cannot express: the caps the
+    coach is judged against, what the trader wrote about the period, and what
+    the previous report already told them.
+    """
+
+    GEMINI_JSON = json.dumps(
+        {
+            "summary": "خلاصه",
+            "scores": [],
+            "weaknesses": [],
+            "strengths": [],
+            "highlights": [],
+            "actionPlan": [],
+        }
+    )
+
+    def setUp(self):
+        self.user = self.auth(self.make_user(username="trader"))
+        self.portfolio = self.make_portfolio(user=self.user, initial=1000)
+        # Two losing trades on one day: worst loss 50$ = 5% of the 1000$ balance,
+        # which the 1% default per-trade cap cannot accept.
+        self.make_trade(self.portfolio, pnl=-50, rr=1.0)
+        self.make_trade(self.portfolio, pnl=-30, rr=1.0)
+
+    def _generate(self, payload=None):
+        """POST /coach/generate/ with the real prompt assembly, capturing the prompt."""
+        with patch("api.views.gemini.get_api_key", return_value="k"), patch(
+            "api.gemini.call_gemini", return_value=self.GEMINI_JSON
+        ) as call:
+            response = self.client.post(
+                "/api/coach/generate/",
+                {"scope": "weekly", "portfolio": self.portfolio.pk, **(payload or {})},
+                format="json",
+            )
+        return response, (call.call_args[0][0] if call.called else "")
+
+    def test_risk_rules_from_the_request_reach_the_prompt(self):
+        response, prompt = self._generate({"risk": {"maxDailyTrades": 1}})
+        self.assertEqual(response.status_code, 201)
+        self.assertIn("قوانین مدیریت ریسک", prompt)
+        self.assertIn("حداکثر تعداد معاملات روزانه: سقف 1", prompt)
+        self.assertIn("نقض شده", prompt)
+        # 50$ of a 1000$ account against the default 1% per-trade cap.
+        self.assertIn("بدترین معاملهٔ این بازه 5%", prompt)
+
+    def test_without_a_risk_payload_the_section_is_skipped(self):
+        response, prompt = self._generate()
+        self.assertEqual(response.status_code, 201)
+        self.assertNotIn("قوانین مدیریت ریسک", prompt)
+
+    def test_journal_notes_of_the_period_are_summarised(self):
+        self.make_journal_entry(
+            user=self.user,
+            title="معامله عجولانه",
+            mistakes="ورود بی‌صبرانه",
+            lesson="منتظر تأییدیه بمان",
+            plan=False,
+        )
+        _, prompt = self._generate()
+        self.assertIn("ژورنال این بازه", prompt)
+        self.assertIn("ورود بی‌صبرانه", prompt)
+        self.assertIn("منتظر تأییدیه بمان", prompt)
+        self.assertIn("خارج از پلن", prompt)
+
+    def test_previous_report_is_fed_back_as_context(self):
+        CoachPeriod.objects.create(
+            id="ai-old-week",
+            user=self.user,
+            portfolio=self.portfolio,
+            scope="weekly",
+            label="هفته پیش",
+            range="۱ تا ۷",
+            summary="خلاصهٔ قبلی",
+            net="+10",
+            win_rate="50%",
+            scores=[],
+            stats=[],
+            weaknesses=[{"title": "ورود زودهنگام", "severity": "مهم"}],
+            strengths=[],
+            highlights=[],
+            action_plan=["منتظر کندل بسته بمان"],
+            generated=True,
+            sort_key=10,
+        )
+        _, prompt = self._generate()
+        self.assertIn("گزارش‌های گذشته", prompt)
+        self.assertIn("ورود زودهنگام", prompt)
+        self.assertIn("منتظر کندل بسته بمان", prompt)
+
+    def test_the_report_being_regenerated_is_not_its_own_context(self):
+        key = gemini.period_key("weekly", list(Trade.objects.all()))
+        CoachPeriod.objects.create(
+            id=f"{key}-u{self.user.pk}-p{self.portfolio.pk}",
+            user=self.user,
+            portfolio=self.portfolio,
+            scope="weekly",
+            label="برچسب-تکراری",
+            range="x",
+            summary="s",
+            net="+1",
+            win_rate="50%",
+            scores=[],
+            stats=[],
+            weaknesses=[],
+            strengths=[],
+            highlights=[],
+            action_plan=[],
+            generated=True,
+            sort_key=99,
+        )
+        _, prompt = self._generate()
+        # The section is skipped entirely: the coach must not be told what it
+        # said about this very bucket a moment ago.
+        self.assertNotIn("## گزارش‌های گذشته", prompt)
+        self.assertNotIn("برچسب-تکراری", prompt)
+
+    def test_another_accounts_report_stays_out_of_the_context(self):
+        other = self.make_portfolio(user=self.make_user(username="other"), name="دیگری")
+        CoachPeriod.objects.create(
+            id="ai-other",
+            user=other.user,
+            portfolio=other,
+            scope="weekly",
+            label="حساب دیگران",
+            range="x",
+            summary="s",
+            net="+1",
+            win_rate="50%",
+            scores=[],
+            stats=[],
+            weaknesses=[],
+            strengths=[],
+            highlights=[],
+            action_plan=[],
+            generated=True,
+            sort_key=99,
+        )
+        _, prompt = self._generate()
+        self.assertNotIn("حساب دیگران", prompt)
+
+
+class RiskRuleTests(BaseTestCase):
+    """Risk caps arrive with the request; nothing about them may be guessed."""
+
+    @staticmethod
+    def _trade(pnl, rr=2.0, hour=10, day=0):
+        return SimpleNamespace(
+            pnl=pnl,
+            rr=rr,
+            close_time=datetime(2026, 9, 1, hour, tzinfo=timezone.utc)
+            + timedelta(days=day),
+        )
+
+    def test_defaults_are_used_when_the_request_sends_nothing(self):
+        self.assertEqual(gemini.normalize_risk(None), gemini.DEFAULT_RISK_RULES)
+        self.assertEqual(gemini.normalize_risk({}), gemini.DEFAULT_RISK_RULES)
+
+    def test_each_invalid_value_falls_back_on_its_own(self):
+        rules = gemini.normalize_risk(
+            {"maxRiskPct": "2.5", "maxDailyTrades": 0, "minRR": "soon", "junk": 1}
+        )
+        self.assertEqual(rules["maxRiskPct"], 2.5)
+        self.assertEqual(rules["maxDailyTrades"], gemini.DEFAULT_RISK_RULES["maxDailyTrades"])
+        self.assertEqual(rules["minRR"], gemini.DEFAULT_RISK_RULES["minRR"])
+        self.assertNotIn("junk", rules)
+
+    def test_percentage_rules_are_skipped_without_a_balance(self):
+        lines = gemini.build_context(
+            [self._trade(-20), self._trade(-20)],
+            risk=gemini.DEFAULT_RISK_RULES,
+            balance=0,
+        )
+        joined = "\n".join(lines)
+        self.assertIn("موجودی حساب در دسترس نیست", joined)
+        self.assertNotIn("بدترین معاملهٔ این بازه", joined)
+
+    def test_daily_caps_are_measured_per_day_not_per_period(self):
+        """Two quiet days must not read as one day that broke the daily cap."""
+        lines = gemini.build_context(
+            [self._trade(-20, day=0), self._trade(-20, day=1)],
+            risk=gemini.DEFAULT_RISK_RULES,
+            balance=1000,
+        )
+        joined = "\n".join(lines)
+        # Worst day is 20$ = 2% against a 3% cap: respected, and the busiest day
+        # holds a single trade.
+        self.assertIn("بدترین روز این بازه 2%", joined)
+        self.assertIn("پرترافیک‌ترین روز این بازه 1 معامله", joined)
+
+    def test_a_broken_streak_is_reported_as_a_breach(self):
+        lines = gemini.build_context(
+            [self._trade(-10), self._trade(-10), self._trade(-10)],
+            risk=gemini.DEFAULT_RISK_RULES,
+            balance=1000,
+        )
+        joined = "\n".join(lines)
+        self.assertIn("بلندترین زنجیرهٔ ضرر این بازه 3 (نقض شده)", joined)
 
 
 class CoachPeriodTests(BaseTestCase):

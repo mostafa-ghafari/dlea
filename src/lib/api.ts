@@ -18,6 +18,7 @@ import type {
   TradeColumn,
 } from "@/lib/types";
 import type { CoachPeriod, CoachScope } from "@/lib/ai-coach-data";
+import type { RiskCaps } from "@/lib/risk-metrics";
 import type {
   AppNotification,
   AuditEntry,
@@ -613,11 +614,16 @@ export function generateCoachReport(
   scope: CoachScope,
   model?: string,
   portfolioId?: string,
+  // The trader's risk caps live only in localStorage (the risk page saves them
+  // there), so the request is the one chance to let the coach see the rules it
+  // is judging the report against.
+  risk?: Partial<RiskCaps>,
 ) {
   return post<GeneratedCoachReport>("coach/generate/", {
     scope,
     model,
     portfolio: portfolioId,
+    risk,
   });
 }
 export const fetchArchivedReports = () =>

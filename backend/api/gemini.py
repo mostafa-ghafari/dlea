@@ -166,6 +166,267 @@ def _en_num(raw: str) -> str:
 
 
 # ---------------------------------------------------------------------------
+# Risk rules (the «ژورنال و مدیریت ریسک» page)
+# ---------------------------------------------------------------------------
+
+# The caps the risk page ships with. They are used whenever a request carries
+# none (the smoke test, a curl call) so a report still gets a risk review.
+DEFAULT_RISK_RULES: dict[str, float] = {
+    "maxRiskPct": 1.0,
+    "maxDailyLossPct": 3.0,
+    "maxWeeklyLossPct": 8.0,
+    "maxDailyTrades": 5,
+    "maxConsecutiveLosses": 3,
+    "minRR": 1.5,
+}
+
+RISK_RULE_LABELS: dict[str, str] = {
+    "maxRiskPct": "حداکثر ریسک هر معامله",
+    "maxDailyLossPct": "حداکثر ضرر روزانه",
+    "maxWeeklyLossPct": "حداکثر ضرر بازه",
+    "maxDailyTrades": "حداکثر تعداد معاملات روزانه",
+    "maxConsecutiveLosses": "حداکثر ضرر متوالی",
+    "minRR": "حداقل R:R",
+}
+
+
+def normalize_risk(raw: Any) -> dict[str, float]:
+    """Effective risk rules: the caps the browser saved, over our defaults.
+
+    The caps live in the trader's browser (the risk page keeps them in
+    ``localStorage``), so the request body is the only place the server ever
+    sees them. A missing, unparseable or non-positive value falls back to the
+    default rule instead of silently dropping that rule from the review.
+    """
+    rules = dict(DEFAULT_RISK_RULES)
+    if isinstance(raw, dict):
+        for key in DEFAULT_RISK_RULES:
+            try:
+                value = float(raw[key])
+            except (KeyError, TypeError, ValueError):
+                continue
+            if value > 0:
+                rules[key] = value
+    return rules
+
+
+def _en_num_str(value: float) -> str:
+    """`3.0` → `3`, `1.50` → `1.5` — English digits, no trailing zeros."""
+    return _en_num(f"{value:g}")
+
+
+def _day_buckets(trades) -> list[tuple[Any, list]]:
+    """`[(jalali day, trades of that day)]`, oldest day first."""
+    by_day: dict[Any, list] = {}
+    for trade in sorted(trades, key=lambda t: t.close_time):
+        by_day.setdefault(_jdate(trade.close_time), []).append(trade)
+    return sorted(by_day.items(), key=lambda item: item[0].togregorian())
+
+
+def _longest_loss_streak(pnls: list[float]) -> int:
+    """Longest run of consecutive losing trades, in close-time order."""
+    streak = longest = 0
+    for pnl in pnls:
+        streak = streak + 1 if pnl < 0 else 0
+        longest = max(longest, streak)
+    return longest
+
+
+def _risk_lines(trades, risk: dict[str, float] | None, balance: float) -> list[str]:
+    """The trader's own caps next to what this period's trades actually did.
+
+    Daily caps are measured per day (the worst day is the one that can break
+    them), the loss cap against the period's net result, and the percentage
+    rules only when the account balance is known — a guessed balance would read
+    as a real breach and the coach would then lecture about a number that never
+    happened.
+    """
+    if not risk:
+        return []
+    ordered = sorted(trades, key=lambda t: t.close_time)
+    pnls = [float(t.pnl) for t in ordered]
+    if not pnls:
+        return []
+
+    def verdict(ok: bool) -> str:
+        return "رعایت شده" if ok else "نقض شده"
+
+    days = _day_buckets(trades)
+    net = sum(pnls)
+    worst_trade = max([-p for p in pnls if p < 0], default=0.0)
+    worst_day_loss = max(
+        [-sum(float(t.pnl) for t in rows) for _, rows in days], default=0.0
+    )
+    period_loss = max(0.0, -net)
+    busiest_day = max(len(rows) for _, rows in days)
+    streak = _longest_loss_streak(pnls)
+
+    lines = [
+        "## قوانین مدیریت ریسک خود کاربر (تنظیمات صفحهٔ «ژورنال و مدیریت ریسک») "
+        "— ملاک تحلیل را همین قوانین بگذار"
+    ]
+
+    if balance > 0:
+        def pct(amount: float) -> str:
+            return _en_num_str(round(amount / balance * 100, 2)) + "%"
+
+        daily_pct = worst_day_loss / balance * 100
+        period_pct = period_loss / balance * 100
+        lines.append(
+            f"- {RISK_RULE_LABELS['maxRiskPct']}: سقف {_en_num_str(risk['maxRiskPct'])}% از موجودی "
+            f"— بدترین معاملهٔ این بازه {pct(worst_trade)} "
+            f"({verdict(worst_trade / balance * 100 < risk['maxRiskPct'])})"
+        )
+        lines.append(
+            f"- {RISK_RULE_LABELS['maxDailyLossPct']}: سقف {_en_num_str(risk['maxDailyLossPct'])}% "
+            f"— بدترین روز این بازه {pct(worst_day_loss)} "
+            f"({verdict(daily_pct < risk['maxDailyLossPct'])})"
+        )
+        lines.append(
+            f"- {RISK_RULE_LABELS['maxWeeklyLossPct']}: سقف {_en_num_str(risk['maxWeeklyLossPct'])}% "
+            f"— ضرر خالص این بازه {pct(period_loss)} "
+            f"({verdict(period_pct < risk['maxWeeklyLossPct'])})"
+        )
+    else:
+        lines.append(
+            "- قوانین درصدی (ریسک هر معامله / ضرر روزانه / ضرر بازه) قابل اندازه‌گیری نبود: "
+            "موجودی حساب در دسترس نیست. اثر ضعف‌ها را با مبلغ دلاری بگو، نه با درصد."
+        )
+
+    lines.append(
+        f"- {RISK_RULE_LABELS['maxDailyTrades']}: سقف {_en_num_str(risk['maxDailyTrades'])} "
+        f"— پرترافیک‌ترین روز این بازه {_en_num_str(busiest_day)} معامله "
+        f"({verdict(busiest_day < risk['maxDailyTrades'])})"
+    )
+    lines.append(
+        f"- {RISK_RULE_LABELS['maxConsecutiveLosses']}: سقف "
+        f"{_en_num_str(risk['maxConsecutiveLosses'])} — بلندترین زنجیرهٔ ضرر این بازه "
+        f"{_en_num_str(streak)} ({verdict(streak < risk['maxConsecutiveLosses'])})"
+    )
+    rrs = [float(t.rr or 0) for t in ordered]
+    below = [rr for rr in rrs if rr < risk["minRR"]]
+    lines.append(
+        f"- {RISK_RULE_LABELS['minRR']}: حداقل {_en_num_str(risk['minRR'])} "
+        f"— {_en_num_str(len(below))} معامله زیر آن (کمترین {_en_num_str(min(rrs))}) "
+        f"({verdict(not below)})"
+    )
+    return lines
+
+
+def _unique_texts(values, limit: int) -> list[str]:
+    """Trimmed, de-duplicated snippets for prompt text."""
+    out: list[str] = []
+    for value in values:
+        text = " ".join(str(value or "").split())
+        if not text or text in out:
+            continue
+        out.append(text[:140])
+        if len(out) >= limit:
+            break
+    return out
+
+
+def _journal_lines(trades, journal_entries) -> list[str]:
+    """The journal side of plan adherence: notes, mistakes and lessons.
+
+    Entries are matched on the period's date span, not on the portfolio, because
+    a note may be saved without a portfolio while still describing a trade from
+    this period.
+    """
+    if not trades or journal_entries is None:
+        return []
+    closes = sorted(t.close_time for t in trades)
+    start, end = closes[0].date(), closes[-1].date()
+    entries = [
+        e
+        for e in journal_entries
+        if getattr(e, "date", None) is not None and start <= e.date <= end
+    ]
+    if not entries:
+        return []
+
+    followed = [e for e in entries if e.plan]
+    lines = [
+        "## ژورنال این بازه",
+        f"- {_en_num_str(len(entries))} یادداشت ژورنال | "
+        f"{_en_num_str(len(entries) - len(followed))} مورد خارج از پلن",
+        f"- پایبندی به پلن بر اساس ژورنال: "
+        f"{_en_num_str(round(len(followed) / len(entries) * 100, 1))}%",
+    ]
+    mistakes = _unique_texts((e.mistakes for e in entries), limit=6)
+    lessons = _unique_texts((e.lesson for e in entries), limit=4)
+    if mistakes:
+        lines.append("- اشتباهات ثبت‌شده: " + "؛ ".join(mistakes))
+    if lessons:
+        lines.append("- درس‌های ثبت‌شده: " + "؛ ".join(lessons))
+    return lines
+
+
+def _past_lines(past_reports) -> list[str]:
+    """Continuity: what the earlier reports already told this trader."""
+    reports = list(past_reports or [])[:3]
+    if not reports:
+        return []
+    lines = [
+        "## گزارش‌های گذشته (زمینه) — بگو کدام ضعف قبلی برطرف شده و کدام تکرار شده است"
+    ]
+    for item in reports:
+        lines.append(
+            f"- {item.get('label', 'گزارش')} ({item.get('range', '—')}) | "
+            f"سود خالص {item.get('net', '—')} | Win Rate {item.get('winRate', '—')}"
+        )
+        summary = " ".join(str(item.get("summary") or "").split())
+        if summary:
+            lines.append(f"  خلاصه: {summary[:240]}")
+        for weakness in list(item.get("weaknesses") or [])[:3]:
+            if isinstance(weakness, dict):
+                lines.append(
+                    f"  ضعف قبلی ({weakness.get('severity', '—')}): "
+                    f"{weakness.get('title', '—')}"
+                )
+            elif str(weakness).strip():
+                lines.append(f"  ضعف قبلی: {str(weakness).strip()[:140]}")
+        for step in list(item.get("actionPlan") or [])[:3]:
+            if str(step).strip():
+                lines.append(f"  اقدام قبلی: {str(step).strip()[:140]}")
+    return lines
+
+
+def build_context(
+    trades,
+    *,
+    risk: dict[str, float] | None = None,
+    journal_entries=None,
+    past_reports=None,
+    balance: float = 0.0,
+) -> list[str]:
+    """Extra prompt sections, in reading order; each is skipped when empty."""
+    return (
+        _risk_lines(trades, risk, balance)
+        +        _journal_lines(trades, journal_entries)
+        + _past_lines(past_reports)
+    )
+
+
+def portfolio_balance(trades) -> float:
+    """Balance of the account these trades belong to (0 when unknown)."""
+    for trade in trades:
+        try:
+            value = float(getattr(trade.portfolio, "balance", 0) or 0)
+        except (AttributeError, TypeError, ValueError):
+            return 0.0
+        if value > 0:
+            return value
+    return 0.0
+
+
+def period_key(scope: str, trades) -> str | None:
+    """`AI-<bucket>` id the report for this scope would get, else None."""
+    period = period_for_scope(scope, trades)
+    return f"AI-{period['key']}" if period else None
+
+
+# ---------------------------------------------------------------------------
 # Period bucketing — derived from the REAL trades in the database
 # ---------------------------------------------------------------------------
 
@@ -279,7 +540,7 @@ def compute_stats(trades) -> dict[str, Any]:
 # Prompt + Gemini call
 # ---------------------------------------------------------------------------
 
-def build_prompt(scope: str, period: dict[str, Any], stats: dict[str, Any], trades) -> str:
+def build_prompt(scope: str, period: dict[str, Any], stats: dict[str, Any], trades, context: list[str] | None = None) -> str:
     fa_scope = {"daily": "روزانه", "weekly": "هفتگی", "monthly": "ماهانه", "yearly": "سالانه"}[scope]
     trade_lines = []
     for t in trades[:40]:
@@ -290,6 +551,9 @@ def build_prompt(scope: str, period: dict[str, Any], stats: dict[str, Any], trad
             f"سود {float(t.pnl):+.2f}$ | R:R {float(t.rr):.2f} | پایبندی به پلن: {plan} | احساس: {emo}"
         )
     trades_txt = "\n".join(trade_lines) if trade_lines else "— (هیچ معامله‌ای ثبت نشده)"
+
+    context_txt = "\n".join(context) if context else ""
+    context_block = f"\n{context_txt}\n" if context_txt else ""
 
     return f"""تو یک مربی حرفه‌ای معامله‌گری (تریدر کوچ) هستی. گزارش {fa_scope} یک معامله‌گر را از روی داده‌های واقعی او می‌نویسی.
 
@@ -306,7 +570,7 @@ Profit Factor: {stats['profitFactor']}
 
 معاملات این بازه:
 {trades_txt}
-
+{context_block}
 خروجی را دقیقاً به شکل یک JSON معتبر (بدون متن اضافه، بدون markdown) بنویس با این ساختار:
 {{
   "summary": "خلاصه ۳ تا ۵ جمله‌ای از عملکرد این بازه، صادقانه و بر اساس داده‌ها",
@@ -330,7 +594,8 @@ Profit Factor: {stats['profitFactor']}
 - همه متن‌ها فارسی، طبیعی و مستقیم (مثل یک مربی واقعی) باشند.
 - ۲ تا ۳ ضعف با شدت‌بندی درست (بحرانی = ضرر مالی واقعی یا تکرارشونده، مهم = تأثیر محسوس، قابل بهبود = عادت‌های جزئی).
 - هر ضعف دقیقاً ۳ قدم عملی و مشخص داشته باشد.
-- هیچ عددی را جعل نکن؛ فقط از داده‌های همین بازه استفاده کن. همه اعداد را با ارقام انگلیسی (لاتین) بنویس، نه فارسی (مثلاً «+588 دلار»)."""
+- هیچ عددی را جعل نکن؛ فقط از داده‌های همین بازه استفاده کن. همه اعداد را با ارقام انگلیسی (لاتین) بنویس، نه فارسی (مثلاً «+588 دلار»).
+- اگر بخش «زمینه» (قوانین ریسک / ژورنال / گزارش‌های گذشته) آمده، حتماً به آن استناد کن: هر قانون ریسکی که «نقض شده» باید در weaknesses با راهکار عملی بیاید، اشتباهات ژورنال را ریشه‌یابی کن، و اگر ضعفی از گزارش قبلی تکرار شده صریح بگو."""
 
 
 def _is_html(body: str) -> bool:
@@ -560,6 +825,12 @@ def normalize_report(raw: dict[str, Any], scope: str, period: dict[str, Any], st
         ]
     if scope in ("monthly", "yearly"):
         stats_list += [{"label": "Max Drawdown", "value": f"{stats['maxDrawdown']:g}%"}]
+    # Appended last on purpose: the caller reads `net`/`winRate` by position
+    # (stats[1], stats[2]), so a new row must never shift those.
+    stats_list += [
+        {"label": "پایبندی به پلن", "value": f"{stats['planAdherence']:g}%"},
+        {"label": "میانگین R:R", "value": f"{stats['avgRr']:g}"},
+    ]
 
     summary = str(raw.get("summary") or "").strip()
     if not summary:
@@ -579,8 +850,22 @@ def normalize_report(raw: dict[str, Any], scope: str, period: dict[str, Any], st
     }
 
 
-def generate_coach_report(scope: str, model: str | None, trades: list | None = None) -> dict[str, Any]:
-    """Compute real stats for the newest `scope` bucket, ask Gemini, return the CoachPeriod dict."""
+def generate_coach_report(
+    scope: str,
+    model: str | None,
+    trades: list | None = None,
+    *,
+    risk: dict[str, float] | None = None,
+    journal_entries=None,
+    past_reports=None,
+    balance: float | None = None,
+) -> dict[str, Any]:
+    """Compute real stats for the newest `scope` bucket, ask Gemini, return the CoachPeriod dict.
+
+    Everything the trader's own pages know and the numbers do not — the risk
+    rules of the «ژورنال و مدیریت ریسک» page, the journal notes, the previous
+    reports — arrives as optional context and is folded into the prompt.
+    """
     from .models import Trade
 
     if trades is None:
@@ -592,8 +877,18 @@ def generate_coach_report(scope: str, model: str | None, trades: list | None = N
         raise LookupError(f"no trades in scope {scope}")
     stats = compute_stats(period["trades"])
 
+    if balance is None:
+        balance = portfolio_balance(period["trades"])
+    context = build_context(
+        period["trades"],
+        risk=risk,
+        journal_entries=journal_entries,
+        past_reports=past_reports,
+        balance=balance,
+    )
+
     model = get_model(model)
-    prompt = build_prompt(scope, period, stats, period["trades"])
+    prompt = build_prompt(scope, period, stats, period["trades"], context)
     text = call_gemini(prompt, model)
     raw = json.loads(text) if isinstance(text, str) else text
     if not isinstance(raw, dict):

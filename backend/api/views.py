@@ -1068,12 +1068,46 @@ class CoachInsightsView(APIView):
         return Response(payload)
 
 
+def _past_report_context(user, portfolio_id, exclude_id=None, limit=3):
+    """Up to `limit` earlier reports, as continuity context for the prompt.
+
+    The order is by generation time (newest first), across scopes: a monthly
+    report written last week still says what the trader was struggling with.
+    Only this account's reports are used — advice built on another portfolio's
+    numbers would be worse than no context at all — and the report being
+    regenerated is skipped so the coach does not quote itself back at us.
+    """
+    if user is None:
+        return []
+    qs = CoachPeriod.objects.filter(user=user)
+    qs = qs.filter(portfolio_id=portfolio_id) if portfolio_id else qs.filter(portfolio__isnull=True)
+    if exclude_id:
+        qs = qs.exclude(id__startswith=exclude_id)
+    return [
+        {
+            "label": period.label,
+            "range": period.range,
+            "net": period.net,
+            "winRate": period.win_rate,
+            "summary": period.summary,
+            "weaknesses": period.weaknesses,
+            "actionPlan": period.action_plan,
+        }
+        for period in qs.order_by("-sort_key")[:limit]
+    ]
+
+
 class CoachGenerateView(APIView):
     """Generate a real coach report with Google Gemini from the stored trades.
 
     POST /api/coach/generate/  {"scope": "weekly", "model": "gemini-2.0-flash"}
     The report is computed from the most recent non-empty bucket of the scope
     and saved as a CoachPeriod so it appears at the top of the periods list.
+
+    The body may also carry `risk`: the trader's risk caps from the
+    «ژورنال و مدیریت ریسک» page, which live in the browser and are therefore
+    invisible to the server otherwise. The journal notes of the period and the
+    previous reports are attached server-side.
     """
 
     def post(self, request):
@@ -1106,15 +1140,40 @@ class CoachGenerateView(APIView):
                     },
                     status=403,
                 )
+        # Resolve the portfolio first: its balance is what turns a raw loss into
+        # the percentage the trader's own risk rules are written in.
+        portfolio_obj = None
         portfolio_id = request.data.get("portfolio")
+        if portfolio_id and user:
+            try:
+                portfolio_obj = Portfolio.objects.get(id=portfolio_id, user=user)
+            except Portfolio.DoesNotExist:
+                pass
+
         if user:
             trades = Trade.objects.filter(portfolio__user=user)
         else:
             trades = Trade.objects.filter(portfolio__user__isnull=True)
         if portfolio_id:
             trades = trades.filter(portfolio__id=portfolio_id)
+        # One load, shared by the period lookup, the risk review and the save.
+        trades = list(trades)
+
+        # Risk rules live in the browser, so this body is the only place the
+        # server sees them; a caller that sends none simply skips that section.
+        raw_risk = request.data.get("risk")
         try:
-            report = gemini.generate_coach_report(scope, request.data.get("model"), trades)
+            report = gemini.generate_coach_report(
+                scope,
+                request.data.get("model"),
+                trades,
+                risk=gemini.normalize_risk(raw_risk) if raw_risk else None,
+                journal_entries=JournalEntry.objects.filter(user=user) if user else None,
+                past_reports=_past_report_context(
+                    user, portfolio_id, gemini.period_key(scope, trades)
+                ),
+                balance=float(portfolio_obj.balance) if portfolio_obj else None,
+            )
         except LookupError as exc:
             return Response({"detail": f"داده‌ای برای این بازه موجود نیست ({exc})"}, status=400)
         except (ValueError, json.JSONDecodeError) as exc:
@@ -1140,15 +1199,6 @@ class CoachGenerateView(APIView):
             )
         except Exception:
             pass
-
-        # Find the portfolio object if portfolio_id was provided
-        portfolio_obj = None
-        if portfolio_id and user:
-            from .models import Portfolio as PortfolioModel
-            try:
-                portfolio_obj = PortfolioModel.objects.get(id=portfolio_id, user=user)
-            except PortfolioModel.DoesNotExist:
-                pass
 
         report_id = report["id"] + (f"-u{user.id}" if user else "") + (f"-p{portfolio_id}" if portfolio_id else "")
         period, created = CoachPeriod.objects.update_or_create(

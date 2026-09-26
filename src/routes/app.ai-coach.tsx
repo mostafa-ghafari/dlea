@@ -40,9 +40,14 @@ import {
   scopeLabels,
   type CoachScope,
 } from "@/lib/ai-coach-data";
+import {
+  DEFAULT_RISK_CAPS,
+  RISK_CAPS_KEY,
+  type RiskCaps,
+} from "@/lib/risk-metrics";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-import { useActivePortfolioId } from "@/lib/app-state";
+import { useActivePortfolioId, useLocalState } from "@/lib/app-state";
 import { Num } from "@/components/Num";
 
 export const Route = createFileRoute("/app/ai-coach")({
@@ -73,6 +78,14 @@ const severityStyle: Record<string, string> = {
 function AiCoach() {
   const insights = useAiInsights();
   const [activePortfolioId] = useActivePortfolioId();
+  // The risk page keeps the trader's caps in localStorage, so the request is the
+  // only way the coach can learn the rules it is meant to judge them against.
+  // Missing entries fall back to the same defaults the risk page shows.
+  const [savedCaps] = useLocalState<Partial<RiskCaps>>(RISK_CAPS_KEY, {});
+  const riskCaps = useMemo<RiskCaps>(
+    () => ({ ...DEFAULT_RISK_CAPS, ...savedCaps }),
+    [savedCaps],
+  );
   const periodsApi = useApi(
     () => fetchCoachPeriods(activePortfolioId ?? undefined),
     [activePortfolioId],
@@ -117,7 +130,12 @@ function AiCoach() {
     if (generating) return;
     setGenerating(true);
     try {
-      await generateCoachReport(scope, model, activePortfolioId ?? undefined);
+      await generateCoachReport(
+        scope,
+        model,
+        activePortfolioId ?? undefined,
+        riskCaps,
+      );
       toast.success(
         `تحلیل ${scopeLabels[scope]} با ${activeModel.name} ساخته شد و در لیست بازه‌ها ذخیره شد.`,
       );
