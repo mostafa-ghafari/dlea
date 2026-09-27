@@ -64,8 +64,18 @@ test("signup → portfolio → trade → journal → dashboard", async ({
   await page.waitForURL(/\/app\/portfolios/, { timeout: 20_000 });
 
   // ---- Onboarding: create the first portfolio ------------------------
-  await page.getByRole("button", { name: "پرتفولیو جدید" }).first().click();
-  await page.getByPlaceholder("پرتفوی اصلی").fill("حساب اصلی");
+  // A fresh account auto-opens the create dialog. Clicking the trigger while it
+  // is opening means clicking through its overlay, which never resolves — so
+  // give the auto-open a moment and only press the trigger if it did not come.
+  const nameField = page.getByPlaceholder("پرتفوی اصلی");
+  const autoOpened = await nameField
+    .waitFor({ state: "visible", timeout: 3_000 })
+    .then(() => true)
+    .catch(() => false);
+  if (!autoOpened) {
+    await page.getByRole("button", { name: "پرتفولیو جدید" }).first().click();
+  }
+  await nameField.fill("حساب اصلی");
   await page.getByPlaceholder("IC Markets").fill("IC Markets");
   await page.locator("input[type='number']").first().fill("10000");
   await page.getByRole("button", { name: "ایجاد پرتفولیو" }).click();
@@ -81,15 +91,83 @@ test("signup → portfolio → trade → journal → dashboard", async ({
   );
   expect(token).toBeTruthy();
 
+  // ---- A second portfolio, and exactly one card may look active --------
+  // Regression for "both portfolios show the active style". The active one is
+  // decided in two places — the server's `is_active` and the id stored in
+  // localStorage — and a card used to render as active when *either* said so.
+  // Every step below leaves and returns through the sidebar, because a page
+  // reload would drop the in-memory GET cache that made the two disagree.
+  const auth = { Authorization: `Bearer ${token}` };
+  const second = await request.post("http://localhost:8000/api/portfolios/", {
+    headers: { ...auth, "Content-Type": "application/json" },
+    data: {
+      name: "حساب دوم",
+      broker: "IC Markets",
+      initial: 5000,
+      balance: 5000,
+      leverage: "1:100",
+      currency: "USD",
+      // Created active, so the server now marks this one and deactivates the
+      // first — while the page below still has the first one stored.
+    },
+  });
+  expect(second.ok()).toBeTruthy();
+
+  async function leaveAndReturn() {
+    // `exact` matters: "معاملات" is also a substring of "تقویم معاملاتی".
+    await page.getByRole("link", { name: "معاملات", exact: true }).click();
+    await page.waitForURL(/\/app\/trades/, { timeout: 20_000 });
+    await page.getByRole("link", { name: "پرتفولیوها", exact: true }).click();
+    await page.waitForURL(/\/app\/portfolios/, { timeout: 20_000 });
+    await expect(page.getByText("حساب اصلی").first()).toBeVisible({
+      timeout: 15_000,
+    });
+  }
+
+  await leaveAndReturn();
+  await expect(page.getByText("فعال", { exact: true })).toHaveCount(1);
+  await expect(
+    page
+      .locator(".card-surface", { hasText: "حساب دوم" })
+      .getByText("فعال", { exact: true }),
+  ).toBeVisible();
+
+  // Activating the first portfolio again tests the other direction: the list
+  // fetched before this click is the one a stale cache would serve back.
+  await page
+    .locator(".card-surface", { hasText: "حساب اصلی" })
+    .getByRole("button", { name: "فعال‌سازی" })
+    .click();
+  await leaveAndReturn();
+
+  // The badge is the visible claim, so it is the thing to count: exactly one
+  // card says فعال, and it is the one that was just activated.
+  await expect(page.getByText("فعال", { exact: true })).toHaveCount(1);
+  await expect(
+    page
+      .locator(".card-surface", { hasText: "حساب اصلی" })
+      .getByText("فعال", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    page
+      .locator(".card-surface", { hasText: "حساب دوم" })
+      .getByText("غیر فعال", { exact: true }),
+  ).toBeVisible();
+
   const portfolios = await request.get(
     "http://localhost:8000/api/portfolios/",
     {
-      headers: { Authorization: `Bearer ${token}` },
+      headers: auth,
     },
   );
   expect(portfolios.ok()).toBeTruthy();
   const list = await portfolios.json();
-  const portfolioId = list.results?.[0]?.id ?? list[0]?.id;
+  const rows: { id: number | string; is_active?: boolean }[] =
+    list.results ?? list;
+  // The journey above re-activated the first portfolio, so the row order is
+  // not what the app is scoped to — the trade has to land on the *active*
+  // portfolio or the dashboard assertion at the end reads zero trades.
+  const portfolioId = rows.find((p) => p.is_active)?.id;
   expect(portfolioId).toBeTruthy();
 
   const created = await request.post("http://localhost:8000/api/trades/", {

@@ -81,19 +81,46 @@ export function useHasPortfolio(): [boolean, (v: boolean) => void, boolean] {
   // A portfolio id outlives the session that chose it: logging out (or signing
   // in as somebody else) used to leave `dlea:active-portfolio` pointing at a
   // portfolio this account does not own, and every scoped request — trades,
-  // journal, dashboard — then came back empty. Re-point the stored id at one of
-  // the portfolios the API just returned, or drop it when there are none.
+  // journal, dashboard — then came back empty. Mirror whatever
+  // `resolveActivePortfolioId` decides into localStorage, or drop it when there
+  // are no portfolios at all.
   useEffect(() => {
     if (!data) return;
     const stored = getActivePortfolioId();
-    if (stored && data.some((p) => String(p.id) === stored)) return;
-    const next = data.find((p) => p.is_active) ?? data[0];
-    const nextId = next ? String(next.id) : null;
+    const nextId = resolveActivePortfolioId(data, stored);
     // Only write when it really changes, so the effect converges instead of
     // re-notifying every subscriber on each render.
     if (nextId !== stored) setActivePortfolioId(nextId);
   }, [data]);
   return [hasPortfolio, setManual, ready];
+}
+
+/**
+ * The one portfolio the app should treat as active.
+ *
+ * The server's `is_active` is the only definition of "active": the MT sync,
+ * the coach's default period and this module all read it, and `activate/`
+ * maintains it as a single-active invariant. The id kept in
+ * `dlea:active-portfolio` is therefore a mirror of that flag, never a second
+ * opinion — letting a stale stored id outrank it is what let the portfolios
+ * page paint two cards as active at once (the stored one the UI scoped to, plus
+ * the one the server still listed as `is_active`).
+ *
+ * Rows written before the single-active migration can all be inactive, so a
+ * stored id the account still owns is kept when the server marks nothing active
+ * at all.
+ */
+export function resolveActivePortfolioId(
+  portfolios: readonly { id: string | number; is_active?: boolean }[],
+  storedId: string | null,
+): string | null {
+  const serverActive = portfolios.find((p) => p.is_active);
+  if (serverActive) return String(serverActive.id);
+  if (storedId && portfolios.some((p) => String(p.id) === storedId)) {
+    return storedId;
+  }
+  const first = portfolios[0];
+  return first ? String(first.id) : null;
 }
 export const ACTIVE_PORTFOLIO_KEY = "dlea:active-portfolio";
 

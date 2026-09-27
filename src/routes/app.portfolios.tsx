@@ -53,7 +53,12 @@ import {
 } from "@/lib/api";
 import { toast } from "sonner";
 import { cn, formatUsd } from "@/lib/utils";
-import { useHasPortfolio, useActivePortfolioId } from "@/lib/app-state";
+import {
+  getActivePortfolioId,
+  resolveActivePortfolioId,
+  useActivePortfolioId,
+  useHasPortfolio,
+} from "@/lib/app-state";
 import { Num } from "@/components/Num";
 
 export const Route = createFileRoute("/app/portfolios")({
@@ -147,7 +152,7 @@ function Portfolios() {
     try {
       await deletePortfolio(p.id);
       setPortfolios((list) => list.filter((x) => x.id !== p.id));
-      if (activeId === p.id) setActiveId(null);
+      if (isActive(p)) setActiveId(null);
       toast.success(`پرتفولیو «${p.name}» حذف شد`);
     } catch (err) {
       toast.error(
@@ -201,13 +206,19 @@ function Portfolios() {
       .then((list) => {
         if (!alive) return;
         setPortfolios(list);
+        // Mirror the server's answer into the stored id straight away. Every
+        // other part of the app scopes its requests by that id, so the card
+        // this page paints and the portfolio the app actually reads can only
+        // agree if the reconciliation happens here, on the response.
+        const next = resolveActivePortfolioId(list, getActivePortfolioId());
+        if (next !== getActivePortfolioId()) setActiveId(next);
         setLoaded(true);
       })
       .catch(() => alive && toast.error("دریافت پرتفولیوها از سرور ممکن نشد"));
     return () => {
       alive = false;
     };
-  }, []);
+  }, [setActiveId]);
 
   // Auto-open create dialog when user has no portfolios (first visit)
   useEffect(() => {
@@ -235,6 +246,9 @@ function Portfolios() {
         trades: 0,
         status: "فعال",
         strategy: strategy.trim() || "",
+        // Explicit: the API deactivates the previous portfolio only for a
+        // portfolio created active, and that depends on this flag reaching it.
+        is_active: true,
       });
       // The API deactivates the previous portfolio. Mirror that change locally
       // so the previous card does not stay highlighted until the next refresh.
@@ -262,6 +276,15 @@ function Portfolios() {
 
   const activePortfolios = portfolios.filter((p) => p.status !== "آرشیو");
   const archivedPortfolios = portfolios.filter((p) => p.status === "آرشیو");
+
+  // One id drives all three "active" affordances on a card — the border, the
+  // badge and the disabled button. They used to share the condition
+  // `activeId === p.id || p.is_active`, which is an OR of two sources of truth:
+  // the moment the stored id and the server's flag disagreed (a list fetched
+  // before the activation, or an id left over from another session) two cards
+  // rendered as active. `resolveActivePortfolioId` collapses them to one.
+  const currentActiveId = resolveActivePortfolioId(portfolios, activeId);
+  const isActive = (p: Portfolio) => String(p.id) === currentActiveId;
 
   return (
     <AppShell
@@ -410,7 +433,7 @@ function Portfolios() {
           return (
             <div
               key={p.id}
-              className={`card-surface p-5 transition-all hover:border-primary/40 ${activeId === p.id || p.is_active ? "!border-primary bg-primary/5" : ""}`}
+              className={`card-surface p-5 transition-all hover:border-primary/40 ${isActive(p) ? "!border-primary bg-primary/5" : ""}`}
             >
               <div className="flex items-start justify-between">
                 <div className="flex items-center gap-3">
@@ -515,12 +538,12 @@ function Portfolios() {
                 <Badge
                   variant="outline"
                   className={
-                    activeId === p.id || p.is_active
+                    isActive(p)
                       ? "border-primary/40 bg-primary/10 text-primary"
                       : "border-muted-foreground/30 bg-muted/50 text-muted-foreground"
                   }
                 >
-                  {activeId === p.id || p.is_active ? "فعال" : "غیر فعال"}
+                  {isActive(p) ? "فعال" : "غیر فعال"}
                 </Badge>
                 <div
                   className={`text-sm font-medium tabular ${pct >= 0 ? "gain" : "loss"}`}
@@ -533,7 +556,7 @@ function Portfolios() {
               </div>
 
               <div className="mt-4 flex gap-2">
-                {activeId === p.id || p.is_active ? (
+                {isActive(p) ? (
                   <Button
                     size="sm"
                     className="flex-1 bg-primary text-primary-foreground"

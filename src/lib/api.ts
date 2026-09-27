@@ -450,10 +450,17 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
       });
   }
 
-  // Invalidate stale GET entries when a mutation happens to the same prefix
+  // Invalidate stale GET entries when a mutation happens to the same prefix.
+  // A mutation usually lands on a detail or action path
+  // (`portfolios/12/activate/`) while the pages that must refetch read the
+  // collection (`portfolios/`) — evicting only the action path left the
+  // collection cached, so a page that re-mounted within the TTL rendered the
+  // list as it was *before* the mutation.
   if (method !== "GET") {
-    const prefix = path.split("?")[0].replace(/\/$/, "");
-    invalidateCache(prefix);
+    const clean = path.split("?")[0].replace(/^\/+|\/+$/g, "");
+    for (const prefix of new Set([clean, clean.split("/")[0]])) {
+      if (prefix) invalidateCache(prefix);
+    }
   }
 
   return fetchPromise;

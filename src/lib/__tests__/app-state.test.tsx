@@ -5,6 +5,7 @@ import {
   fullName,
   getActivePortfolioId,
   getCurrentUser,
+  resolveActivePortfolioId,
   setActivePortfolioId,
   useHasPortfolio,
   useLocalState,
@@ -74,6 +75,37 @@ describe("active portfolio id", () => {
   });
 });
 
+describe("resolveActivePortfolioId", () => {
+  it("returns the portfolio the server marks active", () => {
+    expect(
+      resolveActivePortfolioId(
+        [
+          { id: "11", is_active: false },
+          { id: "12", is_active: true },
+        ],
+        "11",
+      ),
+    ).toBe("12");
+  });
+
+  it("keeps a stored id when the server marks nothing active", () => {
+    // Portfolios written before the single-active migration can all be inactive.
+    expect(resolveActivePortfolioId([{ id: 7 }, { id: 8 }], "8")).toBe("8");
+  });
+
+  it("falls back to the first portfolio when nothing is stored or active", () => {
+    expect(resolveActivePortfolioId([{ id: 7 }], null)).toBe("7");
+  });
+
+  it("never returns an id the list does not contain", () => {
+    expect(resolveActivePortfolioId([{ id: "2" }], "99")).toBe("2");
+  });
+
+  it("returns null for an empty list", () => {
+    expect(resolveActivePortfolioId([], "9")).toBeNull();
+  });
+});
+
 describe("useLocalState", () => {
   it("hydrates from localStorage and becomes ready", async () => {
     window.localStorage.setItem("k", JSON.stringify("stored"));
@@ -128,6 +160,19 @@ describe("useHasPortfolio", () => {
       { id: "12", is_active: true },
     ];
     setActivePortfolioId("99");
+    renderHook(() => useHasPortfolio());
+    await act(async () => {});
+    expect(getActivePortfolioId()).toBe("12");
+  });
+
+  it("follows the server's flag over a stored id the account still owns", async () => {
+    // The stored id survives the ownership check above, but it is no longer the
+    // active portfolio — the mismatch that painted two cards as active.
+    api.portfolios = [
+      { id: "11", is_active: false },
+      { id: "12", is_active: true },
+    ];
+    setActivePortfolioId("11");
     renderHook(() => useHasPortfolio());
     await act(async () => {});
     expect(getActivePortfolioId()).toBe("12");

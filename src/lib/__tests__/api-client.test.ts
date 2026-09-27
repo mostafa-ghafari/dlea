@@ -125,6 +125,19 @@ describe("mutations", () => {
     });
   });
 
+  it("evicts the collection a detail mutation belongs to", async () => {
+    // Activating a portfolio posts to `portfolios/12/activate/`, while the page
+    // that must show the new state reads the collection `portfolios/`. Evicting
+    // only the action path left the collection cached, so a re-mount inside the
+    // TTL re-rendered the pre-activation list — which, with the stored id, marked
+    // two portfolios active at once.
+    const fetchMock = mockFetch(200, []);
+    await get("portfolios/");
+    await post("portfolios/12/activate/", {});
+    await get("portfolios/");
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+  });
+
   it("adds the Bearer token from localStorage", async () => {
     window.localStorage.setItem("dlea:access", "tok-123");
     const fetchMock = mockFetch(200, []);
