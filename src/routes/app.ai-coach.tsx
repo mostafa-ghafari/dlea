@@ -101,12 +101,14 @@ function AiCoach() {
   const quotaUnlimited = (quota?.limit ?? -1) < 0;
   const models = insights?.models ?? [];
   const [model, setModel] = useState<string | undefined>(undefined);
-  // Sync model when models load from API — pick the first available model
+  // Sync model when models load from API — start on the model the server
+  // marks as the default (the light/fast one), so the first analysis is quick;
+  // once the trader picks another model in the dropdown we keep their choice.
   useEffect(() => {
     if (models.length > 0) {
       setModel((prev) => {
         if (prev && models.some((m) => m.id === prev)) return prev;
-        return models[0].id;
+        return (models.find((m) => m.default) ?? models[0]).id;
       });
     }
   }, [models]);
@@ -231,7 +233,14 @@ function AiCoach() {
               {models.map((m) => (
                 <SelectItem key={m.id} value={m.id}>
                   <div className="flex flex-col text-right">
-                    <span className="font-medium">{m.name}</span>
+                    <span className="font-medium">
+                      {m.name}
+                      {m.default && (
+                        <span className="mr-1 text-[11px] font-normal text-primary">
+                          (پیش‌فرض)
+                        </span>
+                      )}
+                    </span>
                     <span className="text-[11px] text-muted-foreground">
                       {m.desc}
                     </span>

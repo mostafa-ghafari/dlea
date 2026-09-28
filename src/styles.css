@@ -184,6 +184,16 @@ html.light .loss {
   * {
     border-color: var(--color-border);
   }
+  /* Reserve the scrollbar track even when nothing scrolls.
+
+     Every Radix menu/select locks body scroll while it is open, which removes
+     the page scrollbar and compensates with `padding-right`. In an RTL document
+     the scrollbar lives on the *left*, so that compensation shifted the whole
+     page sideways the moment a dropdown opened. With the track always
+     reserved there is no scrollbar to remove, and therefore no shift. */
+  html {
+    scrollbar-gutter: stable;
+  }
   html,
   body {
     background-color: var(--color-background);

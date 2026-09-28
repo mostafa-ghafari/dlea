@@ -25,9 +25,10 @@ import {
 } from "@/components/ui/select";
 import {
   bulkImportTrades,
-  get,
-  post,
+  connectMt,
+  fetchMtStatus,
   usePortfolios,
+  type MtStatus,
   type TradeInput,
 } from "@/lib/api";
 import {
@@ -57,17 +58,6 @@ export const Route = createFileRoute("/app/trades/new")({
   }),
   component: NewTrade,
 });
-
-type MtStatus = {
-  connected: boolean;
-  token?: string;
-  webhookUrl?: string;
-  account?: string;
-  server?: string;
-  broker?: string;
-  platform?: string;
-  portfolioId?: string | null;
-};
 
 const ACCEPT = ".csv,.htm,.html,.xlsx,.xls";
 
@@ -388,16 +378,14 @@ function ConnectPanel() {
   const [copied, setCopied] = useState("");
 
   useEffect(() => {
-    get<MtStatus>("mt/status/")
+    fetchMtStatus()
       .then((d) => {
         setMt(d);
-        if (d.connected) {
-          setPlatform(d.platform ?? "mt5");
-          setBroker(d.broker ?? "");
-          setServer(d.server ?? "");
-          setAccount(d.account ?? "");
-          if (d.portfolioId) setPortfolioId(d.portfolioId);
-        }
+        setPlatform(d.platform ?? "mt5");
+        setBroker(d.broker ?? "");
+        setServer(d.server ?? "");
+        setAccount(d.account ?? "");
+        if (d.portfolioId) setPortfolioId(d.portfolioId);
       })
       .catch(() => setMt({ connected: false }))
       .finally(() => setLoading(false));
@@ -414,7 +402,7 @@ function ConnectPanel() {
     }
     setSaving(true);
     try {
-      const data = await post<MtStatus>("mt/connect/", {
+      const data = await connectMt({
         platform,
         broker: broker.trim(),
         server: server.trim(),

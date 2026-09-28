@@ -9,7 +9,6 @@ import {
   Edit,
   Link2,
   Trash2,
-  Copy,
   Zap,
 } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -163,39 +162,23 @@ function Portfolios() {
 
   async function activate(p: Portfolio) {
     try {
-      await activatePortfolio(p.id);
+      const { mtDisconnected } = await activatePortfolio(p.id);
       setActiveId(p.id);
       setPortfolios((list) =>
         list.map((x) => ({ ...x, is_active: x.id === p.id })),
       );
       toast.success(`${p.name} فعال شد — تمام بخش‌ها با این پرتفولیو آپدیت شد`);
+      // The server severs the MetaTrader link whenever the destination
+      // portfolio changes, so a running EA can never keep feeding the old
+      // account's trades into a freshly activated one.
+      if (mtDisconnected) {
+        toast.warning(
+          "اتصال متاتریدر قطع شد — برای ادامه، از تنظیمات دوباره وصل کن",
+        );
+      }
     } catch (err) {
       toast.error(
         `فعال‌سازی پرتفولیو ناموفق بود: ${err instanceof Error ? err.message : err}`,
-      );
-    }
-  }
-
-  async function duplicate(p: Portfolio) {
-    try {
-      const created = await createPortfolio({
-        name: `${p.name} (کپی)`,
-        broker: p.broker,
-        type: p.type,
-        balance: p.balance,
-        initial: p.initial,
-        leverage: p.leverage,
-        currency: p.currency,
-        trades: 0,
-        status: p.status,
-        strategy: p.strategy,
-        is_active: false,
-      });
-      setPortfolios((list) => [...list, created]);
-      toast.success("کپی پرتفولیو ساخته شد");
-    } catch (err) {
-      toast.error(
-        `ساخت کپی ناموفق بود: ${err instanceof Error ? err.message : err}`,
       );
     }
   }
@@ -474,11 +457,6 @@ function Portfolios() {
                         اتصال به متاتریدر
                       </Link>
                     </DropdownMenuItem>
-                    <DropdownMenuItem onSelect={() => duplicate(p)}>
-                      <Copy className="ml-2 h-4 w-4" />
-                      ساخت کپی
-                    </DropdownMenuItem>
-                    <DropdownMenuSeparator />
                     <DropdownMenuItem onSelect={() => toggleArchive(p)}>
                       {p.status === "آرشیو" ? (
                         <ArchiveRestore className="ml-2 h-4 w-4" />

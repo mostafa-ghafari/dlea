@@ -17,7 +17,8 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from . import gemini, jutils, payment_health
-from .plan_limits import ai_quota_for_user
+from .mt_views import current_mt_destination, cut_mt_link_if_destination_changed
+from .plan_limits import MAX_IMAGES_PER_ENTRY, ai_quota_for_user
 from .models import (
     Achievement,
     AchievementHistory,
@@ -101,31 +102,66 @@ class PortfolioViewSet(UserScopedMixin, viewsets.ModelViewSet):
     queryset = Portfolio.objects.all()
     serializer_class = PortfolioSerializer
 
+    def _deactivate_others(self, user, portfolio):
+        """Exactly one active portfolio per owner (or per anonymous demo)."""
+        others = Portfolio.objects.exclude(id=portfolio.id)
+        if user is not None:
+            others = others.filter(user=user)
+        else:
+            others = others.filter(user__isnull=True)
+        others.update(is_active=False)
+
     def perform_create(self, serializer):
         user = self.request.user if self.request.user.is_authenticated else None
+        # Read where the EA was pointed before the new portfolio exists: the
+        # destination follows the active portfolio, so this cannot be resolved
+        # after the switch.
+        conn, destination = current_mt_destination(user)
         portfolio = serializer.save(user=user)
         # Only one portfolio may be active at a time — deactivate the rest,
         # unless the new portfolio was explicitly created inactive (e.g. a copy).
         if portfolio.is_active:
-            others = Portfolio.objects.exclude(id=portfolio.id)
-            if user is not None:
-                others = others.filter(user=user)
-            else:
-                others = others.filter(user__isnull=True)
-            others.update(is_active=False)
+            self._deactivate_others(user, portfolio)
+            cut_mt_link_if_destination_changed(conn, destination, portfolio)
+
+    def perform_update(self, serializer):
+        """PATCHing `is_active` is an activation too, with the same rules.
+
+        The UI activates through the `activate` action, but the flag is
+        writable, so a PATCH could otherwise leave two portfolios active (two
+        green cards) and skip the MetaTrader safety cut that activation does.
+        """
+        user = self.request.user if self.request.user.is_authenticated else None
+        was_active = serializer.instance.is_active
+        conn, destination = current_mt_destination(user)
+        portfolio = serializer.save()
+        if portfolio.is_active and not was_active:
+            self._deactivate_others(user, portfolio)
+            cut_mt_link_if_destination_changed(conn, destination, portfolio)
 
     @action(detail=True, methods=["post"], url_path="activate")
     def activate(self, request, pk=None):
         """Set this portfolio as active, deactivate all others for the user."""
         portfolio = self.get_object()
         user = request.user
+        # Where the EA was pointed before the switch — resolved first on
+        # purpose, because the resolution prefers the active portfolio.
+        conn, destination = current_mt_destination(user)
         if user.is_authenticated:
             Portfolio.objects.filter(user=user).update(is_active=False)
         else:
             Portfolio.objects.filter(user__isnull=True).update(is_active=False)
         portfolio.is_active = True
         portfolio.save(update_fields=["is_active", "updated_at"])
-        return Response(PortfolioSerializer(portfolio).data)
+        # A running EA must not keep feeding the previous account's trades into
+        # the portfolio that just became active; the frontend surfaces this so
+        # the trader knows to reconnect on purpose.
+        mt_disconnected = cut_mt_link_if_destination_changed(
+            conn, destination, portfolio
+        )
+        data = PortfolioSerializer(portfolio).data
+        data["mtDisconnected"] = mt_disconnected
+        return Response(data)
 
 
 class TradeViewSet(viewsets.ModelViewSet):
@@ -384,7 +420,13 @@ class PlanLimitsView(APIView):
                 "features": p.plan_features,
                 "aiRequestsLimit": p.ai_requests_limit,
                 "aiRequestsPeriod": p.ai_requests_period,
-                "maxImagesPerEntry": p.max_images_per_entry,
+                # Capped here as well, so the uploader the frontend renders
+                # matches what the API actually stores (see max_images_for_user).
+                "maxImagesPerEntry": (
+                    MAX_IMAGES_PER_ENTRY
+                    if p.max_images_per_entry < 0
+                    else min(p.max_images_per_entry, MAX_IMAGES_PER_ENTRY)
+                ),
             }
             for p in plans
         ]

@@ -11,7 +11,7 @@ from .auth_views import (
     verify_otp_register,
 )
 from .billing_views import BillingCallbackView, BillingCheckoutView, BillingOrderView
-from .mt_views import MtConnectView, MtStatusView, trades_webhook
+from .mt_views import MtConnectView, MtDisconnectView, MtStatusView, trades_webhook
 from .views import (
     AchievementHistoryViewSet,
     AchievementViewSet,
@@ -89,6 +89,7 @@ urlpatterns = [
     path("auth/password-reset-confirm/", password_reset_confirm, name="password-reset-confirm"),
     path("mt/connect/", MtConnectView.as_view(), name="mt-connect"),
     path("mt/status/", MtStatusView.as_view(), name="mt-status"),
+    path("mt/disconnect/", MtDisconnectView.as_view(), name="mt-disconnect"),
     path("trades/webhook/", trades_webhook, name="trades-webhook"),
     path("dashboard/", DashboardView.as_view(), name="dashboard"),
     path("ai/quota/", AiQuotaView.as_view(), name="ai-quota"),

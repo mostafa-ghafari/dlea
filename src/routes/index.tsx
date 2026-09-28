@@ -1,4 +1,5 @@
 import { Link, createFileRoute } from "@tanstack/react-router";
+import { useMemo } from "react";
 import {
   ArrowLeft,
   BarChart3,
@@ -11,6 +12,7 @@ import {
   Zap,
   BookOpen,
   Calendar,
+  LayoutDashboard,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -19,6 +21,8 @@ import { CountUp } from "@/components/CountUp";
 import { BrandLogo } from "@/components/BrandLogo";
 import { ThemeToggle } from "@/lib/theme";
 import { todayJalali } from "@/lib/persian-calendar";
+import { usePlans } from "@/lib/api";
+import { useCurrentUser } from "@/lib/app-state";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -77,7 +81,25 @@ const features = [
   },
 ];
 
-const plans = [
+type LandingPlan = {
+  name: string;
+  price: string;
+  unit: string;
+  tagline: string;
+  features: string[];
+  cta: string;
+  highlight: boolean;
+};
+
+/**
+ * Shown only when the plans request fails.
+ *
+ * The real prices, feature lists and badges live in the plans table the admin
+ * panel edits (`/api/plans/`); this list used to be the only source, so every
+ * price change had to be shipped as a frontend release. It is still a good
+ * fallback: the pricing section must render something even offline.
+ */
+const fallbackPlans: LandingPlan[] = [
   {
     name: "رایگان",
     price: "۰",
@@ -122,6 +144,25 @@ const plans = [
 ];
 
 function Landing() {
+  const user = useCurrentUser();
+  const loggedIn = user !== null;
+  const apiPlans = usePlans();
+  const plans = useMemo<LandingPlan[]>(() => {
+    // VIP (and anything else marked unsellable) never appears on the pricing
+    // page, exactly like on the billing page.
+    const sellable = apiPlans.filter((p) => p.sellable !== false);
+    if (sellable.length === 0) return fallbackPlans;
+    return sellable.map((p) => ({
+      name: p.name,
+      price: p.price,
+      unit: p.unit,
+      tagline: p.tagline,
+      features: p.features ?? [],
+      cta: p.cta,
+      highlight: p.highlight,
+    }));
+  }, [apiPlans]);
+
   return (
     <div className="min-h-screen bg-background text-foreground">
       <ScrollReveal />
@@ -151,19 +192,35 @@ function Landing() {
           <div className="flex items-center gap-2">
             <ThemeToggle className="h-9 w-9" />
 
-            <Link to="/login">
-              <Button variant="ghost" size="sm">
-                ورود
-              </Button>
-            </Link>
-            <Link to="/signup">
-              <Button
-                size="sm"
-                className="bg-primary text-primary-foreground hover:bg-primary/90"
-              >
-                ثبت‌نام رایگان
-              </Button>
-            </Link>
+            {loggedIn ? (
+              // A signed-in visitor gets one obvious way back into the app
+              // instead of being invited to log in again.
+              <Link to="/app/dashboard">
+                <Button
+                  size="sm"
+                  className="gap-1 bg-primary text-primary-foreground hover:bg-primary/90"
+                >
+                  <LayoutDashboard className="h-4 w-4" />
+                  داشبورد کاربری
+                </Button>
+              </Link>
+            ) : (
+              <>
+                <Link to="/login">
+                  <Button variant="ghost" size="sm">
+                    ورود
+                  </Button>
+                </Link>
+                <Link to="/signup">
+                  <Button
+                    size="sm"
+                    className="bg-primary text-primary-foreground hover:bg-primary/90"
+                  >
+                    ثبت‌نام رایگان
+                  </Button>
+                </Link>
+              </>
+            )}
           </div>
         </div>
       </header>
@@ -190,12 +247,12 @@ function Landing() {
               مربی شخصی عملکرد شما را تحلیل کرده و مسیر رشد را نشان می‌دهد.
             </p>
             <div className="mt-8 flex flex-wrap justify-center gap-3">
-              <Link to="/signup">
+              <Link to={loggedIn ? "/app/dashboard" : "/signup"}>
                 <Button
                   size="lg"
                   className="h-12 bg-primary px-6 text-primary-foreground shadow-[var(--shadow-glow)] hover:bg-primary/90"
                 >
-                  شروع رایگان
+                  {loggedIn ? "رفتن به داشبورد" : "شروع رایگان"}
                   <ArrowLeft className="mr-1 h-4 w-4" />
                 </Button>
               </Link>
@@ -555,15 +612,19 @@ function Landing() {
             آماده تبدیل شدن به یک معامله‌گر منظم هستید؟
           </h2>
           <p className="mx-auto mt-4 max-w-xl text-muted-foreground">
-            همین امروز رایگان ثبت‌نام کنید و اولین گزارش هوشمند خود را دریافت
-            کنید.
+            {loggedIn
+              ? "حساب شما آماده است — هر وقت خواستی به ژورنال و گزارش‌هایت برگرد."
+              : "همین امروز رایگان ثبت‌نام کنید و اولین گزارش هوشمند خود را دریافت کنید."}
           </p>
-          <Link to="/signup" className="mt-8 inline-block">
+          <Link
+            to={loggedIn ? "/app/dashboard" : "/signup"}
+            className="mt-8 inline-block"
+          >
             <Button
               size="lg"
               className="h-12 bg-primary px-8 text-primary-foreground shadow-[var(--shadow-glow)] hover:bg-primary/90"
             >
-              شروع رایگان
+              {loggedIn ? "داشبورد کاربری" : "شروع رایگان"}
               <ArrowLeft className="mr-2 h-4 w-4" />
             </Button>
           </Link>

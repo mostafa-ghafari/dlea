@@ -30,13 +30,15 @@ function ForgotPasswordPage() {
   // Step 3: new password
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [countdown, setCountdown] = useState(0);
 
-  // ─── Step 1: Send verification code ──────────────────────────────
-  async function handleSendCode(e: React.FormEvent) {
-    e.preventDefault();
+  /** Ask the server for a code. Shared by the first send and the resend, so
+   *  both paths report failures the same way (the resend used to swallow them,
+   *  leaving the button apparently dead). */
+  async function sendCode(): Promise<boolean> {
     if (!email.trim()) {
       toast.error("ایمیل الزامی است");
-      return;
+      return false;
     }
     setLoading(true);
     try {
@@ -45,18 +47,52 @@ function ForgotPasswordPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email: email.trim() }),
       });
-      const data = await res.json();
+      const data = (await res.json().catch(() => ({}))) as { error?: string };
       if (!res.ok) {
         toast.error(data.error || "ارسال کد تایید ناموفق بود");
-        setLoading(false);
-        return;
+        return false;
       }
-      toast.success("کد تایید به ایمیل شما ارسال شد");
-      setStep("code");
+      return true;
     } catch {
       toast.error("خطا در اتصال به سرور");
+      return false;
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
+  }
+
+  function startCountdown() {
+    setCountdown(60);
+    const iv = setInterval(() => {
+      setCountdown((c) => {
+        if (c <= 1) {
+          clearInterval(iv);
+          return 0;
+        }
+        return c - 1;
+      });
+    }, 1000);
+  }
+
+  // ─── Step 1: Send verification code ──────────────────────────────
+  async function handleSendCode(e: React.FormEvent) {
+    e.preventDefault();
+    if (await sendCode()) {
+      toast.success("کد تایید به ایمیل شما ارسال شد");
+      setStep("code");
+      startCountdown();
+    }
+  }
+
+  async function resendCode() {
+    if (countdown > 0) return;
+    // A fresh code invalidates the previous one, so clear the boxes: keeping a
+    // half-typed old code on screen is how "the new code doesn't work" happens.
+    setCode(["", "", "", "", "", ""]);
+    if (await sendCode()) {
+      toast.success("کد جدید ارسال شد");
+      startCountdown();
+    }
   }
 
   // ─── Step 2: Verify code ────────────────────────────────────────
@@ -74,7 +110,7 @@ function ForgotPasswordPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email: email.trim(), code: fullCode }),
       });
-      const data = await res.json();
+      const data = (await res.json().catch(() => ({}))) as { error?: string };
       if (!res.ok) {
         toast.error(data.error || "کد تایید نادرست است");
         setLoading(false);
@@ -110,7 +146,7 @@ function ForgotPasswordPage() {
           password: newPassword,
         }),
       });
-      const data = await res.json();
+      const data = (await res.json().catch(() => ({}))) as { error?: string };
       if (!res.ok) {
         toast.error(data.error || "تغییر رمز عبور ناموفق بود");
         setLoading(false);
@@ -288,18 +324,28 @@ function ForgotPasswordPage() {
                 )}
                 تایید کد
               </Button>
-              <button
-                type="button"
-                className="w-full text-center text-xs text-muted-foreground hover:text-primary"
-                onClick={() => {
-                  setCode(["", "", "", "", "", ""]);
-                  handleSendCode(
-                    new Event("submit") as unknown as React.FormEvent,
-                  );
-                }}
-              >
-                ارسال مجدد کد
-              </button>
+              <div className="flex items-center justify-between text-xs">
+                <button
+                  type="button"
+                  disabled={countdown > 0 || loading}
+                  onClick={() => void resendCode()}
+                  className="text-primary hover:underline disabled:cursor-not-allowed disabled:opacity-60 disabled:no-underline"
+                >
+                  {countdown > 0
+                    ? `ارسال مجدد تا ${countdown} ثانیه دیگر`
+                    : "ارسال مجدد کد"}
+                </button>
+                <button
+                  type="button"
+                  className="text-muted-foreground hover:text-foreground"
+                  onClick={() => {
+                    setCode(["", "", "", "", "", ""]);
+                    setStep("email");
+                  }}
+                >
+                  تغییر ایمیل
+                </button>
+              </div>
             </form>
           )}
 

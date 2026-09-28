@@ -80,6 +80,62 @@ def _destination_name(conn, user):
     return portfolio.name if portfolio else None
 
 
+# Reasons a connection can be cut: `portfolio_switch` is set by the server when
+# the active portfolio changes, `manual` when the trader disconnects by hand.
+REASON_PORTFOLIO_SWITCH = "portfolio_switch"
+REASON_MANUAL = "manual"
+
+
+def current_mt_destination(user):
+    """The live connection and where its pushes would land *right now*.
+
+    Callers capture this before they move the active portfolio: the resolution
+    order prefers "follow the active portfolio", so asking afterwards would
+    always answer with the portfolio that just became active.
+    """
+    if user is None or not getattr(user, "is_authenticated", False):
+        return None, None
+    conn = MTConnection.objects.filter(user=user).first()
+    if conn is None or conn.disconnected:
+        return None, None
+    return conn, _destination_portfolio(conn, user=user)
+
+
+def cut_mt_link_if_destination_changed(conn, destination, portfolio):
+    """Cut the MT link when the active portfolio moves to a different account.
+
+    One token covers every portfolio of a user, so a running EA would keep
+    pushing trades that suddenly belong to whichever portfolio happens to be
+    active. Rather than let that happen, the connection is marked disconnected:
+    the EA's pushes are rejected and the trader has to reconnect on the
+    settings page, where that connect re-points the sync at the portfolio that
+    is active now.
+
+    `destination` is what `current_mt_destination` reported *before* the
+    switch. Returns True when a live connection was cut, so the caller can tell
+    the trader what happened. No-ops when the destination already is the
+    portfolio becoming active — re-activating the current one cuts nothing.
+    """
+    if conn is None:
+        return False
+    if destination is not None and destination.pk == portfolio.pk:
+        return False
+    conn.disconnected = True
+    conn.disconnect_reason = REASON_PORTFOLIO_SWITCH
+    # Reconnecting uses "follow the active portfolio", which is the portfolio
+    # being activated right now.
+    conn.portfolio = None
+    conn.save(
+        update_fields=[
+            "disconnected",
+            "disconnect_reason",
+            "portfolio",
+            "updated_at",
+        ]
+    )
+    return True
+
+
 def _log_webhook_problem(payload):
     """Persist why a push was rejected so silent losses stay diagnosable.
 
@@ -186,6 +242,10 @@ class MtConnectView(APIView):
         elif "portfolioId" in body:
             conn.portfolio = None
 
+        # Connecting is an explicit act, so it always revives the link — even
+        # when the server (or the trader) had cut it.
+        conn.disconnected = False
+        conn.disconnect_reason = ""
         conn.save()
 
         webhook_url = _webhook_url(request)
@@ -203,6 +263,39 @@ class MtConnectView(APIView):
         })
 
 
+class MtDisconnectView(APIView):
+    """Cut the EA link on the trader's behalf.
+
+    The token itself is kept, so reconnecting from the settings page restores
+    the very same EA configuration — only the *permission* to push is revoked.
+    """
+
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        conn = MTConnection.objects.filter(user=request.user).first()
+        if conn is not None and not conn.disconnected:
+            conn.disconnected = True
+            conn.disconnect_reason = REASON_MANUAL
+            conn.portfolio = None
+            conn.save(
+                update_fields=[
+                    "disconnected",
+                    "disconnect_reason",
+                    "portfolio",
+                    "updated_at",
+                ]
+            )
+        return Response(
+            {
+                "connected": False,
+                "disconnected": True,
+                "disconnectReason": REASON_MANUAL,
+            }
+        )
+
+
 class MtStatusView(APIView):
     """Return the saved connection (for GET on the settings page)."""
 
@@ -214,7 +307,9 @@ class MtStatusView(APIView):
         if not conn:
             return Response({"connected": False})
         return Response({
-            "connected": True,
+            "connected": not conn.disconnected,
+            "disconnected": conn.disconnected,
+            "disconnectReason": conn.disconnect_reason,
             "token": conn.token,
             "webhookUrl": _webhook_url(request),
             "account": conn.account,
@@ -247,6 +342,17 @@ def trades_webhook(request):
     conn = MTConnection.objects.filter(token=token).select_related("user").first()
     if not conn:
         return JsonResponse({"error": "توکن نامعتبر است — از تنظیمات متاتریدر توکن جدید بگیرید"}, status=401)
+    if conn.disconnected:
+        # The link was cut (the active portfolio changed, or the trader
+        # disconnected). Saying so beats a generic auth error: the EA's log then
+        # tells the trader exactly what to do.
+        return JsonResponse(
+            {
+                "error": "اتصال متاتریدر قطع شده است — از تنظیمات دوباره وصل کن",
+                "reason": conn.disconnect_reason,
+            },
+            status=401,
+        )
 
     items = body.get("trades")
     if not isinstance(items, list) or not items:

@@ -17,6 +17,11 @@ PERIOD_DAYS = {"day": 1, "week": 7, "month": 30}
 PERIOD_LABELS = {"day": "روزانه", "week": "هفتگی", "month": "ماهانه"}
 UNLIMITED = -1
 
+# Absolute ceiling on screenshots per trade / journal entry. A plan may allow
+# fewer (free allows two), never more: the uploader in the UI stops at the same
+# number, so what the form accepts and what the API stores cannot drift.
+MAX_IMAGES_PER_ENTRY = 3
+
 
 def _match(plans, value):
     """Find a plan by slug or name (case/space insensitive)."""
@@ -107,8 +112,16 @@ def ai_quota_for_user(user):
 
 
 def max_images_for_user(user):
-    """How many screenshots a trade/journal entry may hold (-1 = unlimited)."""
+    """How many screenshots a trade/journal entry may hold.
+
+    Returns the plan's own cap when it is lower than `MAX_IMAGES_PER_ENTRY`,
+    otherwise the cap. Never `UNLIMITED` — an unlimited plan still stops at
+    three, which is the number the UI enforces too.
+    """
     plan = resolve_plan(user)
     if plan is None:
-        return UNLIMITED
-    return plan.max_images_per_entry
+        return MAX_IMAGES_PER_ENTRY
+    limit = plan.max_images_per_entry
+    if limit < 0:
+        return MAX_IMAGES_PER_ENTRY
+    return min(limit, MAX_IMAGES_PER_ENTRY)

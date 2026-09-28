@@ -8,6 +8,15 @@ const ACCEPT = "image/jpeg,image/png,image/heic,image/heif,.heic,.heif";
 const TARGET_BYTES = 200 * 1024; // ~200KB after server-side optimisation
 
 /**
+ * Hard ceiling on screenshots per trade / journal entry.
+ *
+ * The plan's own cap (`maxImages`) can be lower — a free account gets fewer —
+ * but it can never be higher, so an unlimited plan still stops at three and
+ * the server enforces the same number (`plan_limits.max_images_for_user`).
+ */
+export const MAX_IMAGES_PER_ENTRY = 3;
+
+/**
  * Screenshot uploader (chart / MT report history).
  * Accepts HEIC, JPG, PNG with no client-side size cap; images are
  * downscaled to roughly 200KB (this mirrors the server-side optimisation).
@@ -79,12 +88,16 @@ export function ImageUploader({
 
     // The cap is part of the plan, so stop before doing the (expensive) image
     // work and tell the user why.
-    const room = maxImages < 0 ? Infinity : maxImages - images.length;
+    const cap =
+      maxImages < 0
+        ? MAX_IMAGES_PER_ENTRY
+        : Math.min(maxImages, MAX_IMAGES_PER_ENTRY);
+    const room = cap - images.length;
     if (room <= 0) {
       toast.error(
         maxImages <= 0
           ? "پلن فعلی اجازه آپلود تصویر ندارد. برای فعال شدن، پلن را ارتقا بده."
-          : `سقف ${maxImages} تصویر پلن فعلی پر شده است. برای تصاویر بیشتر پلن را ارتقا بده.`,
+          : `سقف ${cap} تصویر پر شده است — هر معامله حداکثر ${MAX_IMAGES_PER_ENTRY} اسکرین‌شات می‌پذیرد.`,
       );
       return;
     }
@@ -98,7 +111,7 @@ export function ImageUploader({
     onChange([...images, ...results]);
     if (accepted.length < picked.length) {
       toast.warning(
-        `فقط ${accepted.length} تصویر اضافه شد — سقف پلن ${maxImages} تصویر برای هر معامله است.`,
+        `فقط ${accepted.length} تصویر اضافه شد — سقف ${cap} تصویر برای هر معامله است.`,
       );
     } else {
       toast.success(

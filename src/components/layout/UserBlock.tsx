@@ -65,13 +65,15 @@ export function UserBlock({ compact = false }: { compact?: boolean }) {
             </AvatarFallback>
           </Avatar>
           <div className="min-w-0 flex-1">
+            {/* Exactly two lines, never three: both are single-line and long
+                text is ellipsized instead of wrapping the sidebar footer. */}
             <div className="truncate text-sm font-medium">{name}</div>
-            <div className="mt-0.5 flex flex-wrap items-center gap-1">
+            <div className="mt-0.5 flex flex-nowrap items-center gap-1 overflow-hidden">
               {planName && (
                 <Badge
                   variant="outline"
                   className={cn(
-                    "h-4 px-1.5 text-[10px]",
+                    "h-4 max-w-full shrink-0 truncate px-1.5 text-[10px]",
                     subscription
                       ? "border-primary/40 bg-primary/10 text-primary"
                       : "border-border bg-secondary/60 text-muted-foreground",
@@ -83,7 +85,7 @@ export function UserBlock({ compact = false }: { compact?: boolean }) {
               <Badge
                 variant="outline"
                 className={cn(
-                  "h-4 border-accent/40 bg-accent/10 px-1.5 text-[10px] text-accent",
+                  "h-4 shrink-0 border-accent/40 bg-accent/10 px-1.5 text-[10px] text-accent",
                   isAdmin && "border-primary/40 bg-primary/10 text-primary",
                 )}
               >
@@ -92,7 +94,7 @@ export function UserBlock({ compact = false }: { compact?: boolean }) {
               {!isAdmin && subscription && (
                 <Badge
                   variant="outline"
-                  className="h-4 border-border bg-secondary/60 px-1.5 text-[10px] text-muted-foreground tabular"
+                  className="h-4 shrink-0 border-border bg-secondary/60 px-1.5 text-[10px] text-muted-foreground tabular"
                 >
                   {daysLeft} روز
                 </Badge>

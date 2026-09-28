@@ -60,6 +60,22 @@ const formatMoney = (n: number) => {
   );
 };
 
+/** Recharts paints its tooltip in its own portal with inline colors, so the
+ *  hardcoded dark hexes it shipped with stayed dark in the light theme and the
+ *  value text was barely readable. Drive it (and the grid/axes) from the same
+ *  theme tokens as the rest of the card so both themes stay legible. */
+const chartTooltipStyle = {
+  background: "var(--color-popover)",
+  border: "1px solid var(--color-border)",
+  borderRadius: 8,
+  padding: "6px 10px",
+  fontSize: 12,
+  color: "var(--color-popover-foreground)",
+} as const;
+const chartTooltipTextStyle = {
+  color: "var(--color-popover-foreground)",
+} as const;
+
 function DashboardPage() {
   const { news } = usePlatform();
   const limits = usePlanLimits();
@@ -240,18 +256,18 @@ function DashboardPage() {
                 </defs>
                 <CartesianGrid
                   strokeDasharray="3 3"
-                  stroke="oklch(0.28 0.02 255)"
+                  stroke="var(--color-border)"
                   vertical={false}
                 />
                 <XAxis
                   dataKey="day"
-                  stroke="oklch(0.68 0.02 255)"
+                  stroke="var(--color-muted-foreground)"
                   fontSize={11}
                   tickLine={false}
                   axisLine={false}
                 />
                 <YAxis
-                  stroke="oklch(0.68 0.02 255)"
+                  stroke="var(--color-muted-foreground)"
                   fontSize={11}
                   tickLine={false}
                   axisLine={false}
@@ -259,11 +275,9 @@ function DashboardPage() {
                   padding={{ top: 10, bottom: 10 }}
                 />
                 <Tooltip
-                  contentStyle={{
-                    background: "oklch(0.185 0.022 255)",
-                    border: "1px solid oklch(0.28 0.02 255)",
-                    borderRadius: 8,
-                  }}
+                  contentStyle={chartTooltipStyle}
+                  labelStyle={chartTooltipTextStyle}
+                  itemStyle={chartTooltipTextStyle}
                 />
                 <Area
                   type="monotone"
@@ -305,11 +319,9 @@ function DashboardPage() {
                   ))}
                 </Pie>
                 <Tooltip
-                  contentStyle={{
-                    background: "oklch(0.185 0.022 255)",
-                    border: "1px solid oklch(0.28 0.02 255)",
-                    borderRadius: 8,
-                  }}
+                  contentStyle={chartTooltipStyle}
+                  labelStyle={chartTooltipTextStyle}
+                  itemStyle={chartTooltipTextStyle}
                 />
               </PieChart>
             </ResponsiveContainer>
@@ -344,29 +356,27 @@ function DashboardPage() {
               >
                 <CartesianGrid
                   strokeDasharray="3 3"
-                  stroke="oklch(0.28 0.02 255)"
+                  stroke="var(--color-border)"
                   vertical={false}
                 />
                 <XAxis
                   dataKey="month"
-                  stroke="oklch(0.68 0.02 255)"
+                  stroke="var(--color-muted-foreground)"
                   fontSize={11}
                   tickLine={false}
                   axisLine={false}
                 />
                 <YAxis
-                  stroke="oklch(0.68 0.02 255)"
+                  stroke="var(--color-muted-foreground)"
                   fontSize={11}
                   tickLine={false}
                   axisLine={false}
                   width={55}
                 />
                 <Tooltip
-                  contentStyle={{
-                    background: "oklch(0.185 0.022 255)",
-                    border: "1px solid oklch(0.28 0.02 255)",
-                    borderRadius: 8,
-                  }}
+                  contentStyle={chartTooltipStyle}
+                  labelStyle={chartTooltipTextStyle}
+                  itemStyle={chartTooltipTextStyle}
                 />
                 <Bar dataKey="pnl" radius={[6, 6, 0, 0]}>
                   {monthlyPerformance.map((e, i) => (

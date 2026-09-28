@@ -13,6 +13,7 @@ import {
   Folder,
   Trash2,
   Check,
+  Maximize2,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -40,6 +41,7 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { RichTextEditor, RichTextView } from "@/components/RichTextEditor";
 import { ImageUploader } from "@/components/ImageUploader";
+import { ImageLightbox } from "@/components/ImageLightbox";
 import {
   createJournalEntry,
   createJournalGroup,
@@ -140,6 +142,12 @@ function JournalPage() {
   const [groupNameDraft, setGroupNameDraft] = useState("");
 
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
+  // Card screenshots open in the same zoomable slider the trade details page
+  // uses, so a chart is readable without leaving the journal list.
+  const [lightbox, setLightbox] = useState<{
+    images: string[];
+    index: number;
+  } | null>(null);
 
   const [filterOpen, setFilterOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -936,15 +944,36 @@ function JournalPage() {
                 </div>
 
                 {hasImages && (
-                  <div className="grid grid-cols-2 gap-2 self-start">
+                  <div
+                    className={`grid gap-3 self-start ${
+                      j.images.length === 1 ? "grid-cols-1" : "grid-cols-2"
+                    }`}
+                  >
                     {j.images.map((src, i) => (
-                      <img
+                      <button
                         key={i}
-                        src={src}
-                        alt={`اسکرین‌شات ژورنال ${j.title} شماره ${i + 1}`}
-                        loading="lazy"
-                        className="h-40 w-full rounded-lg border border-border object-cover"
-                      />
+                        type="button"
+                        onClick={() =>
+                          setLightbox({ images: j.images, index: i })
+                        }
+                        aria-label={`بزرگ‌نمایی اسکرین‌شات ${i + 1}`}
+                        className="group relative overflow-hidden rounded-xl border border-border bg-secondary/30"
+                      >
+                        <img
+                          src={src}
+                          alt={`اسکرین‌شات ژورنال ${j.title} شماره ${i + 1}`}
+                          loading="lazy"
+                          className={`w-full object-cover transition-transform duration-300 group-hover:scale-[1.03] ${
+                            j.images.length === 1
+                              ? "h-64 sm:h-80"
+                              : "h-44 sm:h-56"
+                          }`}
+                        />
+                        <span className="pointer-events-none absolute inset-x-0 bottom-0 flex items-center justify-center gap-1 bg-gradient-to-t from-black/70 to-transparent p-2 text-[11px] text-white opacity-0 transition-opacity group-hover:opacity-100">
+                          <Maximize2 className="h-3.5 w-3.5" />
+                          بزرگ‌نمایی
+                        </span>
+                      </button>
                     ))}
                   </div>
                 )}
@@ -977,6 +1006,14 @@ function JournalPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {lightbox && (
+        <ImageLightbox
+          images={lightbox.images}
+          initialIndex={lightbox.index}
+          onClose={() => setLightbox(null)}
+        />
+      )}
     </AppShell>
   );
 }

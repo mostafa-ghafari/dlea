@@ -313,7 +313,13 @@ export type DashboardPayload = {
   maxDrawdown: number;
 };
 
-export type AiCoachModel = { id: string; name: string; desc: string };
+export type AiCoachModel = {
+  id: string;
+  name: string;
+  desc: string;
+  /** The model the coach page preselects (the light/fast one). */
+  default?: boolean;
+};
 
 export type AiInsights = {
   scores: { label: string; value: number }[];
@@ -511,8 +517,51 @@ export const fetchDashboard = (portfolioId?: string) =>
 export const fetchTrades = (portfolioId?: string) =>
   get<Trade[]>(portfolioId ? `trades/?portfolio=${portfolioId}` : "trades/");
 export const fetchPortfolios = () => get<Portfolio[]>("portfolios/");
+/** State of the MetaTrader link, as the settings/import pages render it.
+ *
+ * `connected` is false once the link is cut — either by the trader or by the
+ * server when the active portfolio changed (`disconnectReason`). The token and
+ * the saved account details stay, so reconnecting restores the same EA
+ * configuration. */
+export type MtStatus = {
+  connected: boolean;
+  disconnected?: boolean;
+  /** "portfolio_switch" | "manual" | "" */
+  disconnectReason?: string;
+  token?: string;
+  webhookUrl?: string;
+  account?: string;
+  server?: string;
+  broker?: string;
+  platform?: string;
+  portfolioId?: string | null;
+  /** no pinned portfolio → pushes follow whichever portfolio is active */
+  followActivePortfolio?: boolean;
+  /** where the next import will land, as resolved by the server */
+  destination?: string | null;
+};
+
+export type MtConnectInput = {
+  platform: string;
+  broker: string;
+  server: string;
+  account: string;
+  /** A portfolio id, or "active" to follow the active portfolio. */
+  portfolioId: string;
+};
+
+export const fetchMtStatus = () => get<MtStatus>("mt/status/");
+export const connectMt = (input: MtConnectInput) =>
+  post<MtStatus>("mt/connect/", input);
+export const disconnectMt = () => post<MtStatus>("mt/disconnect/", {});
+
+/** Activating a portfolio also severs any MetaTrader link that pointed at a
+ *  different one — `mtDisconnected` reports whether that happened. */
 export const activatePortfolio = (id: string) =>
-  post<Portfolio>(`portfolios/${id}/activate/`, {});
+  post<Portfolio & { mtDisconnected?: boolean }>(
+    `portfolios/${id}/activate/`,
+    {},
+  );
 export const fetchJournalGroups = (portfolioId?: string) =>
   get<JournalGroup[]>(
     portfolioId
@@ -1130,7 +1179,7 @@ const PAID_LIMITS: PlanLimits = {
   maxTradesPerMonth: -1,
   aiRequestsLimit: 3,
   aiRequestsPeriod: "week",
-  maxImagesPerEntry: 10,
+  maxImagesPerEntry: 3,
   features: [
     "portfolios",
     "trades",

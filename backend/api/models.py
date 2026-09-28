@@ -298,6 +298,12 @@ class MTConnection(Timestamped):
     account = models.CharField(max_length=32, default="")
     platform = models.CharField(max_length=8, choices=[("mt4", "MT4"), ("mt5", "MT5")], default="mt5")
     token = models.CharField(max_length=64, unique=True)
+    # A single token serves every portfolio of the user, so anything that moves
+    # the *active* portfolio would silently start filing a different account's
+    # trades. Those moves mark the connection disconnected instead; the EA's
+    # pushes are rejected until the trader reconnects on purpose.
+    disconnected = models.BooleanField(default=False)
+    disconnect_reason = models.CharField(max_length=32, blank=True, default="")
 
     def __str__(self):
         return f"{self.user_id} {self.account} ({self.platform})"

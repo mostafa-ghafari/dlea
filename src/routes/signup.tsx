@@ -42,6 +42,9 @@ function SignupPage() {
   const [countdown, setCountdown] = useState(0);
   const [debugOtp, setDebugOtp] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+  // The email is only discovered to be taken on the last step, so offer the
+  // way out instead of leaving the user staring at a code that cannot work.
+  const [emailTaken, setEmailTaken] = useState(false);
 
   // Initialize Google Identity Services
   useEffect(() => {
@@ -71,16 +74,21 @@ function SignupPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ credential: response.credential }),
       });
-      const data = await res.json();
+      const data = (await res.json().catch(() => ({}))) as {
+        error?: string;
+        access?: string;
+        refresh?: string;
+        user?: unknown;
+      };
       if (!res.ok) {
         toast.error(data.error || "خطا در ثبت‌نام با گوگل");
         setGoogleLoading(false);
         return;
       }
 
-      localStorage.setItem("dlea:access", data.access);
-      localStorage.setItem("dlea:refresh", data.refresh);
-      localStorage.setItem("dlea:user", JSON.stringify(data.user));
+      localStorage.setItem("dlea:access", data.access ?? "");
+      localStorage.setItem("dlea:refresh", data.refresh ?? "");
+      localStorage.setItem("dlea:user", JSON.stringify(data.user ?? null));
 
       setStep("done");
       toast.success("ثبت‌نام با موفقیت انجام شد");
@@ -135,12 +143,16 @@ function SignupPage() {
           password,
         }),
       });
-      const data = await res.json();
+      const data = (await res.json().catch(() => ({}))) as {
+        error?: string;
+        debug_otp?: string;
+      };
       if (!res.ok) {
         toast.error(data.error || "خطا در ارسال کد");
         setLoading(false);
         return;
       }
+      setEmailTaken(false);
       setDebugOtp(data.debug_otp || "");
       setStep("otp");
       startCountdown();
@@ -169,17 +181,24 @@ function SignupPage() {
           password,
         }),
       });
-      const data = await res.json();
+      const data = (await res.json().catch(() => ({}))) as {
+        error?: string;
+        access?: string;
+        refresh?: string;
+        user?: unknown;
+      };
       if (!res.ok) {
-        toast.error(data.error || "خطا در تأیید کد");
+        const message = data.error || "خطا در تأیید کد";
+        if (message.includes("ثبت شده")) setEmailTaken(true);
+        toast.error(message);
         setLoading(false);
         return;
       }
 
       // Auto-login: save tokens
-      localStorage.setItem("dlea:access", data.access);
-      localStorage.setItem("dlea:refresh", data.refresh);
-      localStorage.setItem("dlea:user", JSON.stringify(data.user));
+      localStorage.setItem("dlea:access", data.access ?? "");
+      localStorage.setItem("dlea:refresh", data.refresh ?? "");
+      localStorage.setItem("dlea:user", JSON.stringify(data.user ?? null));
 
       setStep("done");
       toast.success("ثبت‌نام با موفقیت انجام شد");
@@ -193,22 +212,36 @@ function SignupPage() {
   async function handleResendOtp() {
     if (countdown > 0) return;
     setLoading(true);
+    // A new code replaces the old one, so drop whatever is typed in the boxes.
+    setOtp("");
     try {
       const res = await fetch(`${API_BASE}/auth/send-otp/`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: email.trim() }),
+        body: JSON.stringify({
+          email: email.trim(),
+          firstName: firstName.trim(),
+          lastName: lastName.trim(),
+          password,
+        }),
       });
-      const data = await res.json();
-      if (res.ok) {
-        setDebugOtp(data.debug_otp || "");
-        startCountdown();
-        toast.success(`کد جدید به ${email} ارسال شد`);
+      const data = (await res.json().catch(() => ({}))) as {
+        error?: string;
+        debug_otp?: string;
+      };
+      if (!res.ok) {
+        // Silently ignoring this is how the button looked broken.
+        toast.error(data.error || "ارسال مجدد کد ناموفق بود");
+        return;
       }
+      setDebugOtp(data.debug_otp || "");
+      startCountdown();
+      toast.success(`کد جدید به ${email} ارسال شد`);
     } catch {
-      /* ignore */
+      toast.error("خطا در اتصال به سرور");
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   }
 
   function handleGoogleSignup() {
@@ -399,6 +432,22 @@ function SignupPage() {
                   <span className="font-medium text-foreground">{email}</span>{" "}
                   ارسال شد
                 </p>
+                {emailTaken && (
+                  <div className="mt-4 rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 text-xs leading-relaxed text-amber-600 dark:text-amber-400">
+                    این ایمیل قبلاً ثبت شده است.{" "}
+                    <Link to="/login" className="font-medium underline">
+                      وارد شوید
+                    </Link>{" "}
+                    یا اگر رمز را به خاطر ندارید{" "}
+                    <Link
+                      to="/forgot-password"
+                      className="font-medium underline"
+                    >
+                      رمز عبور را بازیابی کنید
+                    </Link>
+                    .
+                  </div>
+                )}
                 {debugOtp && (
                   <div className="mt-4 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm">
                     <p className="text-amber-600 dark:text-amber-400 font-medium">

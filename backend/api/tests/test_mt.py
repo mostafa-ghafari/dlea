@@ -101,6 +101,117 @@ class MtConnectTests(BaseTestCase):
         self.assertEqual(r.data["account"], "999")
 
 
+class PortfolioSwitchDisconnectTests(BaseTestCase):
+    """Switching the active portfolio must cut the EA link.
+
+    One token covers every portfolio of a user, so leaving the link live would
+    let a running EA keep importing the previous account's trades into the
+    portfolio that just became active. The link is severed instead, and only an
+    explicit reconnect revives it — on the active portfolio.
+    """
+
+    def setUp(self):
+        self.user = self.auth(self.make_user(username="trader"))
+        self.first = self.make_portfolio(user=self.user, name="اول")
+        self.second = self.make_portfolio(user=self.user, name="دوم", is_active=False)
+        self.client.post("/api/mt/connect/", {"account": "123"}, format="json")
+
+    def _conn(self):
+        return MTConnection.objects.get(user=self.user)
+
+    def test_activating_another_portfolio_cuts_the_link(self):
+        r = self.client.post(f"/api/portfolios/{self.second.pk}/activate/", format="json")
+
+        self.assertEqual(r.status_code, 200)
+        self.assertTrue(r.data["mtDisconnected"])
+        conn = self._conn()
+        self.assertTrue(conn.disconnected)
+        self.assertEqual(conn.disconnect_reason, "portfolio_switch")
+        self.assertIsNone(conn.portfolio)
+        status = self.client.get("/api/mt/status/").data
+        self.assertFalse(status["connected"])
+        self.assertEqual(status["disconnectReason"], "portfolio_switch")
+
+    def test_a_disconnected_link_rejects_ea_pushes(self):
+        self.client.post(f"/api/portfolios/{self.second.pk}/activate/", format="json")
+
+        r = self.client.post(
+            "/api/trades/webhook/",
+            {"token": self._conn().token, "trades": [{"ticket": "1"}]},
+            format="json",
+        )
+
+        self.assertEqual(r.status_code, 401)
+        self.assertIn("قطع شده", r.json()["error"])
+
+    def test_reactivating_the_same_portfolio_keeps_the_link(self):
+        r = self.client.post(f"/api/portfolios/{self.first.pk}/activate/", format="json")
+
+        self.assertFalse(r.data["mtDisconnected"])
+        self.assertFalse(self._conn().disconnected)
+
+    def test_reconnecting_revives_the_link_on_the_active_portfolio(self):
+        self.client.post(f"/api/portfolios/{self.second.pk}/activate/", format="json")
+
+        r = self.client.post("/api/mt/connect/", {"account": "123"}, format="json")
+
+        self.assertTrue(r.data["connected"])
+        self.assertEqual(r.data["destination"], self.second.name)
+        self.assertFalse(self._conn().disconnected)
+        push = self.client.post(
+            "/api/trades/webhook/",
+            {
+                "token": self._conn().token,
+                "trades": [
+                    {
+                        "ticket": "777",
+                        "symbol": "EURUSD",
+                        "side": "buy",
+                        "entry": "1.1000",
+                        "exit": "1.1050",
+                        "volume": "1.00",
+                        "pnl": "50.00",
+                        "rr": "1.00",
+                        "open_time": "2026.08.19 08:00",
+                        "close_time": "2026.08.19 09:00",
+                    }
+                ],
+            },
+            format="json",
+        )
+        self.assertEqual(push.json()["created"], 1)
+        self.assertEqual(Trade.objects.get(ticket="777").portfolio_id, self.second.pk)
+
+    def test_creating_an_active_portfolio_also_cuts_the_link(self):
+        r = self.client.post(
+            "/api/portfolios/",
+            self.portfolio_payload(name="سوم", is_active=True),
+            format="json",
+        )
+
+        self.assertEqual(r.status_code, 201)
+        self.assertTrue(self._conn().disconnected)
+
+    def test_manual_disconnect_stops_the_ea(self):
+        r = self.client.post("/api/mt/disconnect/", {}, format="json")
+
+        self.assertEqual(r.status_code, 200)
+        self.assertFalse(r.data["connected"])
+        conn = self._conn()
+        self.assertEqual(conn.disconnect_reason, "manual")
+        push = self.client.post(
+            "/api/trades/webhook/",
+            {"token": conn.token, "trades": [{"ticket": "1"}]},
+            format="json",
+        )
+        self.assertEqual(push.status_code, 401)
+
+    def test_disconnect_requires_authentication(self):
+        self.client.force_authenticate(None)
+        r = self.client.post("/api/mt/disconnect/", {}, format="json")
+        self.assertEqual(r.status_code, 401)
+
+
 class WebhookTests(BaseTestCase):
     def setUp(self):
         self.user = self.make_user(username="trader")

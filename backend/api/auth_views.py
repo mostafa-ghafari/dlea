@@ -1,5 +1,6 @@
 """Authentication views: signup, login, OTP, Google callback."""
 
+import hmac
 import json
 import random
 import string
@@ -17,9 +18,38 @@ User = get_user_model()
 # OTP timeout: 5 minutes (in seconds)
 OTP_TTL = 300
 
+# Each flow keeps its code under a key of its own. They used to share one key,
+# so asking for a password-reset code invalidated the signup code the user was
+# still holding (and the other way round) — the code in their inbox simply
+# stopped working.
+PURPOSE_REGISTER = "register"
+PURPOSE_RESET = "reset"
+
 
 def _generate_otp(length: int = 6) -> str:
     return "".join(random.choices(string.digits, k=length))
+
+
+def _otp_key(purpose: str, email: str) -> str:
+    return f"otp:{purpose}:{email}"
+
+
+def _store_otp(email: str, otp: str, purpose: str) -> None:
+    """Cache *just* the code.
+
+    The signup body used to be stored alongside it, which put the plaintext
+    password in the cache for five minutes for no reason — verification always
+    re-reads the fields from the request.
+    """
+    cache.set(_otp_key(purpose, email), otp, OTP_TTL)
+
+
+def _otp_matches(email: str, purpose: str, code: str) -> bool:
+    """Constant-time comparison; a missing/expired code never matches."""
+    stored = cache.get(_otp_key(purpose, email))
+    if not isinstance(stored, str) or not code:
+        return False
+    return hmac.compare_digest(stored, code)
 
 
 def _json_body(request):
@@ -41,7 +71,7 @@ def send_otp(request):
 
     email = body["email"].strip().lower()
     otp = _generate_otp()
-    cache.set(f"otp:{email}", {"otp": otp, "data": body}, OTP_TTL)
+    _store_otp(email, otp, PURPOSE_REGISTER)
 
     # In production: send email via SMTP
     # In dev: prints to console (EMAIL_BACKEND=console)
@@ -85,8 +115,7 @@ def verify_otp_register(request):
     if not all([email, otp, first_name, last_name, password]):
         return JsonResponse({"error": "همه فیلدها الزامی هستند"}, status=400)
 
-    stored = cache.get(f"otp:{email}")
-    if not stored or stored["otp"] != otp:
+    if not _otp_matches(email, PURPOSE_REGISTER, otp):
         return JsonResponse({"error": "کد تأیید نادرست است"}, status=400)
 
     # Check if user already exists
@@ -111,7 +140,7 @@ def verify_otp_register(request):
     )
 
     # Clean up OTP
-    cache.delete(f"otp:{email}")
+    cache.delete(_otp_key(PURPOSE_REGISTER, email))
 
     # Generate JWT tokens
     refresh = RefreshToken.for_user(user)
@@ -187,15 +216,15 @@ def password_reset_request(request):
 
     email = body["email"].strip().lower()
 
-    # Check if user exists (but don't reveal this — same message either way)
-    try:
-        User.objects.get(email=email)
-    except User.DoesNotExist:
+    # Check if user exists (but don't reveal this — same message either way).
+    # `filter().exists()` rather than `get()`: the email column is not unique,
+    # and a second row with the same address turned this into a 500.
+    if not User.objects.filter(email=email).exists():
         # Still return success to prevent email enumeration
         return JsonResponse({"message": f"کد تأیید به {email} ارسال شد"})
 
     otp = _generate_otp()
-    cache.set(f"otp:{email}", {"otp": otp, "type": "password_reset"}, OTP_TTL)
+    _store_otp(email, otp, PURPOSE_RESET)
 
     try:
         from django.core.mail import send_mail
@@ -234,8 +263,7 @@ def password_reset_verify(request):
     if not email or not code:
         return JsonResponse({"error": "ایمیل و کد تایید الزامی است"}, status=400)
 
-    stored = cache.get(f"otp:{email}")
-    if not stored or stored["otp"] != code or stored.get("type") != "password_reset":
+    if not _otp_matches(email, PURPOSE_RESET, code):
         return JsonResponse({"error": "کد تایید نادرست یا منقضی شده است"}, status=400)
 
     return JsonResponse({"message": "کد تایید شد"})
@@ -261,21 +289,22 @@ def password_reset_confirm(request):
     if len(password) < 8:
         return JsonResponse({"error": "رمز عبور باید حداقل ۸ کاراکتر باشد"}, status=400)
 
-    stored = cache.get(f"otp:{email}")
-    if not stored or stored["otp"] != code or stored.get("type") != "password_reset":
+    if not _otp_matches(email, PURPOSE_RESET, code):
         return JsonResponse({"error": "کد تایید نادرست یا منقضی شده است"}, status=400)
 
-    # Find user and update password
-    try:
-        user = User.objects.get(email=email)
-    except User.DoesNotExist:
+    # Find the user and update the password. The email column is not unique, so
+    # refuse when more than one account answers to it instead of resetting the
+    # password of an arbitrary one.
+    matches = User.objects.filter(email=email)
+    if matches.count() != 1:
         return JsonResponse({"error": "کاربری با این ایمیل یافت نشد"}, status=404)
+    user = matches.first()
 
     user.set_password(password)
     user.save()
 
     # Clean up OTP
-    cache.delete(f"otp:{email}")
+    cache.delete(_otp_key(PURPOSE_RESET, email))
 
     return JsonResponse({"message": "رمز عبور با موفقیت تغییر کرد"})
 

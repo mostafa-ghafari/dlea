@@ -51,6 +51,21 @@ export function getCurrentUser(): CurrentUser | null {
   }
 }
 
+/**
+ * Is there an access token to send?
+ *
+ * Only a routing hint — the API still rejects an expired token. Deliberately
+ * *not* SSR-safe: callers must guard `typeof window`, because the app renders
+ * on the server too.
+ */
+export function hasAuthToken(): boolean {
+  try {
+    return Boolean(window.localStorage.getItem("dlea:access"));
+  } catch {
+    return false;
+  }
+}
+
 export function useCurrentUser(): CurrentUser | null {
   const [user, setUser] = useState<CurrentUser | null>(null);
   useEffect(() => {

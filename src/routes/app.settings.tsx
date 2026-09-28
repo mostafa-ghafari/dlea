@@ -12,6 +12,7 @@ import {
   Download,
   Loader2,
   Camera,
+  Link2Off,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -30,14 +31,15 @@ import {
 import { toast } from "sonner";
 import { fullName, useCurrentUser } from "@/lib/app-state";
 import {
+  connectMt,
+  disconnectMt,
+  fetchMtStatus,
   fetchProfile,
-  get,
-  post,
   updateProfile,
   usePortfolios,
   useSubscription,
 } from "@/lib/api";
-import type { UserProfile } from "@/lib/api";
+import type { MtStatus, UserProfile } from "@/lib/api";
 
 export const Route = createFileRoute("/app/settings")({
   head: () => ({ meta: [{ title: "تنظیمات" }] }),
@@ -50,21 +52,6 @@ export const Route = createFileRoute("/app/settings")({
   }),
   component: SettingsPage,
 });
-
-type MtStatus = {
-  connected: boolean;
-  token?: string;
-  webhookUrl?: string;
-  account?: string;
-  server?: string;
-  broker?: string;
-  platform?: string;
-  portfolioId?: string | null;
-  /** no pinned portfolio → pushes follow whichever portfolio is active */
-  followActivePortfolio?: boolean;
-  /** where the next import will land, as resolved by the server */
-  destination?: string | null;
-};
 
 /** Sentinel for the "follow the active portfolio" destination choice. */
 const FOLLOW_ACTIVE = "active";
@@ -329,14 +316,6 @@ function SettingsPage() {
                 t: "هشدار نزدیک شدن به سقف ریسک",
                 d: "وقتی ۸۰٪ ضرر روزانه رخ داد.",
               },
-              {
-                t: "گزارش هفتگی AI",
-                d: "خلاصه عملکرد هفتگی به ایمیل ارسال شود.",
-              },
-              {
-                t: "رفتار غیرعادی معاملاتی",
-                d: "شناسایی FOMO یا Revenge Trading.",
-              },
             ].map((n, i) => (
               <div
                 key={i}
@@ -346,7 +325,7 @@ function SettingsPage() {
                   <div className="font-medium">{n.t}</div>
                   <div className="text-xs text-muted-foreground">{n.d}</div>
                 </div>
-                <Switch defaultChecked={i < 3} />
+                <Switch defaultChecked />
               </div>
             ))}
           </div>
@@ -372,16 +351,16 @@ function MetaTraderTab({ pinnedPortfolioId }: { pinnedPortfolioId?: string }) {
   const [copied, setCopied] = useState("");
 
   useEffect(() => {
-    get<MtStatus>("mt/status/")
+    fetchMtStatus()
       .then((d) => {
         setMt(d);
-        if (d.connected) {
-          setPlatform(d.platform ?? "mt5");
-          setBroker(d.broker ?? "");
-          setServer(d.server ?? "");
-          setAccount(d.account ?? "");
-          setPortfolioId(d.portfolioId ?? FOLLOW_ACTIVE);
-        }
+        // Prefill even when the link is cut: reconnecting then takes one
+        // click, and the trader does not have to retype the account number.
+        setPlatform(d.platform ?? "mt5");
+        setBroker(d.broker ?? "");
+        setServer(d.server ?? "");
+        setAccount(d.account ?? "");
+        setPortfolioId(d.portfolioId ?? FOLLOW_ACTIVE);
       })
       .catch(() => setMt({ connected: false }))
       .finally(() => setLoading(false));
@@ -394,7 +373,7 @@ function MetaTraderTab({ pinnedPortfolioId }: { pinnedPortfolioId?: string }) {
     }
     setSaving(true);
     try {
-      const data = await post<MtStatus>("mt/connect/", {
+      const data = await connectMt({
         platform,
         broker: broker.trim(),
         server: server.trim(),
@@ -407,6 +386,20 @@ function MetaTraderTab({ pinnedPortfolioId }: { pinnedPortfolioId?: string }) {
       toast.success("اتصال متاتریدر برقرار شد — حالا EA را نصب کن");
     } catch (e) {
       toast.error(String(e instanceof Error ? e.message : "خطا در اتصال"));
+    }
+    setSaving(false);
+  }
+
+  async function handleDisconnect() {
+    setSaving(true);
+    try {
+      await disconnectMt();
+      setMt((prev) => ({ ...prev, connected: false, disconnected: true }));
+      toast.success(
+        "اتصال متاتریدر قطع شد — اکسپرت دیگر معامله‌ای ارسال نمی‌کند",
+      );
+    } catch (e) {
+      toast.error(String(e instanceof Error ? e.message : "خطا در قطع اتصال"));
     }
     setSaving(false);
   }
@@ -439,6 +432,16 @@ function MetaTraderTab({ pinnedPortfolioId }: { pinnedPortfolioId?: string }) {
         <p className="mt-1 text-sm text-muted-foreground">
           معاملات بسته‌شده با نصب یک EA (اکسپرت) به‌صورت خودکار همگام می‌شوند.
         </p>
+        {!connected && mt?.disconnectReason === "portfolio_switch" && (
+          <div className="mt-3 flex items-start gap-2 rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 text-xs leading-relaxed text-amber-600 dark:text-amber-400">
+            <Link2Off className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+            <span>
+              با جابجایی بین پرتفولیوها، اتصال متاتریدر خودکار قطع شد تا معاملات
+              حساب قبلی وارد پرتفولیوی جدید نشود. برای ادامه دوباره «اتصال» را
+              بزن؛ اکسپرت از این پس فقط روی پرتفولیوی فعال کار می‌کند.
+            </span>
+          </div>
+        )}
         {connected && mt?.destination && (
           <p className="mt-2 text-xs text-muted-foreground">
             مقصد فعلی واردات:{" "}
@@ -511,8 +514,8 @@ function MetaTraderTab({ pinnedPortfolioId }: { pinnedPortfolioId?: string }) {
             </Select>
             <p className="text-xs text-muted-foreground">
               {portfolioId === FOLLOW_ACTIVE
-                ? "هر معامله به پرتفولیوی فعال همان لحظه می‌رود؛ با عوض کردن پرتفولیو، واردات هم عوض می‌شود و نیازی به نصب مجدد EA نیست."
-                : "معاملات همیشه در همین پرتفولیو ثبت می‌شوند، حتی اگر پرتفولیوی فعال را عوض کنی."}
+                ? "هر معامله به پرتفولیوی فعال همان لحظه می‌رود. اگر بعداً پرتفولیوی فعال را عوض کنی، اتصال خودکار قطع می‌شود و باید یک‌بار دوباره وصل شوی — نصب مجدد EA لازم نیست."
+                : "معاملات همیشه در همین پرتفولیو ثبت می‌شوند. اگر پرتفولیوی فعال را به حساب دیگری عوض کنی، اتصال خودکار قطع می‌شود تا معاملات دو حساب قاطی نشوند."}
             </p>
             {portfolios.length === 0 && (
               <p className="text-xs text-amber-500">
@@ -542,9 +545,21 @@ function MetaTraderTab({ pinnedPortfolioId }: { pinnedPortfolioId?: string }) {
       {connected ? (
         <div className="space-y-4">
           <div className="card-surface p-6">
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between gap-2">
               <h3 className="font-semibold">اتصال فعال</h3>
-              <Badge className="bg-primary/15 text-primary">فعال</Badge>
+              <div className="flex items-center gap-2">
+                <Badge className="bg-primary/15 text-primary">فعال</Badge>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={saving}
+                  onClick={handleDisconnect}
+                  className="gap-1 border-destructive/40 text-destructive hover:text-destructive"
+                >
+                  <Link2Off className="h-3.5 w-3.5" />
+                  قطع اتصال
+                </Button>
+              </div>
             </div>
             <dl className="mt-4 space-y-2 text-sm">
               <div className="flex justify-between">

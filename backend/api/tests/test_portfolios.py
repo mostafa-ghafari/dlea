@@ -46,6 +46,43 @@ class PortfolioCreateTests(BaseTestCase):
         r = self.client.post("/api/portfolios/999999/activate/")
         self.assertEqual(r.status_code, 404)
 
+    def test_patching_is_active_activates_exactly_one(self):
+        """`is_active` is writable, so a PATCH is an activation too.
+
+        Without the same rules as the `activate` action it would leave two
+        portfolios active — two green cards, and two candidate destinations for
+        the MetaTrader webhook.
+        """
+        first = self.client.post("/api/portfolios/", self.portfolio_payload(name="اول"), format="json")
+        second = self.client.post(
+            "/api/portfolios/", self.portfolio_payload(name="دوم", is_active=False), format="json"
+        )
+
+        r = self.client.patch(
+            f"/api/portfolios/{second.data['id']}/", {"is_active": True}, format="json"
+        )
+
+        self.assertEqual(r.status_code, 200)
+        self.assertTrue(Portfolio.objects.get(pk=second.data["id"]).is_active)
+        self.assertFalse(Portfolio.objects.get(pk=first.data["id"]).is_active)
+
+    def test_editing_does_not_re_activate_the_others(self):
+        """A plain rename must not touch the active flag at all."""
+        first = self.client.post("/api/portfolios/", self.portfolio_payload(name="اول"), format="json")
+        self.client.post(
+            "/api/portfolios/", self.portfolio_payload(name="دوم", is_active=False), format="json"
+        )
+
+        r = self.client.patch(
+            f"/api/portfolios/{first.data['id']}/", {"name": "اولی"}, format="json"
+        )
+
+        self.assertEqual(r.status_code, 200)
+        self.assertTrue(Portfolio.objects.get(pk=first.data["id"]).is_active)
+        self.assertEqual(
+            Portfolio.objects.filter(user=self.user, is_active=True).count(), 1
+        )
+
     def test_computed_balance_pnl_win_rate(self):
         p = self.make_portfolio(user=self.user, initial=1000)
         self.make_trade(p, pnl=100, exit=2100)  # win

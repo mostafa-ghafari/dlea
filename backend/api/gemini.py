@@ -29,10 +29,19 @@ from . import jutils
 DEFAULT_MODEL = "gemini-3.6-flash"
 
 # Gemini models offered in the coach model selector when a key is set.
+#
+# `default: True` marks the model the UI preselects — the light/fast one, so
+# the analysis a trader asks for first comes back quickly and cheaply; the
+# heavier models stay one dropdown away.
 GEMINI_MODELS = [
-    {"id": "gemini-3.6-flash", "name": "Gemini 3.6 Flash", "desc": "پیش‌فرض — سریع و قدرتمند"},
+    {"id": "gemini-3.6-flash", "name": "Gemini 3.6 Flash", "desc": "تحلیل عمیق — کندتر و دقیق‌تر"},
     {"id": "gemini-3.5-flash", "name": "Gemini 3.5 Flash", "desc": "تحلیل سریع و مقرون‌به‌صرفه"},
-    {"id": "gemini-3.1-flash-lite", "name": "Gemini 3.1 Flash Lite", "desc": "سبک و سریع — مناسب گزارشهای کوتاه"},
+    {
+        "id": "gemini-3.1-flash-lite",
+        "name": "Gemini 3.1 Flash Lite",
+        "default": True,
+        "desc": "سبک و سریع — مناسب گزارشهای کوتاه",
+    },
 ]
 
 GEMINI_API_BASE = "https://generativelanguage.googleapis.com/v1beta"
@@ -997,7 +1006,7 @@ def generate_coach_report(
     return report
 
 
-def gemini_models() -> list[dict[str, str]]:
+def gemini_models() -> list[dict]:
     """Model list for the UI: real Gemini models when a key is set, else seeded."""
     if get_api_key():
         return GEMINI_MODELS

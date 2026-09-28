@@ -230,37 +230,41 @@ class ImageCapTests(BaseTestCase):
         r = self.client.post("/api/trades/", self._trade_payload(2), format="json")
         self.assertEqual(r.status_code, 201)
 
-    def test_paid_plan_gets_more_images(self):
+    def _subscribe(self, plan="Pro"):
         from api.models import Subscription
 
         Subscription.objects.create(
             user=self.user,
-            plan="Pro",
+            plan=plan,
             start_date=timezone.localdate(),
             end_date=timezone.localdate() + timedelta(days=30),
             total_days=30,
             days_left=30,
             price="0",
         )
-        r = self.client.post("/api/trades/", self._trade_payload(5), format="json")
-        self.assertEqual(r.status_code, 201)
-        self.assertEqual(len(Trade.objects.get(ticket="123456").screenshots), 5)
 
-    def test_unlimited_plan_has_no_cap(self):
+    def test_paid_plan_reaches_three_images(self):
+        self._subscribe()
+        r = self.client.post("/api/trades/", self._trade_payload(3), format="json")
+        self.assertEqual(r.status_code, 201)
+        self.assertEqual(len(Trade.objects.get(ticket="123456").screenshots), 3)
+
+    def test_paid_plan_is_capped_at_three(self):
+        """A generous plan cap (10) stops at the absolute ceiling of three."""
+        self._subscribe()
+        r = self.client.post("/api/trades/", self._trade_payload(4), format="json")
+        self.assertEqual(r.status_code, 400)
+        self.assertIn("حداکثر 3 تصویر", str(r.data))
+        self.assertEqual(Trade.objects.count(), 0)
+
+    def test_unlimited_plan_is_still_capped_at_three(self):
+        """`-1` (unlimited in the plan editor) must not mean unlimited files."""
         self.pro.max_images_per_entry = -1
         self.pro.save(update_fields=["max_images_per_entry"])
-        from api.models import Subscription
-
-        Subscription.objects.create(
-            user=self.user,
-            plan="Pro",
-            start_date=timezone.localdate(),
-            end_date=timezone.localdate() + timedelta(days=30),
-            total_days=30,
-            days_left=30,
-            price="0",
-        )
-        r = self.client.post("/api/trades/", self._trade_payload(12), format="json")
+        self._subscribe()
+        r = self.client.post("/api/trades/", self._trade_payload(4), format="json")
+        self.assertEqual(r.status_code, 400)
+        r = self.client.post("/api/trades/", self._trade_payload(3), format="json")
         self.assertEqual(r.status_code, 201)
 
     def test_journal_images_follow_the_same_cap(self):
@@ -275,6 +279,13 @@ class ImageCapTests(BaseTestCase):
         self.assertEqual(r.status_code, 400)
         self.assertIn("حداکثر 2 تصویر", str(r.data))
         self.assertEqual(JournalEntry.objects.count(), 0)
+
+    def test_limits_endpoint_reports_the_capped_number(self):
+        """The uploader reads its cap from here, so it must be the real one."""
+        items = self.get_list("/api/plans/limits/")
+        by_slug = {p["slug"]: p["maxImagesPerEntry"] for p in items}
+        self.assertEqual(by_slug["free"], 2)
+        self.assertEqual(by_slug["pro"], 3)
 
 
 class PlanFeatureBackfillTests(BaseTestCase):
