@@ -41,13 +41,15 @@ RESULT_ALREADY_VERIFIED = 201
 SANDBOX_MERCHANT = "zibal"
 
 # What the gateway accepts, in Rial. Probed against the live gateway on
-# 2026-09-15: exactly `1000` and exactly `4_000_000_000` answer result 100,
-# while `999` answers 105 and `4_000_000_001` answers 113. The ceiling used to
-# be 5,000,000,000 here, so an order our own guard called valid was passed to
-# the gateway only to come back as a refusal — `deploy/smoke_payment.py`
-# re-probes these two bounds on every smoke run.
+# 2026-10-07 with the production merchant: exactly `1000` and exactly
+# `1_000_000_000` answer result 100, while `999` answers 105 and
+# `1_000_000_001` answers 113 ("حداکثر مبلغ مجاز برای هر تراکنش در این درگاه
+# 1,000,000,000 ریال است"). The ceiling is per-merchant and used to read
+# 4,000,000,000, so an order our own guard called valid could be passed to the
+# gateway only to come back as a refusal — `deploy/smoke_payment.py` re-probes
+# these two bounds on every smoke run.
 MIN_AMOUNT_RIAL = 1000
-MAX_AMOUNT_RIAL = 4_000_000_000
+MAX_AMOUNT_RIAL = 1_000_000_000
 
 # The gateway's own `message` is authoritative and always preferred; this map
 # only exists so a failed payment reads like Persian prose in our UI when the

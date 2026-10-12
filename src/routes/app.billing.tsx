@@ -10,17 +10,19 @@ import {
   ShieldCheck,
   XCircle,
 } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import {
+  checkCoupon,
   confirmPaymentOrder,
   fetchPaymentOrder,
   invalidateCache,
   startCheckout,
   usePlans,
   useSubscription,
+  type CouponQuote,
   type PaymentOrder,
   type Subscription,
 } from "@/lib/api";
@@ -86,8 +88,33 @@ function useGatewayReturn(): [
   return [result, setResult];
 }
 
+/**
+ * Does `subPlan` name the plan `p`?
+ *
+ * `Subscription.plan` keeps whatever the backend stored at purchase time —
+ * which has drifted between English ("Pro Max", older orders) and the plan's
+ * own Persian display name ("پرو مکس", current catalogue). A raw `===` on the
+ * display name therefore never matched, so the buyer's own card showed
+ * «خرید …» instead of «تمدید اشتراک» (DEV-116). Strip everything but digits
+ * and letters so both spellings match.
+ */
+function samePlan(subPlan: string, p: { id: string; name: string }): boolean {
+  const key = (v: string) =>
+    v
+      .replace(/[\u200c\u200f]/g, "")
+      .replace(/[^\p{L}\p{N}]/gu, "")
+      .toLowerCase();
+  const sub = key(subPlan ?? "");
+  return !!sub && (sub === key(p.name) || sub === key(p.id));
+}
+
 function BillingPage() {
   const [coupon, setCoupon] = useState("");
+  // The code the server accepted (normalised), and what it is worth per plan.
+  // Kept apart from the text in the box so typing does not silently reprice.
+  const [appliedCode, setAppliedCode] = useState("");
+  const [quotes, setQuotes] = useState<Record<string, CouponQuote>>({});
+  const [applying, setApplying] = useState(false);
   const [cycle, setCycle] = useState<"monthly" | "yearly">("monthly");
   const [busyPlan, setBusyPlan] = useState<string | null>(null);
   const [gateway, setGateway] = useGatewayReturn();
@@ -104,7 +131,83 @@ function BillingPage() {
     price: "—",
   };
   const pct = Math.max(0, Math.round((sub.daysLeft / sub.totalDays) * 100));
-  const sellable = plans.filter((p) => p.sellable && p.id !== "free");
+  const sellable = useMemo(
+    () => plans.filter((p) => p.sellable && p.id !== "free"),
+    [plans],
+  );
+
+  // A discount is a share of the amount actually billed, so a monthly quote is
+  // the wrong number for a yearly order: re-ask the server on every cycle
+  // switch rather than scaling the old figure here and drifting from the
+  // amount checkout will really charge.
+  useEffect(() => {
+    if (!appliedCode || plans.length === 0) return;
+    let alive = true;
+    Promise.all(
+      sellable.map((p) =>
+        checkCoupon(p.id, cycle, appliedCode)
+          .then((q) => [p.id, q] as const)
+          .catch(() => null),
+      ),
+    ).then((rows) => {
+      if (!alive) return;
+      const next: Record<string, CouponQuote> = {};
+      for (const row of rows) if (row) next[row[0]] = row[1];
+      setQuotes(next);
+    });
+    return () => {
+      alive = false;
+    };
+  }, [appliedCode, cycle, plans, sellable]);
+
+  async function applyCoupon() {
+    const code = coupon.trim();
+    if (!code) {
+      toast.error("کد تخفیف را وارد کن");
+      return;
+    }
+    if (sellable.length === 0) {
+      toast.error("ابتدا پلنها را بارگذاری کن");
+      return;
+    }
+    setApplying(true);
+    try {
+      const results = await Promise.all(
+        sellable.map((p) =>
+          checkCoupon(p.id, cycle, code)
+            .then((q) => ({ plan: p.id, quote: q }))
+            .catch((e: unknown) => ({ plan: p.id, error: e })),
+        ),
+      );
+      const ok = results.filter((r) => "quote" in r && r.quote) as {
+        plan: string;
+        quote: CouponQuote;
+      }[];
+      if (ok.length === 0) {
+        const first = results[0];
+        toast.error(
+          "error" in first && first.error instanceof Error
+            ? first.error.message
+            : "این کد تخفیف قابل استفاده نیست",
+        );
+        return;
+      }
+      const next: Record<string, CouponQuote> = {};
+      for (const r of ok) next[r.plan] = r.quote;
+      setQuotes(next);
+      setAppliedCode(ok[0].quote.code);
+      setCoupon(ok[0].quote.code);
+      toast.success(`${ok[0].quote.code} اعمال شد`);
+    } finally {
+      setApplying(false);
+    }
+  }
+
+  function clearCoupon() {
+    setAppliedCode("");
+    setQuotes({});
+    setCoupon("");
+  }
 
   // Pull the order behind the redirect so the tracking code and the card the
   // buyer paid with can be shown, not just the status word.
@@ -122,7 +225,7 @@ function BillingPage() {
   async function buy(planId: string) {
     setBusyPlan(planId);
     try {
-      const session = await startCheckout(planId, cycle);
+      const session = await startCheckout(planId, cycle, appliedCode);
       // Full navigation, not a router push: the bank owns the next page.
       window.location.href = session.paymentUrl;
     } catch (e) {
@@ -238,6 +341,17 @@ function BillingPage() {
               <div className="text-muted-foreground">شماره کارت</div>
               <div className="mt-1 tabular">{order?.cardNumber || "—"}</div>
             </div>
+            {order && order.discountRial > 0 && (
+              <div>
+                <div className="text-muted-foreground">تخفیف</div>
+                <div className="mt-1 tabular text-primary">
+                  {(order.discountRial / 10).toLocaleString("fa-IR")} تومان
+                  <span className="mr-1 text-xs text-muted-foreground">
+                    ({order.couponCode})
+                  </span>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -286,18 +400,39 @@ function BillingPage() {
               onChange={(e) => setCoupon(e.target.value)}
               placeholder="کد را وارد کنید"
               className="bg-secondary/60"
+              disabled={applying}
             />
-            <Button
-              variant="outline"
-              onClick={() =>
-                coupon.trim()
-                  ? toast.success("کد تخفیف اعمال شد")
-                  : toast.error("کد تخفیف را وارد کن")
-              }
-            >
-              اعمال
-            </Button>
+            {appliedCode ? (
+              <Button variant="outline" onClick={clearCoupon}>
+                حذف
+              </Button>
+            ) : (
+              <Button
+                variant="outline"
+                disabled={applying}
+                onClick={applyCoupon}
+              >
+                {applying ? (
+                  <Loader2 className="ml-1 h-4 w-4 animate-spin" />
+                ) : null}
+                اعمال
+              </Button>
+            )}
           </div>
+          {appliedCode && Object.keys(quotes).length > 0 && (
+            <div className="mt-3 space-y-1 text-xs text-primary">
+              <div className="flex items-center gap-1">
+                <BadgeCheck className="h-3 w-3" />
+                کد {appliedCode} فعال است
+                {quotes[sellable[0]?.id]?.percent
+                  ? ` — ${quotes[sellable[0].id].percent}% تخفیف`
+                  : ""}
+              </div>
+              <div className="text-muted-foreground">
+                مبلغ نهایی هر پلن روی کارت همان پلن بهروز شد.
+              </div>
+            </div>
+          )}
           <div className="mt-4 flex items-start gap-2 rounded-lg bg-primary/10 p-3 text-sm text-primary">
             <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0" />
             پرداخت امن با تمام کارت‌های عضو شتاب، از طریق درگاه زیبال
@@ -347,8 +482,24 @@ function BillingPage() {
             </div>
             <p className="mt-1 text-xs text-muted-foreground">{p.tagline}</p>
             <div className="mt-4 flex items-baseline gap-1">
-              <span className="text-2xl font-bold tabular">{p.price}</span>
-              <span className="text-xs text-muted-foreground">{p.unit}</span>
+              {quotes[p.id] ? (
+                <>
+                  <span className="text-2xl font-bold tabular text-primary">
+                    {quotes[p.id].totalToman.toLocaleString("fa-IR")}
+                  </span>
+                  <span className="text-xs text-muted-foreground">تومان</span>
+                  <span className="mr-2 text-xs text-muted-foreground line-through tabular">
+                    {quotes[p.id].listToman.toLocaleString("fa-IR")}
+                  </span>
+                </>
+              ) : (
+                <>
+                  <span className="text-2xl font-bold tabular">{p.price}</span>
+                  <span className="text-xs text-muted-foreground">
+                    {p.unit}
+                  </span>
+                </>
+              )}
             </div>
             <ul className="mt-4 flex-1 space-y-2 text-sm">
               {p.features.map((f) => (
@@ -370,7 +521,7 @@ function BillingPage() {
               )}
               {busyPlan === p.id
                 ? "در حال انتقال به درگاه…"
-                : sub.plan === p.name
+                : samePlan(sub.plan, p)
                   ? "تمدید اشتراک"
                   : `خرید ${p.name}`}
             </Button>

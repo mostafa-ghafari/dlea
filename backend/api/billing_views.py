@@ -8,9 +8,12 @@ Three steps, mirroring how the old dlea.ir store did it with WooCommerce:
    word is never trusted: the payment is only settled after `verify`.
 3. `order`     lets the page show the outcome (کد رهگیری) and retry the
    confirmation when the callback never made it back.
+4. `coupon`    prices a discount code for the page before it pays, so the
+   button a buyer presses carries the amount the gateway will be asked for.
 
 Because the amount is decided by the server from the plan record — never by
-the client — a tampered request cannot buy Pro Max for a Toman.
+the client — a tampered request cannot buy Pro Max for a Toman, and a coupon
+can only ever lower the bill by what its own row says it is worth.
 """
 
 import os
@@ -18,6 +21,7 @@ from datetime import datetime, timedelta
 from urllib.parse import urlencode, urlparse
 
 from django.conf import settings
+from django.db.models import F
 from django.shortcuts import redirect
 from django.urls import reverse
 from django.utils import timezone
@@ -31,13 +35,14 @@ from .models import (
     PAYMENT_FAILED,
     PAYMENT_PAID,
     PAYMENT_PENDING,
+    Coupon,
     Payment,
     Plan,
     Subscription,
     UserProfile,
     fa,
 )
-from .plan_limits import find_plan
+from .plan_limits import find_plan, same_plan
 
 # What a cycle buys. Yearly bills ten months and hands over twelve — the
 # "۲ ماه هدیه" the pricing page advertises.
@@ -61,13 +66,24 @@ class BillingCheckoutView(APIView):
             )
 
         cycle = "yearly" if str(request.data.get("cycle", "monthly")) == "yearly" else "monthly"
-        toman = payments.toman_amount(plan.price) * CYCLE_MONTHS_CHARGED[cycle]
-        rial = toman * 10
-        if toman <= 0:
+        list_toman = payments.toman_amount(plan.price) * CYCLE_MONTHS_CHARGED[cycle]
+        if list_toman <= 0:
             return Response(
                 {"detail": "مبلغ این پلن تعیین نشده است، با پشتیبانی تماس بگیرید"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+
+        # Discount first, gateway bounds second: what gets measured against the
+        # gateway's range has to be the amount actually charged, not the list
+        # price, or a coupon could push an order under the floor unnoticed.
+        coupon, coupon_error = _coupon_for(request.data.get("coupon"))
+        if coupon_error:
+            return Response(
+                {"detail": coupon_error}, status=status.HTTP_400_BAD_REQUEST
+            )
+        discount_toman = coupon.discount_toman(list_toman) if coupon else 0
+        toman = list_toman - discount_toman
+        rial = toman * 10
         if not (payments.MIN_AMOUNT_RIAL <= rial <= payments.MAX_AMOUNT_RIAL):
             return Response(
                 {"detail": "مبلغ سفارش خارج از محدوده مجاز درگاه است"},
@@ -85,6 +101,8 @@ class BillingCheckoutView(APIView):
             date=timezone.localdate(),
             status=PAYMENT_PENDING,
             gateway="zibal",
+            coupon_code=coupon.code if coupon else "",
+            discount_rial=discount_toman * 10,
         )
 
         description = f"خرید {plan.name} ({'سالانه' if cycle == 'yearly' else 'ماهانه'}) — {request.user.email}"
@@ -95,6 +113,9 @@ class BillingCheckoutView(APIView):
         # from here and re-probes the gateway with it.
         sent = {
             "amount": rial,
+            "listAmount": list_toman * 10,
+            "coupon": coupon.code if coupon else "",
+            "discount": discount_toman * 10,
             "callbackUrl": callback_url,
             "orderId": str(payment.pk),
             "mobile": bool(_phone(request.user)),
@@ -133,6 +154,9 @@ class BillingCheckoutView(APIView):
                 "trackId": str(track_id),
                 "amount": rial,
                 "amountToman": toman,
+                "listAmountToman": list_toman,
+                "discountToman": discount_toman,
+                "coupon": coupon.code if coupon else "",
                 "plan": plan.name,
                 "cycle": cycle,
                 "sandbox": payments.is_sandbox(),
@@ -140,11 +164,66 @@ class BillingCheckoutView(APIView):
         )
 
 
+class BillingCouponView(APIView):
+    """POST {plan, cycle, code} -> what the code is worth, before paying.
+
+    The page calls this the moment a buyer types a code, so the number printed
+    on the pay button is the number the gateway will be asked for. Checkout
+    re-derives the discount from scratch: this endpoint is a preview and never
+    the source of truth, so a tampered preview buys nothing.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        plan = find_plan(request.data.get("plan"))
+        if plan is None:
+            return Response(
+                {"detail": "پلن انتخاب‌شده پیدا نشد"}, status=status.HTTP_404_NOT_FOUND
+            )
+        cycle = "yearly" if str(request.data.get("cycle", "monthly")) == "yearly" else "monthly"
+        list_toman = payments.toman_amount(plan.price) * CYCLE_MONTHS_CHARGED[cycle]
+        if list_toman <= 0:
+            return Response(
+                {"detail": "مبلغ این پلن تعیین نشده است، با پشتیبانی تماس بگیرید"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        coupon, coupon_error = _coupon_for(request.data.get("code"))
+        if coupon_error:
+            return Response(
+                {"detail": coupon_error}, status=status.HTTP_400_BAD_REQUEST
+            )
+        discount_toman = coupon.discount_toman(list_toman) if coupon else 0
+        toman = list_toman - discount_toman
+        rial = toman * 10
+        if discount_toman and not (
+            payments.MIN_AMOUNT_RIAL <= rial <= payments.MAX_AMOUNT_RIAL
+        ):
+            return Response(
+                {"detail": "این کد تخفیف مبلغ سفارش را به کمتر از حد مجاز درگاه می‌رساند"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        return Response(
+            {
+                "code": coupon.code if coupon else "",
+                "percent": coupon.percent if coupon else 0,
+                "listToman": list_toman,
+                "discountToman": discount_toman,
+                "totalToman": toman,
+                "totalRial": rial,
+                "cycle": cycle,
+                "plan": plan.name,
+            }
+        )
+
+
 class BillingCallbackView(APIView):
     """Where the gateway returns the buyer's browser.
 
-    Always answers with a redirect to the billing page: the visitor is a
-    human in a browser, not an API client.
+    Always answers with a redirect to the payment-result page: the visitor is
+    a human in a browser, not an API client.
     """
 
     permission_classes = [AllowAny]
@@ -154,31 +233,31 @@ class BillingCallbackView(APIView):
         params = request.query_params
         payment = _find_order(params.get("orderId"), params.get("trackId"))
         if payment is None:
-            return _to_billing(
+            return _to_result(
                 "unknown", reason="سفارش مربوط به این پرداخت پیدا نشد", request=request
             )
 
         if payment.status == PAYMENT_PAID:
-            return _to_billing("success", payment, request=request)
+            return _to_result("success", payment, request=request)
 
         if str(params.get("success", "")) != "1":
             if not str(params.get("success", "")).strip():
                 # Not a gateway return trip at all (someone opened the URL).
-                return _to_billing("pending", payment, request=request)
+                return _to_result("pending", payment, request=request)
             payment.status = PAYMENT_FAILED
             payment.save(update_fields=["status"])
-            return _to_billing(
+            return _to_result(
                 "failed", payment, reason="پرداخت در درگاه انجام نشد", request=request
             )
 
         payment, message = _confirm(payment, params.get("trackId"))
         if payment.status == PAYMENT_PAID:
-            return _to_billing("success", payment, request=request)
+            return _to_result("success", payment, request=request)
         if payment.status == PAYMENT_PENDING:
             # The gateway could not be reached; the order stays open so the
             # page's "بررسی مجدد" button can settle it once the gateway is up.
-            return _to_billing("pending", payment, reason=message, request=request)
-        return _to_billing("failed", payment, reason=message, request=request)
+            return _to_result("pending", payment, reason=message, request=request)
+        return _to_result("failed", payment, reason=message, request=request)
 
 
 class BillingOrderView(APIView):
@@ -227,6 +306,25 @@ def _phone(user) -> str:
         return (user.profile.phone or "").strip()
     except UserProfile.DoesNotExist:
         return ""
+
+
+def _coupon_for(raw_code):
+    """``(coupon, error)`` — the code the buyer typed, or why it cannot apply.
+
+    An empty code is not an error: it means "no coupon", which is the normal
+    case for every order that is not discounted. Matching ignores case and
+    stray spaces so a buyer who types `dlea20` still gets `DLEA20`.
+    """
+    code = Coupon.normalize(raw_code)
+    if not code:
+        return None, ""
+    coupon = Coupon.objects.filter(code=code).first()
+    if coupon is None:
+        return None, "کد تخفیف معتبر نیست"
+    usable, reason = coupon.is_usable()
+    if not usable:
+        return None, reason
+    return coupon, ""
 
 
 def _callback_url(request) -> str:
@@ -297,7 +395,14 @@ def _frontend_url(request=None) -> str:
     return ""
 
 
-def _to_billing(state: str, payment=None, reason: str = "", request=None):
+# Where the buyer's browser lands after a gateway round trip. The outcome gets
+# a page of its own rather than a card buried in the shop: the buyer arrives here
+# right after paying — often from a bank app on a phone — and wants the
+# tracking code, not a pricing table (DEV-140).
+FRONTEND_RESULT_PATH = "/app/payment/result"
+
+
+def _to_result(state: str, payment=None, reason: str = "", request=None):
     # urlencode, not f-strings: `reason` is Persian prose and a raw string in
     # a Location header is neither valid nor encodable.
     params = {"status": state}
@@ -307,7 +412,7 @@ def _to_billing(state: str, payment=None, reason: str = "", request=None):
             params["ref"] = payment.reference_id
     if reason:
         params["reason"] = reason
-    return redirect(f"{_frontend_url(request)}/app/billing?{urlencode(params)}")
+    return redirect(f"{_frontend_url(request)}{FRONTEND_RESULT_PATH}?{urlencode(params)}")
 
 
 def _find_order(order_id, track_id):
@@ -375,6 +480,13 @@ def _settle(payment: Payment, answer: dict):
     payment.save(
         update_fields=["status", "reference_id", "card_number", "paid_at", "raw_response"]
     )
+    # Count the coupon on the settled order, not on the opened one: a cart that
+    # was abandoned at the bank should not spend a use. `F()` keeps two
+    # simultaneous confirmations from overwriting each other's increment.
+    if payment.coupon_code:
+        Coupon.objects.filter(code=payment.coupon_code).update(
+            used_count=F("used_count") + 1
+        )
     activate_subscription(payment)
 
 
@@ -410,7 +522,7 @@ def activate_subscription(payment: Payment):
     current = Subscription.objects.filter(user=user).order_by("id").first()
     renewing = (
         current is not None
-        and current.plan == plan_name
+        and same_plan(current.plan, plan_name)
         and current.end_date is not None
         and current.end_date >= today
     )
@@ -448,6 +560,9 @@ def _order_payload(payment: Payment) -> dict:
         "cycle": payment.cycle,
         "amount": payment.amount,
         "amountRial": payment.amount_rial,
+        "couponCode": payment.coupon_code,
+        "discountRial": payment.discount_rial,
+        "listAmountRial": payment.amount_rial + payment.discount_rial,
         "status": payment.status,
         "referenceId": payment.reference_id,
         "cardNumber": payment.card_number,

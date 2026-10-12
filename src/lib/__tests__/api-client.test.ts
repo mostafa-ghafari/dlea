@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   ApiError,
+  checkCoupon,
   confirmPaymentOrder,
   del,
   fetchPaymentHealth,
@@ -260,6 +261,42 @@ describe("payment gateway", () => {
     ];
     expect(url).toBe(`${API_BASE}/billing/checkout/`);
     expect(init.body).toBe(JSON.stringify({ plan: "promax", cycle: "yearly" }));
+  });
+
+  it("sends a discount code with the checkout when one was applied", async () => {
+    const fetchMock = mockFetch(200, {
+      paymentId: 8,
+      paymentUrl: "https://gateway.zibal.ir/start/1",
+    });
+    await startCheckout("promax", "yearly", "dlea20");
+    const [, init] = fetchMock.mock.calls[0] as unknown as [
+      string,
+      RequestInit,
+    ];
+    expect(init.body).toBe(
+      JSON.stringify({ plan: "promax", cycle: "yearly", coupon: "dlea20" }),
+    );
+  });
+
+  it("prices a discount code against a plan before paying", async () => {
+    const fetchMock = mockFetch(200, {
+      code: "DLEA20",
+      percent: 20,
+      listToman: 200000,
+      discountToman: 40000,
+      totalToman: 160000,
+      totalRial: 1600000,
+    });
+    const quote = await checkCoupon("pro", "monthly", "dlea20");
+    expect(quote.totalToman).toBe(160000);
+    const [url, init] = fetchMock.mock.calls[0] as unknown as [
+      string,
+      RequestInit,
+    ];
+    expect(url).toBe(`${API_BASE}/billing/coupon/`);
+    expect(init.body).toBe(
+      JSON.stringify({ plan: "pro", cycle: "monthly", code: "dlea20" }),
+    );
   });
 
   it("surfaces the gateway's own refusal message to the buyer", async () => {

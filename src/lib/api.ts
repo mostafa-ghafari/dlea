@@ -256,10 +256,34 @@ export type CheckoutSession = {
   trackId: string;
   amount: number;
   amountToman: number;
+  /** The price before the coupon — what the order would have cost. */
+  listAmountToman: number;
+  discountToman: number;
+  /** The code that was applied (empty for a full-price order). */
+  coupon: string;
   plan: string;
   cycle: "monthly" | "yearly";
   /** True while the gateway's test merchant is in use. */
   sandbox: boolean;
+};
+
+/**
+ * What a discount code is worth for one plan/cycle, as priced by the server.
+ *
+ * The page shows these numbers so the amount on the pay button is the amount
+ * the gateway will be asked for; checkout re-derives the same discount, so a
+ * stale quote can never buy a cheaper order.
+ */
+export type CouponQuote = {
+  /** The normalised code (`dlea20` → `DLEA20`); empty when none was sent. */
+  code: string;
+  percent: number;
+  listToman: number;
+  discountToman: number;
+  totalToman: number;
+  totalRial: number;
+  cycle: "monthly" | "yearly";
+  plan: string;
 };
 
 /** One of the buyer's own orders; `status` is Persian, like the admin list. */
@@ -270,6 +294,10 @@ export type PaymentOrder = {
   cycle: "monthly" | "yearly";
   amount: string;
   amountRial: number;
+  /** The coupon on this order, if any, and what it took off (in Rial). */
+  couponCode: string;
+  discountRial: number;
+  listAmountRial: number;
   status: string;
   referenceId: string;
   cardNumber: string;
@@ -614,7 +642,32 @@ export type AiApiInfo = {
   tokens_in: number;
   tokens_out: number;
 };
-export type AdminAiApis = { apis: AiApiInfo[]; gemini_configured: boolean };
+/**
+ * One model the AI coach offers, as the admin panel shows it: the coach's own
+ * catalogue with live usage beside it, so a row means something (zero requests
+ * is a model nobody picked, not a broken entry).
+ */
+export type AdminAiModel = {
+  id: string;
+  name: string;
+  desc: string;
+  /** Preselected in the coach's dropdown. */
+  default: boolean;
+  /** What a request that names no model actually runs on. */
+  active: boolean;
+  configured: boolean;
+  provider: string;
+  envVar: string;
+  docsUrl: string;
+  requests: number;
+  tokens_in: number;
+  tokens_out: number;
+};
+export type AdminAiApis = {
+  apis: AiApiInfo[];
+  gemini_configured: boolean;
+  models: AdminAiModel[];
+};
 export const fetchAdminAiApis = () => get<AdminAiApis>("admin/ai-apis/");
 export type UsersPage = {
   count: number;
@@ -628,8 +681,25 @@ export const fetchUsers = (page = 1, pageSize = 20, search = "") =>
   );
 export const fetchPayments = () => get<Payment[]>("admin/payments/");
 /** Open a payment session for `plan` and hand back the gateway URL. */
-export const startCheckout = (plan: string, cycle: "monthly" | "yearly") =>
-  post<CheckoutSession>("billing/checkout/", { plan, cycle });
+export const startCheckout = (
+  plan: string,
+  cycle: "monthly" | "yearly",
+  /** Optional discount code the buyer typed (empty = list price). */
+  coupon = "",
+) =>
+  post<CheckoutSession>("billing/checkout/", {
+    plan,
+    cycle,
+    // Only present when there is a code: a full-price order keeps the exact
+    // body it has always sent.
+    ...(coupon ? { coupon } : {}),
+  });
+/** Price a discount code for a plan before paying — a preview, not a promise. */
+export const checkCoupon = (
+  plan: string,
+  cycle: "monthly" | "yearly",
+  code: string,
+) => post<CouponQuote>("billing/coupon/", { plan, cycle, code });
 /** Read one of my orders (used after the bank sends the browser back). */
 export const fetchPaymentOrder = (id: number | string) =>
   get<PaymentOrder>(`billing/orders/${id}/`);
