@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { Mail, Phone, Send, MapPin, Calendar, Users } from "lucide-react";
+import { AtSign, Calendar, Mail, Phone, Send, Users } from "lucide-react";
 import { useState } from "react";
 import { LegalPage } from "@/components/LegalPage";
 import { Button } from "@/components/ui/button";
@@ -30,28 +30,36 @@ export const Route = createFileRoute("/contact")({
 
 const teamMembers = [
   {
-    name: "دکتر رضا غلامرضایی",
+    name: "دکتر رضا غلامرضائی",
     role: "فاندر پروژه",
+    photo: "/team/photo3.jpg",
     email: "rezagholamrezaei1377@gmail.com",
-    phones: ["+989215429539", "+983146372557"],
+    phones: ["09215429539"],
+    telegram: "@dlea_admin",
   },
   {
-    name: "دکتر آریان خسروی",
+    name: "دکتر ارین خسروی",
     role: "همکار و ادمین",
-    email: null,
-    phones: [],
+    photo: "/team/photo4.jpg",
+    email: "mani1995mgf@gmail.com",
+    phones: ["+98 938 429 0960"],
+    telegram: "@Supp20262026",
   },
   {
     name: "دکتر محمد جعفری",
     role: "مشاور",
-    email: null,
-    phones: [],
+    photo: "/team/photo1.jpg",
+    email: "mohammmdjafar1367@gmail.com",
+    phones: ["09130233085"],
+    instagram: "jafarii_com",
   },
   {
     name: "مهندس مصطفی غفاری",
     role: "برنامه‌نویس پروژه",
-    email: null,
-    phones: [],
+    photo: "/team/photo2.jpg",
+    email: "mostafa.ghaffari75@gmail.com",
+    phones: ["09134353632"],
+    telegram: "@ghaffari_tech",
   },
 ];
 
@@ -64,7 +72,9 @@ function ContactPage() {
       toast.error("همه فیلدها را کامل کن");
       return;
     }
-    toast.success("پیام شما ثبت شد — تیم پشتیبانی به‌زودی پاسخ می‌دهد");
+    toast.success(
+      "پیام شما ثبت شد — برای پاسخ سریع‌تر از تلگرام یا تلفن استفاده کنید",
+    );
     setForm({ name: "", email: "", message: "" });
   }
 
@@ -130,9 +140,12 @@ function ContactPage() {
               className="rounded-lg border border-border bg-secondary/40 p-4"
             >
               <div className="flex items-center gap-3">
-                <div className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-primary/15 text-sm font-bold text-primary">
-                  {m.name.split(" ").filter(Boolean).slice(-1)[0]?.[0] ?? ""}
-                </div>
+                <img
+                  src={m.photo}
+                  alt={`عکس ${m.name}`}
+                  loading="lazy"
+                  className="h-14 w-14 shrink-0 rounded-full border border-border object-cover"
+                />
                 <div>
                   <div className="text-sm font-semibold">{m.name}</div>
                   <div className="text-xs text-muted-foreground">{m.role}</div>
@@ -154,9 +167,32 @@ function ContactPage() {
                     <span dir="ltr">{p}</span>
                   </div>
                 ))}
-                {!m.email && m.phones.length === 0 && (
-                  <div className="text-xs text-muted-foreground/50 italic">
-                    اطلاعات تماس به‌زودی اضافه می‌شود
+                {m.telegram && (
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                    <Send className="h-3.5 w-3.5 text-primary" />
+                    <a
+                      href={`https://t.me/${m.telegram.slice(1)}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      dir="ltr"
+                      className="hover:text-primary"
+                    >
+                      {m.telegram}
+                    </a>
+                  </div>
+                )}
+                {m.instagram && (
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                    <AtSign className="h-3.5 w-3.5 text-primary" />
+                    <a
+                      href={`https://instagram.com/${m.instagram}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      dir="ltr"
+                      className="hover:text-primary"
+                    >
+                      {m.instagram}
+                    </a>
                   </div>
                 )}
               </div>
