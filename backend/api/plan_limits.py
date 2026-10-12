@@ -36,9 +36,42 @@ def _match(plans, value):
     return None
 
 
+
 def find_plan(value):
     """A plan by slug or display name, or None when nothing matches."""
     return _match(list(Plan.objects.all()), value)
+
+
+def same_plan(a, b) -> bool:
+    """Do two plan labels name the same plan?
+
+    `Subscription.plan` keeps whatever was stored at purchase time, and older
+    rows hold the *English* catalogue name ("Pro Max") while the current
+    catalogue stores the Persian display name ("پرو مکس"). Raw string equality
+    would therefore treat a renewal of a legacy plan as a plan *switch* and
+    throw away the days the buyer already owns (DEV-116). Compare through
+    `find_plan` when either side resolves to a real plan, falling back to
+    loose string equality for labels the catalogue no longer knows.
+    """
+    if not a or not b:
+        return False
+    plans = list(Plan.objects.all())
+    pa = _match(plans, a)
+    pb = _match(plans, b)
+    if pa is not None and pb is not None:
+        return pa.pk == pb.pk
+    if pa is not None:
+        return str(b).strip().lower() in {
+            pa.slug.strip().lower(),
+            pa.name.strip().lower().replace("‌", ""),
+        }
+    if pb is not None:
+        return str(a).strip().lower() in {
+            pb.slug.strip().lower(),
+            pb.name.strip().lower().replace("‌", ""),
+        }
+    return str(a).strip().lower().replace("‌", "") == str(b).strip().lower().replace("‌", "")
+
 
 
 def resolve_plan(user):

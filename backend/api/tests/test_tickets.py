@@ -49,6 +49,35 @@ class TicketTests(BaseTestCase):
         self.assertIn("مشکل در پرداخت", subjects)
         self.assertNotIn("تیکت دیگر", subjects)
 
+    def test_vip_role_is_not_admin_and_gets_no_ticket_notifications(self):
+        """DEV-148 + DEV-141: VIP is a perk, not an admin grant.
+
+        A `vip`-role user used to pass `_is_admin_user`, so admin notifications
+        about other users' tickets landed in their bell. Only the explicit
+        "admin" role (or Django staff) gets admin notifications now.
+        """
+        from django.contrib.auth import get_user_model
+        vuser = self.make_user(username="vip", email="vip@example.com")
+        self.make_profile(vuser, role="vip")
+        self.auth(vuser)
+        # The vip user can create a ticket (their own)…
+        self.client.post("/api/tickets/", self._payload(), format="json")
+        # …but is NOT notified about other users' tickets like an admin,
+        # and cannot list other users' tickets.
+        self.auth(self.make_user(username="other", email="other@example.com"))
+        self.client.post(
+            "/api/tickets/",
+            {"subject": "تیکت دیگر", "topic": "فنی", "user": "Other", "email": "other@example.com"},
+            format="json",
+        )
+        self.assertFalse(
+            Notification.objects.filter(kind="ticket", user=vuser).exists(),
+            "vip must not receive admin ticket notifications",
+        )
+        self.auth(vuser)
+        subjects = [t["subject"] for t in self.get_list("/api/tickets/")]
+        self.assertEqual(subjects, [])
+
     def test_admin_sees_all_tickets(self):
         self.client.post("/api/tickets/", self._payload(), format="json")
         self.auth_staff()

@@ -5,6 +5,9 @@ and `src/lib/platform-store.tsx` so the React app can consume the API with
 zero contract changes. Dates/times are emitted as Persian (Jalali) strings.
 """
 
+import json
+import re
+
 from django.db.models import Count, Q, Sum
 from rest_framework import serializers
 
@@ -243,6 +246,26 @@ class TradeSerializer(serializers.ModelSerializer):
 # Journal
 # ---------------------------------------------------------------------------
 
+# Inline images live inside the entry's rich text as `<img>` tags — the body
+# editor embeds them as base64 data URLs — so a cap that only counted the
+# `images` gallery array was trivially bypassed by pasting screenshots into
+# the entry text. Count both, case-insensitively (`<IMG`), and in `blocks` too
+# (the field is writable, so it must not become the next loophole).
+_IMG_TAG = re.compile(r"<img\b", re.IGNORECASE)
+
+
+def _entry_image_count(images, html, blocks):
+    """Every image an entry carries: the gallery array plus each `<img>`
+    embedded in the rich text (html) or the blocks payload."""
+    count = len(images or [])
+    for payload in (html, blocks):
+        if isinstance(payload, str):
+            count += len(_IMG_TAG.findall(payload))
+        elif payload:
+            count += len(_IMG_TAG.findall(json.dumps(payload, ensure_ascii=False)))
+    return count
+
+
 class JournalGroupSerializer(serializers.ModelSerializer):
     id = serializers.CharField(source="pk", read_only=True)
 
@@ -289,14 +312,34 @@ class JournalEntrySerializer(serializers.ModelSerializer):
         return str(obj.group_id) if obj.group_id else None
 
     def validate(self, attrs):
-        """Same per-plan screenshot cap as trades, applied to journal images."""
+        """The per-plan image cap covers the whole entry, not just the gallery.
+
+        The body editor embeds screenshots as `<img>` tags inside `html`, so a
+        cap on the `images` array alone let a free plan paste unlimited images
+        into the entry text. Gallery and inline images count together against
+        the same cap the uploader enforces client-side.
+
+        An update is only refused when it *raises* the total above the cap:
+        entries written before this rule may already exceed it, and refusing to
+        let them be edited would be worse than the loophole this closes.
+        """
         request = self.context.get("request")
         cap = max_images_for_user(getattr(request, "user", None))
-        images = attrs.get("images", getattr(self.instance, "images", None))
-        if cap >= 0 and len(images or []) > cap:
-            raise serializers.ValidationError(
-                {"images": f"حداکثر {cap} تصویر برای هر یادداشت مجاز است."}
-            )
+        if cap >= 0:
+            images = attrs.get("images", getattr(self.instance, "images", None))
+            html = attrs.get("html", getattr(self.instance, "html", None))
+            blocks = attrs.get("blocks", getattr(self.instance, "blocks", None))
+            total = _entry_image_count(images, html, blocks)
+            if total > cap:
+                if self.instance is not None:
+                    previous = _entry_image_count(
+                        self.instance.images, self.instance.html, self.instance.blocks
+                    )
+                    if total <= previous:
+                        return attrs  # legacy content, not made any larger
+                raise serializers.ValidationError(
+                    {"images": f"حداکثر {cap} تصویر برای هر یادداشت مجاز است."}
+                )
         return attrs
 
 

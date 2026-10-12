@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from "react";
+import { toast } from "sonner";
+import { MAX_IMAGES_PER_ENTRY } from "@/components/ImageUploader";
 import {
   Bold,
   Italic,
@@ -33,11 +35,19 @@ export function RichTextEditor({
   onChange,
   placeholder = "متن ژورنال را اینجا بنویس...",
   minHeight = 220,
+  maxImages,
+  usedImages = 0,
 }: {
   value: string;
   onChange: (html: string) => void;
   placeholder?: string;
   minHeight?: number;
+  /** Per-entry image cap for this user's plan (-1 = unlimited); omit to leave
+   * the editor uncapped (admin content has no plan). */
+  maxImages?: number;
+  /** Images the entry already carries outside the body (the screenshot
+   * gallery) — the plan cap counts them together with the inline ones. */
+  usedImages?: number;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -194,6 +204,22 @@ export function RichTextEditor({
           const file = e.target.files?.[0];
           e.target.value = "";
           if (!file) return;
+          // The plan's image cap counts the screenshot gallery and the images
+          // embedded in the body together — the same number the server
+          // enforces — so inline inserts cannot become the way around it.
+          if (maxImages !== undefined) {
+            const cap =
+              maxImages < 0
+                ? MAX_IMAGES_PER_ENTRY
+                : Math.min(maxImages, MAX_IMAGES_PER_ENTRY);
+            const inline = ref.current?.querySelectorAll("img").length ?? 0;
+            if (inline + usedImages >= cap) {
+              toast.error(
+                `سقف ${cap} تصویر برای هر یادداشت پر شده است — تصاویر داخل متن هم شمرده می‌شوند.`,
+              );
+              return;
+            }
+          }
           const fr = new FileReader();
           fr.onload = () =>
             insertHtml(

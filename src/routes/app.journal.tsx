@@ -727,6 +727,8 @@ function JournalPage() {
                 <RichTextEditor
                   value={draft.html}
                   onChange={(html) => setDraft((d) => ({ ...d, html }))}
+                  maxImages={limits.maxImagesPerEntry ?? -1}
+                  usedImages={draft.images.length}
                 />
               </div>
 

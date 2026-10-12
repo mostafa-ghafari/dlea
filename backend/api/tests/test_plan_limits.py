@@ -280,6 +280,87 @@ class ImageCapTests(BaseTestCase):
         self.assertIn("حداکثر 2 تصویر", str(r.data))
         self.assertEqual(JournalEntry.objects.count(), 0)
 
+    # -- images embedded in the entry body ----------------------------------
+
+    def test_journal_body_images_count_toward_the_cap(self):
+        """The body editor embeds screenshots as <img> inside `html`.
+
+        The gallery cap alone left that path wide open: a free plan could paste
+        unlimited screenshots into the entry text and keep the plan's image
+        limit only on the uploader.
+        """
+        html = "<p>متن</p>" + "".join(
+            f'<IMG src="data:image/jpeg;base64,{i}">' for i in range(3)
+        )
+        r = self.client.post(
+            "/api/journal/entries/", {"title": "یادداشت", "html": html}, format="json"
+        )
+        self.assertEqual(r.status_code, 400)
+        self.assertIn("حداکثر 2 تصویر", str(r.data))
+        self.assertEqual(JournalEntry.objects.count(), 0)
+
+    def test_journal_gallery_and_body_images_are_counted_together(self):
+        """One gallery screenshot plus one inline image is the whole cap."""
+        html = '<p>متن</p><img src="data:image/png;base64,x">'
+        r = self.client.post(
+            "/api/journal/entries/",
+            {"title": "یادداشت", "html": html, "images": ["data:image/jpeg;base64,a"]},
+            format="json",
+        )
+        self.assertEqual(r.status_code, 201)
+
+        r = self.client.post(
+            "/api/journal/entries/",
+            {
+                "title": "یادداشت",
+                "html": html,
+                "images": ["data:image/jpeg;base64,a", "data:image/jpeg;base64,b"],
+            },
+            format="json",
+        )
+        self.assertEqual(r.status_code, 400)
+
+    def test_journal_blocks_cannot_smuggle_images_past_the_cap(self):
+        """`blocks` is writable, so it must not become the next loophole."""
+        r = self.client.post(
+            "/api/journal/entries/",
+            {
+                "title": "یادداشت",
+                "blocks": ["<img src='data:image/png;base64,a'>"] * 3,
+            },
+            format="json",
+        )
+        self.assertEqual(r.status_code, 400)
+        self.assertEqual(JournalEntry.objects.count(), 0)
+
+    def test_journal_entry_over_the_cap_from_before_stays_editable(self):
+        """Entries written before this rule may already exceed the cap.
+
+        Refusing to touch them would be worse than the loophole: the trader
+        could never fix a typo. An update is only refused when it raises the
+        total above what the entry already carried.
+        """
+        legacy = JournalEntry.objects.create(
+            user=self.user,
+            title="قدیمی",
+            date=timezone.localdate(),
+            week="هفته جاری",
+            month="ماه جاری",
+            html="".join('<img src="data:image/png;base64,x">' for _ in range(3)),
+        )
+
+        r = self.client.patch(
+            f"/api/journal/entries/{legacy.pk}/", {"title": "اصلاح شد"}, format="json"
+        )
+        self.assertEqual(r.status_code, 200)
+
+        worse = legacy.html + '<img src="data:image/png;base64,y">'
+        r = self.client.patch(
+            f"/api/journal/entries/{legacy.pk}/", {"html": worse}, format="json"
+        )
+        self.assertEqual(r.status_code, 400)
+        self.assertEqual(JournalEntry.objects.get(pk=legacy.pk).html, legacy.html)
+
     def test_limits_endpoint_reports_the_capped_number(self):
         """The uploader reads its cap from here, so it must be the real one."""
         items = self.get_list("/api/plans/limits/")
