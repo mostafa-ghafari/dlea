@@ -2,11 +2,72 @@
 
 import json
 from pathlib import Path
+from unittest.mock import patch
 
 from rest_framework import status
 
 from api.models import MTConnection, Trade
 from api.tests.common import BaseTestCase
+
+
+class WebhookUrlTests(BaseTestCase):
+    """The URL the EA is told to POST to.
+
+    Without configuration it follows the host the request arrived on; with the
+    `WEBHOOK_URL` env var set (production, e.g. after the dlea.ir migration)
+    that canonical public host wins, no matter which host served the request.
+    """
+
+    def test_follows_the_request_host_by_default(self):
+        user = self.auth(self.make_user(username="trader"))
+        r = self.client.post(
+            "/api/mt/connect/", {"account": "1"}, format="json", HTTP_HOST="dlea.piqagram.ir"
+        )
+        self.assertEqual(r.data["webhookUrl"], "http://dlea.piqagram.ir/api/trades/webhook/")
+
+    def test_https_host_gives_an_https_webhook(self):
+        user = self.auth(self.make_user(username="trader"))
+        r = self.client.post(
+            "/api/mt/connect/",
+            {"account": "1"},
+            format="json",
+            HTTP_HOST="dlea.piqagram.ir",
+            secure=True,
+        )
+        self.assertEqual(r.data["webhookUrl"], "https://dlea.piqagram.ir/api/trades/webhook/")
+
+    def test_local_dev_rewrites_localhost_to_127_0_0_1(self):
+        user = self.auth(self.make_user(username="trader"))
+        r = self.client.post(
+            "/api/mt/connect/", {"account": "1"}, format="json", HTTP_HOST="localhost:8000"
+        )
+        self.assertEqual(r.data["webhookUrl"], "http://127.0.0.1:8000/api/trades/webhook/")
+
+    def test_configured_webhook_url_wins_over_the_request_host(self):
+        user = self.auth(self.make_user(username="trader"))
+        with patch.dict("os.environ", {"WEBHOOK_URL": "https://dlea.ir"}):
+            r = self.client.post(
+                "/api/mt/connect/",
+                {"account": "1"},
+                format="json",
+                HTTP_HOST="dlea.piqagram.ir",
+            )
+        self.assertEqual(r.data["webhookUrl"], "https://dlea.ir/api/trades/webhook/")
+
+    def test_status_also_uses_the_configured_webhook_url(self):
+        user = self.auth(self.make_user(username="trader"))
+        self.client.post("/api/mt/connect/", {"account": "1"}, format="json")
+        with patch.dict("os.environ", {"WEBHOOK_URL": "https://dlea.ir"}):
+            r = self.client.get("/api/mt/status/", HTTP_HOST="dlea.piqagram.ir")
+        self.assertEqual(r.data["webhookUrl"], "https://dlea.ir/api/trades/webhook/")
+
+    def test_a_trailing_slash_in_the_env_is_trimmed(self):
+        user = self.auth(self.make_user(username="trader"))
+        with patch.dict("os.environ", {"WEBHOOK_URL": "https://dlea.ir/"}):
+            r = self.client.post(
+                "/api/mt/connect/", {"account": "1"}, format="json", HTTP_HOST="dlea.piqagram.ir"
+            )
+        self.assertEqual(r.data["webhookUrl"], "https://dlea.ir/api/trades/webhook/")
 
 
 class MtConnectTests(BaseTestCase):

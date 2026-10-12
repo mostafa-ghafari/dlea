@@ -13,6 +13,7 @@ Two pieces make the MT4/MT5 sync real:
 """
 
 import json
+import os
 import secrets
 
 from django.http import JsonResponse
@@ -45,7 +46,17 @@ def _webhook_url(request):
 
     MetaTrader's WebRequest cannot resolve `localhost`, so the URL we show
     the user (and that the EA embeds) must use 127.0.0.1 for local setups.
+
+    In production the URL is pinned by the `WEBHOOK_URL` env var: after the
+    migration to `dlea.ir` the site is reachable on several hosts (dlea.ir,
+    www, dev, and the old piqagram address), but the EA copies *one* URL into
+    its input and MT's WebRequest allowlist needs it to keep working across
+    all of them — so the public canonical host wins over whatever host this
+    particular request happened to arrive on.
     """
+    configured = os.environ.get("WEBHOOK_URL", "").strip().rstrip("/")
+    if configured:
+        return f"{configured}/api/trades/webhook/"
     host = request.get_host()
     if "localhost" in host:
         host = host.replace("localhost", "127.0.0.1", 1)
