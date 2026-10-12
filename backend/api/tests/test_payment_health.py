@@ -27,17 +27,18 @@ class _SiteRequest:
     def build_absolute_uri(self, path):
         return f"http://dlea.piqagram.ir{path}"
 
-# What the real gateway enforces, probed on 2026-09-15. Deliberately hardcoded:
-# the fake gateway must keep answering "the real ceiling" even when a test
-# widens our own constant, because that mismatch is what it has to catch.
-REAL_MIN, REAL_MAX = 1000, 4_000_000_000
+# What the real gateway enforces, probed on 2026-10-07 (per-merchant ceiling).
+# Deliberately hardcoded: the fake gateway must keep answering "the real
+# ceiling" even when a test widens our own constant, because that mismatch is
+# what it has to catch.
+REAL_MIN, REAL_MAX = 1000, 1_000_000_000
 
 
 def gateway_like(amount_rial, callback_url, order_id, description="", mobile=""):
     if amount_rial < REAL_MIN:
         return {"result": 105, "message": "amount<1000 IRR"}
     if amount_rial > REAL_MAX:
-        return {"result": 113, "message": "amount>4000000000 IRR"}
+        return {"result": 113, "message": "amount>1000000000 IRR"}
     if not str(callback_url).startswith("http"):
         return {"result": 106, "message": "callbackUrl is not valid"}
     return {"result": 100, "message": "success", "trackId": 111222333}
@@ -227,17 +228,27 @@ class PlanPriceTests(BaseTestCase):
         self.assertIn("plan-vip", [c["id"] for c in r.data["checks"]])
 
     def test_a_yearly_price_beyond_the_ceiling_is_flagged(self):
-        # 400,000,000 Toman a year is fine monthly, over the ceiling yearly.
-        self.make_plan(slug="big", name="Big", price="40,000,000")
+        # 150,000,000 Toman a year (1,500,000,000 Rial, ten months charged) is
+        # fine monthly, over the ceiling yearly.
+        self.make_plan(slug="big", name="Big", price="15,000,000")
         r = self.client.get(URL)
         plan = r.data["plans"][0]
-        self.assertEqual(plan["yearlyRial"], 4_000_000_000)
-        self.assertEqual(plan["status"], "pass")
+        self.assertEqual(plan["yearlyRial"], 1_500_000_000)
+        self.assertEqual(plan["status"], "fail")
         self.make_plan(slug="huge", name="Huge", price="45,000,000")
         r = self.client.get(URL)
         huge = next(p for p in r.data["plans"] if p["slug"] == "huge")
         self.assertEqual(huge["status"], "fail")
         self.assertIn("سالانه", huge["detail"])
+
+    def test_a_yearly_price_at_the_ceiling_is_not_flagged(self):
+        # 100,000,000 Toman a year is exactly 1,000,000,000 Rial — the ceiling
+        # itself is still sellable.
+        self.make_plan(slug="maxed", name="Maxed", price="10,000,000")
+        r = self.client.get(URL)
+        plan = next(p for p in r.data["plans"] if p["slug"] == "maxed")
+        self.assertEqual(plan["yearlyRial"], 1_000_000_000)
+        self.assertEqual(plan["status"], "pass")
 
     def test_an_unpriced_plan_is_not_a_failure(self):
         self.make_plan(slug="free", name="رایگان", price="۰")

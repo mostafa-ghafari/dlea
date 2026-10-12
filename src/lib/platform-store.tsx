@@ -226,14 +226,22 @@ export function PlatformProvider({ children }: { children: ReactNode }) {
             ? list.map((n) => (n.id === item.id ? item : n))
             : [item, ...list],
         );
-        void post<NewsItem>("news/", {
+        // A fresh draft carries an `N-…` id; anything else is an existing
+        // server-side news item whose id is numeric — PATCH it in place
+        // instead of POSTing a duplicate (DEV-154).
+        const isNew = item.id.startsWith("N-");
+        const payload = {
           title: item.title,
           summary: item.summary,
           body: item.body,
           category: item.category,
-          date: isoDate(),
           pinned: item.pinned,
-        }).catch(() => {
+        };
+        void (
+          isNew
+            ? post<NewsItem>("news/", { ...payload, date: isoDate() })
+            : patch<NewsItem>(`news/${item.id}/`, payload)
+        ).catch(() => {
           /* optimistic write failed */
         });
       },
