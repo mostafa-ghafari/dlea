@@ -41,6 +41,7 @@ import { Route as AppAdminTicketsRouteImport } from './routes/app.admin.tickets'
 import { Route as AppAdminUsersRouteImport } from './routes/app.admin.users'
 import { Route as AppNewsIndexRouteImport } from './routes/app.news.index'
 import { Route as AppNewsIdRouteImport } from './routes/app.news.$id'
+import { Route as AppPaymentResultRouteImport } from './routes/app.payment.result'
 import { Route as AppTradesIndexRouteImport } from './routes/app.trades.index'
 import { Route as AppTradesIdRouteImport } from './routes/app.trades.$id'
 import { Route as AppTradesNewRouteImport } from './routes/app.trades.new'
@@ -205,6 +206,11 @@ const AppNewsIdRoute = AppNewsIdRouteImport.update({
   path: '/news/$id',
   getParentRoute: () => AppRoute,
 } as any)
+const AppPaymentResultRoute = AppPaymentResultRouteImport.update({
+  id: '/payment/result',
+  path: '/payment/result',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppTradesIndexRoute = AppTradesIndexRouteImport.update({
   id: '/trades/',
   path: '/trades/',
@@ -253,6 +259,7 @@ export interface FileRoutesByFullPath {
   '/app/admin/tickets': typeof AppAdminTicketsRoute
   '/app/admin/users': typeof AppAdminUsersRoute
   '/app/news/$id': typeof AppNewsIdRoute
+  '/app/payment/result': typeof AppPaymentResultRoute
   '/app/trades/$id': typeof AppTradesIdRoute
   '/app/trades/new': typeof AppTradesNewRoute
   '/app/news/': typeof AppNewsIndexRoute
@@ -290,6 +297,7 @@ export interface FileRoutesByTo {
   '/app/admin/tickets': typeof AppAdminTicketsRoute
   '/app/admin/users': typeof AppAdminUsersRoute
   '/app/news/$id': typeof AppNewsIdRoute
+  '/app/payment/result': typeof AppPaymentResultRoute
   '/app/trades/$id': typeof AppTradesIdRoute
   '/app/trades/new': typeof AppTradesNewRoute
   '/app/news': typeof AppNewsIndexRoute
@@ -328,6 +336,7 @@ export interface FileRoutesById {
   '/app/admin/tickets': typeof AppAdminTicketsRoute
   '/app/admin/users': typeof AppAdminUsersRoute
   '/app/news/$id': typeof AppNewsIdRoute
+  '/app/payment/result': typeof AppPaymentResultRoute
   '/app/trades/$id': typeof AppTradesIdRoute
   '/app/trades/new': typeof AppTradesNewRoute
   '/app/news/': typeof AppNewsIndexRoute
@@ -367,6 +376,7 @@ export interface FileRouteTypes {
     | '/app/admin/tickets'
     | '/app/admin/users'
     | '/app/news/$id'
+    | '/app/payment/result'
     | '/app/trades/$id'
     | '/app/trades/new'
     | '/app/news/'
@@ -404,6 +414,7 @@ export interface FileRouteTypes {
     | '/app/admin/tickets'
     | '/app/admin/users'
     | '/app/news/$id'
+    | '/app/payment/result'
     | '/app/trades/$id'
     | '/app/trades/new'
     | '/app/news'
@@ -441,6 +452,7 @@ export interface FileRouteTypes {
     | '/app/admin/tickets'
     | '/app/admin/users'
     | '/app/news/$id'
+    | '/app/payment/result'
     | '/app/trades/$id'
     | '/app/trades/new'
     | '/app/news/'
@@ -684,6 +696,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppNewsIdRouteImport
       parentRoute: typeof AppRoute
     }
+    '/app/payment/result': {
+      id: '/app/payment/result'
+      path: '/payment/result'
+      fullPath: '/app/payment/result'
+      preLoaderRoute: typeof AppPaymentResultRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/app/trades/': {
       id: '/app/trades/'
       path: '/trades'
@@ -752,6 +771,7 @@ interface AppRouteChildren {
   AppSettingsRoute: typeof AppSettingsRoute
   AppSupportRoute: typeof AppSupportRoute
   AppNewsIdRoute: typeof AppNewsIdRoute
+  AppPaymentResultRoute: typeof AppPaymentResultRoute
   AppTradesIdRoute: typeof AppTradesIdRoute
   AppTradesNewRoute: typeof AppTradesNewRoute
   AppNewsIndexRoute: typeof AppNewsIndexRoute
@@ -772,6 +792,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppSettingsRoute: AppSettingsRoute,
   AppSupportRoute: AppSupportRoute,
   AppNewsIdRoute: AppNewsIdRoute,
+  AppPaymentResultRoute: AppPaymentResultRoute,
   AppTradesIdRoute: AppTradesIdRoute,
   AppTradesNewRoute: AppTradesNewRoute,
   AppNewsIndexRoute: AppNewsIndexRoute,
