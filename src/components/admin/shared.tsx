@@ -7,7 +7,7 @@ import {
   fetchAdminStats,
   fetchAdminAiApis,
   type AdminStats,
-  type AiApiInfo,
+  type AdminAiApis,
 } from "@/lib/api";
 
 // ─── Context ────────────────────────────────────────────────────────
@@ -18,7 +18,7 @@ export type AdminCtx = {
   paymentQuery: string;
   setPaymentQuery: (v: string) => void;
   stats: AdminStats | null;
-  aiApis: { apis: AiApiInfo[]; gemini_configured: boolean } | null;
+  aiApis: AdminAiApis | null;
 };
 
 const AdminContext = createContext<AdminCtx>({
@@ -69,10 +69,7 @@ function useAdminStats() {
 }
 
 function useAdminAiApis() {
-  const [data, setData] = useState<{
-    apis: AiApiInfo[];
-    gemini_configured: boolean;
-  } | null>(null);
+  const [data, setData] = useState<AdminAiApis | null>(null);
   useEffect(() => {
     fetchAdminAiApis()
       .then(setData)

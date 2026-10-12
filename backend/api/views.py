@@ -484,13 +484,65 @@ class AdminStatsView(APIView):
         })
 
 
+# The catalogue the admin panel lists and opens in a modal (DEV-137/138).
+#
+# It is the coach's own list — `gemini.GEMINI_MODELS` — not a second copy, so
+# the panel can never advertise a model the coach would not actually run, and a
+# model retired from the coach leaves the panel in the same commit.
+AI_MODEL_PROVIDER = "Google Gemini"
+AI_MODEL_ENV_VAR = "GEMINI_API_KEY"
+AI_MODEL_DOCS_URL = "https://ai.google.dev/gemini-api/docs/models"
+
+
+def _admin_ai_models(configured: bool) -> list:
+    """Every coach model, with its live usage and which one is in use."""
+    from django.db.models import Count, Sum
+
+    from . import gemini
+    from .models import AiApiCall
+
+    usage = {}
+    for row in (
+        AiApiCall.objects.values("model_name").annotate(
+            requests=Count("pk"),
+            tokens_in=Sum("tokens_in", default=0),
+            tokens_out=Sum("tokens_out", default=0),
+        )
+    ):
+        usage[str(row["model_name"] or "").strip()] = row
+
+    # The model a request that names no model runs on (`GEMINI_MODEL` env, else
+    # the module default). Worth flagging: changing it changes every report.
+    active = gemini.get_model(None)
+    models = []
+    for model in gemini.GEMINI_MODELS:
+        stats = usage.get(model["id"], {})
+        models.append(
+            {
+                "id": model["id"],
+                "name": model["name"],
+                "desc": model.get("desc", ""),
+                "default": bool(model.get("default")),
+                "active": model["id"] == active,
+                "configured": configured,
+                "provider": AI_MODEL_PROVIDER,
+                "envVar": AI_MODEL_ENV_VAR,
+                "docsUrl": AI_MODEL_DOCS_URL,
+                "requests": stats.get("requests", 0),
+                "tokens_in": stats.get("tokens_in") or 0,
+                "tokens_out": stats.get("tokens_out") or 0,
+            }
+        )
+    return models
+
+
 class AdminAiApisView(APIView):
     """Return real AI API usage grouped by model_name."""
     permission_classes = [IsAdminUserPermission]
 
     def get(self, request):
         from .models import AiApiCall
-        from django.db.models import Sum
+        from django.db.models import Count, Sum
         calls = (
             AiApiCall.objects
             .values("model_name", "endpoint")
@@ -513,6 +565,7 @@ class AdminAiApisView(APIView):
         return Response({
             "apis": apis,
             "gemini_configured": bool(api_key),
+            "models": _admin_ai_models(bool(api_key)),
         })
 
 
@@ -777,14 +830,17 @@ class NewsItemViewSet(viewsets.ModelViewSet):
 
 
 def _is_admin_user(user):
-    """Return True if the user is staff OR has an admin-level UserProfile.role."""
+    """Return True if the user is staff OR has the admin UserProfile.role.
+
+    VIP roles (`vip`, `*-vip`) are *perks*, not admin grants (DEV-141): they
+    must never see other users' tickets or admin notifications.
+    """
     if not user.is_authenticated:
         return False
     if user.is_staff:
         return True
     try:
-        profile = user.profile
-        return profile.role in {"admin", "vip", "trader-vip", "professional-vip", "master-vip"}
+        return user.profile.role == "admin"
     except UserProfile.DoesNotExist:
         return False
 
@@ -798,7 +854,7 @@ def _admin_queryset():
     from django.db.models import Q
     return User.objects.filter(
         Q(is_staff=True)
-        | Q(profile__role__in={"admin", "vip", "trader-vip", "professional-vip", "master-vip"})
+        | Q(profile__role="admin")
     )
 
 

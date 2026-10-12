@@ -1,9 +1,12 @@
 """Tests for the admin API: stats, charts, users, payments, logs, audit."""
 
+import os
 from datetime import date
+from unittest.mock import patch
 
 from rest_framework import status
 
+from api import gemini
 from api.models import AiApiCall, AuditEntry, LogEntry, Payment, Subscription, UserProfile
 from api.tests.common import BaseTestCase
 
@@ -99,6 +102,50 @@ class AdminAiApisTests(BaseTestCase):
         by_name = {a["name"]: a for a in data["apis"]}
         self.assertEqual(by_name["gemini-2.0-flash"]["requests"], 3)
         self.assertEqual(by_name["gemini-2.0-flash"]["tokens_in"], 300)
+
+    def test_models_list_carries_usage_and_flags(self):
+        """The panel lists the coach's own catalogue, with usage beside it."""
+        for _ in range(2):
+            AiApiCall.objects.create(
+                user_email="a@b.com",
+                endpoint="/api/coach/generate/",
+                model_name="gemini-3.1-flash-lite",
+                tokens_in=40,
+                tokens_out=4,
+            )
+        with patch("api.views.gemini.get_api_key", return_value="key"):
+            r = self.client.get("/api/admin/ai-apis/")
+        self.assertEqual(r.status_code, 200)
+        models = {m["id"]: m for m in r.data["models"]}
+        # One source, not a second copy: the panel lists what the coach offers.
+        self.assertEqual(
+            sorted(models), sorted(m["id"] for m in gemini.GEMINI_MODELS)
+        )
+        lite = models["gemini-3.1-flash-lite"]
+        self.assertTrue(lite["configured"])
+        self.assertTrue(lite["default"])
+        self.assertEqual(lite["requests"], 2)
+        self.assertEqual(lite["tokens_in"], 80)
+        # A model nobody called is listed with zeroes rather than left out.
+        self.assertEqual(models["gemini-3.6-flash"]["requests"], 0)
+        self.assertEqual(models["gemini-3.6-flash"]["tokens_in"], 0)
+
+    def test_models_reported_unconfigured_without_a_key(self):
+        with patch("api.views.gemini.get_api_key", return_value=""):
+            r = self.client.get("/api/admin/ai-apis/")
+        self.assertFalse(r.data["gemini_configured"])
+        self.assertTrue(r.data["models"])
+        self.assertTrue(all(not m["configured"] for m in r.data["models"]))
+
+    def test_active_model_follows_the_configured_env(self):
+        """`GEMINI_MODEL` decides what unnamed requests run on — flag that one."""
+        with (
+            patch("api.views.gemini.get_api_key", return_value="key"),
+            patch.dict(os.environ, {"GEMINI_MODEL": "gemini-3.5-flash"}),
+        ):
+            r = self.client.get("/api/admin/ai-apis/")
+        active = [m["id"] for m in r.data["models"] if m["active"]]
+        self.assertEqual(active, ["gemini-3.5-flash"])
 
 
 class AdminUsersTests(BaseTestCase):
