@@ -22,6 +22,14 @@ RUN useradd -m -r dlea
 WORKDIR /app
 COPY --chown=dlea:dlea . .
 
+# `WORKDIR` creates /app as root, and COPY only chowns what it copies in, so
+# the directory itself stays root-owned. `_cache/` is gitignored and therefore
+# never in the build context, which left the process (uid 999) unable to create
+# its file-based cache directory. That broke the OTP flows at runtime and made
+# every `manage.py` command die on its system checks — including the `migrate`
+# the deploy runs, so schema migrations silently stopped being applied.
+RUN mkdir -p /app/_cache && chown -R dlea:dlea /app
+
 USER dlea
 
 EXPOSE 8002
