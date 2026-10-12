@@ -17,6 +17,7 @@ from api.models import (
     PAYMENT_FAILED,
     PAYMENT_PAID,
     PAYMENT_PENDING,
+    Coupon,
     Payment,
     Subscription,
 )
@@ -62,14 +63,15 @@ class AmountParsingTests(BaseTestCase):
             self.assertTrue(payments.RESULT_MESSAGES.get(code), code)
 
     def test_amount_bounds_match_the_live_gateway(self):
-        """Probed 2026-09-15: 1000 and 4,000,000,000 pass, 999 and +1 do not.
+        """Probed 2026-10-07: 1000 and 1,000,000,000 pass, 999 and +1 do not.
 
-        These are the numbers the gateway itself enforces; a wider ceiling here
+        These are the numbers the gateway itself enforces for this merchant
+        (the ceiling is per-merchant and can change); a wider ceiling here
         means an order our own guard called valid is refused at the gateway.
         `deploy/smoke_payment.py` re-probes both bounds against the real gateway.
         """
         self.assertEqual(payments.MIN_AMOUNT_RIAL, 1000)
-        self.assertEqual(payments.MAX_AMOUNT_RIAL, 4_000_000_000)
+        self.assertEqual(payments.MAX_AMOUNT_RIAL, 1_000_000_000)
 
 
 class CheckoutTests(BaseTestCase):
@@ -313,19 +315,25 @@ class ReturnDestinationTests(BaseTestCase):
         self.assertEqual(r.status_code, 302)
         self.assertNotIn("localhost", r.url)
         # The host the buyer arrived on is the only host we know they can reach.
-        self.assertTrue(r.url.startswith("http://dlea.piqagram.ir/app/billing"), r.url)
+        self.assertTrue(
+            r.url.startswith("http://dlea.piqagram.ir/app/payment/result"), r.url
+        )
 
     def test_the_configured_frontend_url_wins(self):
         with patch.dict("os.environ", {"FRONTEND_URL": "https://dlea.piqagram.ir"}):
             r = self._callback()
-        self.assertTrue(r.url.startswith("https://dlea.piqagram.ir/app/billing"), r.url)
+        self.assertTrue(
+            r.url.startswith("https://dlea.piqagram.ir/app/payment/result"), r.url
+        )
 
     def test_a_public_cors_origin_beats_the_request_host(self):
         with patch.dict("os.environ", {"FRONTEND_URL": ""}), override_settings(
             CORS_ALLOWED_ORIGINS=["http://localhost:5173", "https://app.example.com"]
         ):
             r = self._callback()
-        self.assertTrue(r.url.startswith("https://app.example.com/app/billing"), r.url)
+        self.assertTrue(
+            r.url.startswith("https://app.example.com/app/payment/result"), r.url
+        )
 
     def test_with_no_host_at_all_the_redirect_stays_relative(self):
         """A relative redirect lands on the host the request itself used, which
@@ -415,6 +423,32 @@ class RenewalTests(BaseTestCase):
         # leftover older row would keep showing the previous plan.
         self.assertEqual(Subscription.objects.filter(user=self.user).count(), 1)
 
+    def test_renewal_matches_legacy_english_plan_name(self):
+        """DEV-116: a subscription stored as "Pro" must still renew.
+
+        The current catalogue names plans in Persian ("پرو"), so raw equality
+        said "different plan" and threw away the days the buyer already owned.
+        """
+        sub = Subscription.objects.create(
+            user=self.user,
+            plan="Pro",  # legacy English name
+            start_date=timezone.localdate(),
+            end_date=timezone.localdate() + timedelta(days=10),
+            total_days=30,
+            days_left=10,
+            price="۲۰۰,۰۰۰ تومان",
+        )
+        order = self._paid_order()
+        with patch("api.payments.verify_payment", return_value=verify_ok(order.amount_rial)):
+            self.client.get(
+                "/api/billing/callback/",
+                {"orderId": order.pk, "trackId": order.authority, "success": "1"},
+            )
+
+        sub.refresh_from_db()
+        self.assertEqual(sub.days_left, 40)  # 10 remaining + 30 renewed, not a fresh 30
+        self.assertEqual(Subscription.objects.filter(user=self.user).count(), 1)
+
 
 class OrderStatusTests(BaseTestCase):
     def setUp(self):
@@ -496,3 +530,203 @@ class AdminPaymentListTests(BaseTestCase):
         self.assertEqual(row["accountEmail"], self.buyer.email)
         self.assertEqual(row["amountRial"], 2_000_000)
         self.assertNotEqual(row["paidAt"], "")
+
+
+class CouponTests(BaseTestCase):
+    """DEV-156: discount codes.
+
+    The whole point of these tests is that a coupon can only ever lower the
+    bill by what its own row in the database says it is worth: the preview
+    endpoint the page calls is a preview, and checkout re-derives the discount
+    before the gateway is ever asked for a number.
+    """
+
+    def setUp(self):
+        self.plan = self.make_plan(
+            slug="pro", name="Pro", price="۲۰۰,۰۰۰", unit="تومان / ماه", sellable=True
+        )
+        self.user = self.make_user(username="buyer")
+        self.auth(self.user)
+
+    def _coupon(self, **kwargs):
+        data = {"code": "DLEA20", "percent": 20, "active": True}
+        data.update(kwargs)
+        return Coupon.objects.create(**data)
+
+    def _preview(self, code, plan="pro", cycle="monthly"):
+        return self.client.post(
+            "/api/billing/coupon/", {"plan": plan, "cycle": cycle, "code": code}, format="json"
+        )
+
+    # ── the preview the page shows before paying ──────────────────────────
+
+    def test_preview_prices_the_discounted_amount(self):
+        self._coupon()
+        r = self._preview("DLEA20")
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.data["listToman"], 200_000)
+        self.assertEqual(r.data["discountToman"], 40_000)
+        self.assertEqual(r.data["totalToman"], 160_000)
+        self.assertEqual(r.data["totalRial"], 1_600_000)
+
+    def test_preview_applies_to_the_ten_billed_months_of_a_yearly_cycle(self):
+        """Yearly bills ten months, so the discount is 20% of ten months."""
+        self._coupon()
+        r = self._preview("DLEA20", cycle="yearly")
+        self.assertEqual(r.data["listToman"], 2_000_000)
+        self.assertEqual(r.data["discountToman"], 400_000)
+        self.assertEqual(r.data["totalToman"], 1_600_000)
+
+    def test_a_code_ignores_case_and_surrounding_spaces(self):
+        self._coupon()
+        r = self._preview("  dlea20 ")
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.data["code"], "DLEA20")
+
+    def test_an_empty_code_quotes_the_list_price(self):
+        """No code is not an error — the page re-prices on every plan change."""
+        r = self._preview("")
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.data["totalToman"], 200_000)
+        self.assertEqual(r.data["discountToman"], 0)
+
+    def test_an_unknown_code_is_refused(self):
+        r = self._preview("NOPE")
+        self.assertEqual(r.status_code, 400)
+        self.assertIn("معتبر نیست", r.data["detail"])
+
+    def test_inactive_expired_and_exhausted_codes_are_refused(self):
+        cases = [
+            ({"active": False}, "غیرفعال"),
+            ({"expires_at": timezone.now() - timedelta(days=1)}, "مهلت"),
+            ({"max_uses": 1, "used_count": 1}, "ظرفیت"),
+        ]
+        for kwargs, expected in cases:
+            with self.subTest(**kwargs):
+                Coupon.objects.all().delete()
+                self._coupon(**kwargs)
+                r = self._preview("DLEA20")
+                self.assertEqual(r.status_code, 400)
+                self.assertIn(expected, r.data["detail"])
+
+    def test_a_percent_above_one_hundred_still_leaves_a_payable_order(self):
+        """A code can never make the order free — the gateway has a floor."""
+        self._coupon(percent=150)
+        r = self._preview("DLEA20")
+        self.assertEqual(r.status_code, 400)
+        self.assertIn("کمتر از حد مجاز", r.data["detail"])
+
+    # ── checkout charges what the coupon says ─────────────────────────────
+
+    @patch("api.payments.request_payment")
+    def test_checkout_charges_the_discounted_amount(self, request_payment):
+        request_payment.return_value = request_ok()
+        self._coupon()
+        r = self.client.post(
+            "/api/billing/checkout/", {"plan": "pro", "coupon": "DLEA20"}, format="json"
+        )
+
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.data["amount"], 1_600_000)  # 160,000 Toman in Rial
+        self.assertEqual(r.data["amountToman"], 160_000)
+        self.assertEqual(r.data["listAmountToman"], 200_000)
+        self.assertEqual(r.data["discountToman"], 40_000)
+        # The gateway is asked for the discounted number, and only that one.
+        self.assertEqual(request_payment.call_args.kwargs["amount_rial"], 1_600_000)
+
+        order = Payment.objects.get()
+        self.assertEqual(order.coupon_code, "DLEA20")
+        self.assertEqual(order.discount_rial, 400_000)
+        self.assertEqual(order.amount_rial, 1_600_000)
+        # The list price survives on the order, so an invoice can show both.
+        sent = order.raw_response["sent"]
+        self.assertEqual(sent["listAmount"], 2_000_000)
+        self.assertEqual(sent["coupon"], "DLEA20")
+        self.assertEqual(sent["discount"], 400_000)
+
+    @patch("api.payments.request_payment")
+    def test_a_bad_code_stops_the_order_before_the_gateway(self, request_payment):
+        r = self.client.post(
+            "/api/billing/checkout/", {"plan": "pro", "coupon": "NOPE"}, format="json"
+        )
+        self.assertEqual(r.status_code, 400)
+        request_payment.assert_not_called()
+        self.assertFalse(Payment.objects.exists())
+
+    @patch("api.payments.request_payment")
+    def test_a_code_without_a_coupon_is_still_a_normal_order(self, request_payment):
+        request_payment.return_value = request_ok()
+        r = self.client.post("/api/billing/checkout/", {"plan": "pro"}, format="json")
+        self.assertEqual(r.status_code, 200)
+        order = Payment.objects.get()
+        self.assertEqual(order.coupon_code, "")
+        self.assertEqual(order.discount_rial, 0)
+        self.assertEqual(order.amount_rial, 2_000_000)
+
+    # ── what a coupon costs ───────────────────────────────────────────────
+
+    @patch("api.payments.verify_payment")
+    @patch("api.payments.request_payment")
+    def test_a_use_is_counted_only_when_the_order_settles(self, request_payment, verify):
+        request_payment.return_value = request_ok()
+        verify.return_value = verify_ok(1_600_000)
+        coupon = self._coupon()
+        self.client.post(
+            "/api/billing/checkout/", {"plan": "pro", "coupon": "DLEA20"}, format="json"
+        )
+        order = Payment.objects.get()
+        coupon.refresh_from_db()
+        # Opening an order must not burn a use: most carts never reach the bank.
+        self.assertEqual(coupon.used_count, 0)
+
+        self.client.get(
+            "/api/billing/callback/",
+            {"orderId": order.pk, "trackId": order.authority, "success": "1"},
+        )
+        coupon.refresh_from_db()
+        self.assertEqual(coupon.used_count, 1)
+
+    @patch("api.payments.verify_payment")
+    def test_a_coupon_at_capacity_cannot_be_used_again(self, verify):
+        verify.return_value = verify_ok(1_600_000)
+        coupon = self._coupon(max_uses=1)
+        order = Payment.objects.create(
+            user="Buyer",
+            account=self.user,
+            plan="Pro",
+            plan_slug="pro",
+            cycle="monthly",
+            amount="۱۶۰,۰۰۰ تومان",
+            amount_rial=1_600_000,
+            date=timezone.localdate(),
+            status=PAYMENT_PENDING,
+            authority="track-coupon",
+            coupon_code="DLEA20",
+            discount_rial=400_000,
+        )
+        self.client.get(
+            "/api/billing/callback/",
+            {"orderId": order.pk, "trackId": order.authority, "success": "1"},
+        )
+        coupon.refresh_from_db()
+        self.assertEqual(coupon.used_count, 1)
+        self.assertIn("ظرفیت", self._preview("DLEA20").data["detail"])
+
+    def test_the_order_payload_carries_the_discount(self):
+        order = Payment.objects.create(
+            user="Buyer",
+            account=self.user,
+            plan="Pro",
+            plan_slug="pro",
+            cycle="monthly",
+            amount="۱۶۰,۰۰۰ تومان",
+            amount_rial=1_600_000,
+            date=timezone.localdate(),
+            status=PAYMENT_PENDING,
+            coupon_code="DLEA20",
+            discount_rial=400_000,
+        )
+        r = self.client.get(f"/api/billing/orders/{order.pk}/")
+        self.assertEqual(r.data["couponCode"], "DLEA20")
+        self.assertEqual(r.data["discountRial"], 400_000)
+        self.assertEqual(r.data["listAmountRial"], 2_000_000)

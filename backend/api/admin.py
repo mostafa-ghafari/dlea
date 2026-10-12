@@ -10,6 +10,7 @@ from .models import (
     CalendarDay,
     CoachInsights,
     CoachPeriod,
+    Coupon,
     EconomicEvent,
     EquityCurvePoint,
     ForexSymbol,
@@ -119,10 +120,34 @@ admin.site.register(Goal)
 admin.site.register(Achievement)
 admin.site.register(AchievementHistory)
 admin.site.register(RoleTier)
+@admin.register(Coupon)
+class CouponAdmin(admin.ModelAdmin):
+    """Where discount codes are created (DEV-156).
+
+    The app's own admin panel prices plans; codes are minted here, which keeps
+    one place that can hand out free money. The code is saved upper-cased so a
+    search for `dlea20` finds `DLEA20` — matching is case-insensitive anyway.
+    """
+
+    list_display = ("code", "percent", "amount", "active", "used_count", "max_uses", "expires_at")
+    list_filter = ("active",)
+    search_fields = ("code",)
+
+    def save_model(self, request, obj, form, change):
+        obj.code = Coupon.normalize(obj.code)
+        super().save_model(request, obj, form, change)
+
+
+@admin.register(Payment)
+class PaymentAdmin(admin.ModelAdmin):
+    list_display = ("id", "user", "plan", "cycle", "amount", "coupon_code", "discount_rial", "status", "date")
+    list_filter = ("status", "cycle", "plan", "gateway")
+    search_fields = ("user", "reference_id", "coupon_code", "account__email")
+
+
 admin.site.register(Plan)
 admin.site.register(Subscription)
 admin.site.register(PlatformUser)
-admin.site.register(Payment)
 admin.site.register(ReferralLink)
 admin.site.register(NewsItem)
 admin.site.register(Ticket)

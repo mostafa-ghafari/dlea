@@ -6,6 +6,7 @@ serializers stay thin and the frontend types map 1:1.
 
 from django.conf import settings
 from django.db import models
+from django.utils import timezone
 
 
 def fa(n: int | float) -> str:
@@ -329,6 +330,63 @@ PAYMENT_PAID = "موفق"
 PAYMENT_FAILED = "ناموفق"
 
 
+class Coupon(models.Model):
+    """A discount code a buyer can type at checkout.
+
+    One code carries either a percentage or a fixed amount, never both, and the
+    discount is always computed server-side from the plan price: the browser
+    may *ask* what a code is worth (``billing/coupon/``), but it can never tell
+    the gateway a smaller number than the one we charge.
+    """
+
+    code = models.CharField(max_length=32, unique=True)
+    # Percentage off (0–100). Used when set; `amount` is the fallback.
+    percent = models.PositiveSmallIntegerField(default=0)
+    # Fixed discount in Toman. Used only when `percent` is 0.
+    amount = models.PositiveIntegerField(default=0)
+    active = models.BooleanField(default=True)
+    # 0 = unlimited. Counted when an order *settles*, not when it is opened, so
+    # an abandoned cart does not burn a use.
+    max_uses = models.PositiveIntegerField(default=0)
+    used_count = models.PositiveIntegerField(default=0)
+    expires_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-id"]
+
+    def __str__(self):
+        return self.code
+
+    @staticmethod
+    def normalize(raw) -> str:
+        """` dlea20 ` → `DLEA20` — codes ignore case and stray spaces."""
+        return str(raw or "").strip().upper()
+
+    def is_usable(self, now=None) -> tuple[bool, str]:
+        """``(usable, reason)`` — why a code cannot be applied, in Persian."""
+        if not self.active:
+            return False, "این کد تخفیف غیرفعال است"
+        now = now or timezone.now()
+        if self.expires_at and self.expires_at < now:
+            return False, "مهلت این کد تخفیف تمام شده است"
+        if self.max_uses and self.used_count >= self.max_uses:
+            return False, "ظرفیت استفاده از این کد تخفیف پر شده است"
+        return True, ""
+
+    def discount_toman(self, toman: int) -> int:
+        """What this code takes off a `toman` order, in Toman.
+
+        Never the whole price: a zero-Toman order cannot be sent to the
+        gateway, so at least one Toman always stays on the bill.
+        """
+        if self.percent:
+            off = int(toman) * min(self.percent, 100) // 100
+        else:
+            off = self.amount
+        return max(0, min(int(off), max(0, int(toman) - 1)))
+
+
 class Payment(models.Model):
     user = models.CharField(max_length=64)
     plan = models.CharField(max_length=32)
@@ -353,6 +411,10 @@ class Payment(models.Model):
     authority = models.CharField(max_length=64, blank=True, default="")
     card_number = models.CharField(max_length=24, blank=True, default="")
     paid_at = models.DateTimeField(null=True, blank=True)
+    # Discount the buyer got from a coupon, kept on the order so the invoice,
+    # the admin table and the coupon's own usage count all tell one story.
+    coupon_code = models.CharField(max_length=32, blank=True, default="")
+    discount_rial = models.BigIntegerField(default=0)
 
     class Meta:
         ordering = ["-id"]
