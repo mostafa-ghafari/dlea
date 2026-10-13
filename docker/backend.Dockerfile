@@ -1,9 +1,9 @@
 # ── Stage 1: build wheels ──────────────────────────────────────────
+# No build toolchain on purpose: every requirement resolves to a wheel
+# (psycopg2-binary ships its own libpq), so nothing is ever compiled — and
+# `apt-get` against deb.debian.org resets halfway through the package index on
+# the deploy box, which failed whole builds before a line of the app was built.
 FROM python:3.12-slim AS builder
-
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    gcc libpq-dev && \
-    rm -rf /var/lib/apt/lists/*
 
 WORKDIR /build
 COPY . .
@@ -24,10 +24,6 @@ RUN if ls ./*.whl >/dev/null 2>&1; then \
 # ── Stage 2: runtime ───────────────────────────────────────────────
 FROM python:3.12-slim
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    libpq5 curl && \
-    rm -rf /var/lib/apt/lists/*
-
 COPY --from=builder /install /usr/local
 
 RUN useradd -m -r dlea
@@ -46,8 +42,10 @@ USER dlea
 
 EXPOSE 8002
 
+# `curl` was only ever installed for this probe; python is already in the
+# image, so the health check no longer needs a package download to work.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-    CMD curl -f http://localhost:8002/api/ || exit 1
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8002/api/', timeout=5)"
 
 CMD ["gunicorn", "config.wsgi:application", \
      "--bind", "0.0.0.0:8002", \

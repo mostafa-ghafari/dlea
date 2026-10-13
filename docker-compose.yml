@@ -43,8 +43,9 @@ services:
       - "1000"
     volumes:
       - /var/www/dlea.piqagram.ir/backend/media:/app/media
+    # Same probe as the image: python is in the image, curl is not installed.
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8002/api/"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8002/api/', timeout=5)"]
       interval: 15s
       timeout: 5s
       retries: 3
