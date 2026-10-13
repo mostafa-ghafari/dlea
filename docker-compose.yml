@@ -9,8 +9,11 @@ services:
     restart: unless-stopped
     ports:
       - "127.0.0.1:3000:3000"
+    # Mirrors the image's own HEALTHCHECK: the runtime is a bare node:22-alpine
+    # (no wget), so probing with fetch() keeps the container healthy without
+    # depending on a package the build box cannot reliably download.
     healthcheck:
-      test: ["CMD", "wget", "-q", "--spider", "http://localhost:3000/"]
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3000/').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
       interval: 15s
       timeout: 5s
       retries: 3
