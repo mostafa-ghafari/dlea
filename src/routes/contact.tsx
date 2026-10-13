@@ -40,7 +40,7 @@ const teamMembers = [
   {
     name: "دکتر ارین خسروی",
     role: "همکار و ادمین",
-    photo: "/team/photo4.jpg",
+    photo: "/team/photo2.jpg",
     email: "mani1995mgf@gmail.com",
     phones: ["+98 938 429 0960"],
     telegram: "@Supp20262026",
@@ -56,7 +56,7 @@ const teamMembers = [
   {
     name: "مهندس مصطفی غفاری",
     role: "برنامه‌نویس پروژه",
-    photo: "/team/photo2.jpg",
+    photo: "/team/photo4.jpg",
     email: "mostafa.ghaffari75@gmail.com",
     phones: ["09134353632"],
     telegram: "@ghaffari_tech",
