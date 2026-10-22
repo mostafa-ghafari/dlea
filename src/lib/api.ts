@@ -374,12 +374,124 @@ export type AiInsights = {
 /* Transport                                                           */
 /* ------------------------------------------------------------------ */
 
-function getAccessToken(): string | null {
+const ACCESS_KEY = "dlea:access";
+const REFRESH_KEY = "dlea:refresh";
+const USER_KEY = "dlea:user";
+
+function readToken(key: string): string | null {
   try {
-    return window.localStorage.getItem("dlea:access");
+    return window.localStorage.getItem(key);
   } catch {
     return null;
   }
+}
+
+function getAccessToken(): string | null {
+  return readToken(ACCESS_KEY);
+}
+
+/** Drop the local session. Safe on the server, where there is no storage. */
+function clearSession(): void {
+  try {
+    window.localStorage.removeItem(ACCESS_KEY);
+    window.localStorage.removeItem(REFRESH_KEY);
+    window.localStorage.removeItem(USER_KEY);
+  } catch {
+    /* SSR build, or storage disabled by the browser */
+  }
+}
+
+/**
+ * The session could not be renewed: forget it and send the trader to sign in.
+ *
+ * Without this the shell kept rendering — header, sidebar, KPI cards — on top
+ * of a pile of 401s, so a session that expired overnight looked like an
+ * account whose trades had vanished: empty menu, `۰٪` win rate and a blank
+ * equity chart, with no hint that anything had failed.
+ */
+export const SESSION_EXPIRED_KEY = "dlea:session-expired";
+
+function endSession(): void {
+  clearSession();
+  invalidateCache("");
+  if (typeof window === "undefined") return;
+  if (window.location.pathname.startsWith("/login")) return;
+  try {
+    // The router drops unknown search params while it hydrates, so the notice
+    // would vanish if it only travelled in the URL. The flag survives the
+    // navigation and the login page clears it once it has been read.
+    window.sessionStorage.setItem(SESSION_EXPIRED_KEY, "1");
+  } catch {
+    /* storage disabled — the ?expired=1 in the URL is the fallback */
+  }
+  window.location.assign("/login?expired=1");
+}
+
+/**
+ * Paths that never trigger a refresh: the refresh call itself, and the sign-in
+ * endpoints, which answer 401 for a wrong password rather than an old token.
+ */
+function isAuthPath(path: string): boolean {
+  return path.replace(/^\/+/, "").startsWith("auth/");
+}
+
+/**
+ * Trade the stored refresh token for a new access token.
+ *
+ * The access token lives 24 hours and the refresh token a week
+ * (`SIMPLE_JWT` in the backend), and the login page has always stored both —
+ * but nothing ever spent the refresh token, so the first page opened the day
+ * after signing in was a wall of 401s. Concurrent requests share one refresh:
+ * `ROTATE_REFRESH_TOKENS` is on, so a second call would present a token the
+ * first one already spent and log the user out for no reason.
+ */
+let refreshInFlight: Promise<string | null> | null = null;
+
+async function refreshAccessToken(): Promise<string | null> {
+  if (refreshInFlight) return refreshInFlight;
+  const refresh = readToken(REFRESH_KEY);
+  if (!refresh) {
+    endSession();
+    return null;
+  }
+  refreshInFlight = (async () => {
+    try {
+      const res = await fetch(`${API_BASE}/auth/token/refresh/`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ refresh }),
+      });
+      if (!res.ok) {
+        endSession();
+        return null;
+      }
+      const data = (await res.json()) as { access?: string; refresh?: string };
+      if (!data.access) {
+        endSession();
+        return null;
+      }
+      try {
+        window.localStorage.setItem(ACCESS_KEY, data.access);
+        // Rotation is enabled, so the token we just sent is spent: keep the
+        // replacement or the next refresh would present a dead one.
+        if (data.refresh) window.localStorage.setItem(REFRESH_KEY, data.refresh);
+      } catch {
+        /* storage disabled — the request still goes out with the new token */
+      }
+      // Everything cached under the previous token — or cached while there was
+      // none, which is how empty lists and a "free plan" got frozen for a
+      // minute — is stale now.
+      invalidateCache("");
+      return data.access;
+    } catch {
+      // Offline or the backend is down: not proof the session is over, so keep
+      // the tokens and let the caller report the original error.
+      return null;
+    } finally {
+      refreshInFlight = null;
+    }
+  })();
+  return refreshInFlight;
 }
 
 // ── In-memory GET cache + request deduplication ──────────────────────
@@ -413,18 +525,29 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     }
   }
 
-  const headers: Record<string, string> = {};
-  // Don't set Content-Type for FormData — browser sets it with boundary
-  if (!(init?.body instanceof FormData)) {
-    headers["Content-Type"] = "application/json";
-  }
-  const token = getAccessToken();
-  if (token) headers.Authorization = `Bearer ${token}`;
+  /** One attempt. `retried` marks the replay after a token renewal, so a
+   *  server that keeps answering 401 cannot loop through refreshes forever. */
+  const send = async (token: string | null, retried = false): Promise<T> => {
+    const headers: Record<string, string> = {};
+    // Don't set Content-Type for FormData — browser sets it with boundary
+    if (!(init?.body instanceof FormData)) {
+      headers["Content-Type"] = "application/json";
+    }
+    if (token) headers.Authorization = `Bearer ${token}`;
 
-  const fetchPromise = fetch(`${API_BASE}/${path.replace(/^\//, "")}`, {
-    headers,
-    ...init,
-  }).then(async (res) => {
+    const res = await fetch(`${API_BASE}/${path.replace(/^\//, "")}`, {
+      headers,
+      ...init,
+    });
+
+    // A 401 with a token in hand is an expired access token, not a refusal:
+    // renew it and replay the request once. `refreshAccessToken` ends the
+    // session itself when renewal is impossible.
+    if (res.status === 401 && token && !retried && !isAuthPath(path)) {
+      const renewed = await refreshAccessToken();
+      if (renewed) return send(renewed, true);
+      throw new ApiError("نشست شما منقضی شده است — دوباره وارد شوید.", 401);
+    }
     if (!res.ok) {
       let detail = `API ${res.status}: ${path}`;
       let gateway = false;
@@ -467,7 +590,9 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
       }
     }
     return data as T;
-  });
+  };
+
+  const fetchPromise = send(getAccessToken());
 
   // Track in-flight GETs for deduplication
   if (method === "GET") {
@@ -1109,9 +1234,19 @@ export function useArchivedReports(): ArchivedReport[] {
   return useApi(fetchArchivedReports).data ?? [];
 }
 
-export function useDashboard(): DashboardPayload | null {
+/**
+ * The dashboard request *with* its loading/error state.
+ *
+ * Pages need to tell "this account has not traded yet" apart from "the request
+ * failed" — rendering both as `۰` made a failed load look like a wiped account.
+ */
+export function useDashboardQuery() {
   const [pid] = useActivePortfolioId();
-  return useApi(() => fetchDashboard(pid ?? undefined), [pid]).data;
+  return useApi(() => fetchDashboard(pid ?? undefined), [pid]);
+}
+
+export function useDashboard(): DashboardPayload | null {
+  return useDashboardQuery().data;
 }
 
 export function useForexSymbols(): string[] {

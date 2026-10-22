@@ -24,16 +24,16 @@ export function NavList({
   const location = useLocation();
   const limits = usePlanLimits();
   const roleData = useRole();
-  const roleLoaded = roleData !== null;
   const isAdmin = roleData?.effective === "admin";
   const [lockedFeature, setLockedFeature] = useState<PlanFeature | null>(null);
   const navigate = useNavigate();
 
-  const regularItems = !roleLoaded
-    ? []
-    : isAdmin
-      ? []
-      : nav.filter((item) => !item.admin);
+  // The trader menu does not wait for `role/`: while it is in flight (or after
+  // it failed) the sidebar used to render the "منو" heading with nothing under
+  // it, which reads as a broken app rather than a slow request. Admins are the
+  // only users who see a different menu, so showing the trader links until the
+  // role arrives is right for everyone else.
+  const regularItems = isAdmin ? [] : nav.filter((item) => !item.admin);
   const adminItems = nav.filter((item) => item.admin);
 
   function isActive(item: (typeof nav)[number]) {

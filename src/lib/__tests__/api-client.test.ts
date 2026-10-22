@@ -173,6 +173,103 @@ describe("mutations", () => {
   });
 });
 
+/** A single response, for tests that script a whole exchange. */
+function jsonResponse(status: number, body: unknown): Response {
+  return {
+    ok: status >= 200 && status < 300,
+    status,
+    async json() {
+      return body;
+    },
+    async text() {
+      return typeof body === "string" ? body : JSON.stringify(body);
+    },
+  } as Response;
+}
+
+describe("expired access token", () => {
+  beforeEach(() => {
+    window.localStorage.clear();
+  });
+
+  afterEach(() => {
+    window.localStorage.clear();
+  });
+
+  it("renews the access token and replays the request once", async () => {
+    window.localStorage.setItem("dlea:access", "expired");
+    window.localStorage.setItem("dlea:refresh", "refresh-1");
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse(401, { detail: "token_not_valid" }))
+      .mockResolvedValueOnce(
+        jsonResponse(200, { access: "fresh", refresh: "refresh-2" }),
+      )
+      .mockResolvedValueOnce(jsonResponse(200, [{ id: "1" }]));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(get("trades/")).resolves.toEqual([{ id: "1" }]);
+
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(fetchMock.mock.calls[1]?.[0]).toBe(
+      `${API_BASE}/auth/token/refresh/`,
+    );
+    const replay = fetchMock.mock.calls[2]?.[1] as RequestInit;
+    expect(replay.headers).toMatchObject({ Authorization: "Bearer fresh" });
+    expect(window.localStorage.getItem("dlea:access")).toBe("fresh");
+    // ROTATE_REFRESH_TOKENS is on: the spent refresh token must be replaced,
+    // or the next renewal presents one the server already retired.
+    expect(window.localStorage.getItem("dlea:refresh")).toBe("refresh-2");
+  });
+
+  it("spends a single refresh for a burst of requests", async () => {
+    window.localStorage.setItem("dlea:access", "expired");
+    window.localStorage.setItem("dlea:refresh", "refresh-1");
+    const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+      if (url.endsWith("/auth/token/refresh/"))
+        return jsonResponse(200, { access: "fresh", refresh: "refresh-2" });
+      const headers = init?.headers as Record<string, string> | undefined;
+      return headers?.Authorization === "Bearer fresh"
+        ? jsonResponse(200, [])
+        : jsonResponse(401, { detail: "token_not_valid" });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await Promise.all([get("trades/"), get("portfolios/"), get("role/")]);
+
+    const refreshes = fetchMock.mock.calls.filter(([url]) =>
+      String(url).endsWith("/auth/token/refresh/"),
+    );
+    expect(refreshes).toHaveLength(1);
+  });
+
+  it("clears the session when the refresh token is refused", async () => {
+    window.localStorage.setItem("dlea:access", "expired");
+    window.localStorage.setItem("dlea:refresh", "dead");
+    window.localStorage.setItem("dlea:user", JSON.stringify({ id: 1 }));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) =>
+        String(url).endsWith("/auth/token/refresh/")
+          ? jsonResponse(401, {
+              detail: "Token is invalid or expired",
+              code: "token_not_valid",
+            })
+          : jsonResponse(401, { detail: "Given token not valid" }),
+      ),
+    );
+
+    const error = await rejection(get("dashboard/"));
+
+    expect(error.status).toBe(401);
+    expect(error.message).toContain("نشست شما منقضی");
+    // A dead session must not linger: the shell would render on top of it.
+    expect(window.localStorage.getItem("dlea:access")).toBeNull();
+    expect(window.localStorage.getItem("dlea:refresh")).toBeNull();
+    expect(window.localStorage.getItem("dlea:user")).toBeNull();
+  });
+});
+
 describe("response handling", () => {
   it("unwraps the DRF pagination wrapper", async () => {
     mockFetch(200, {

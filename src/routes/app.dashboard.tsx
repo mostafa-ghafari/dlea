@@ -29,6 +29,7 @@ import {
   Megaphone,
   Pin,
   Sparkles,
+  ShieldAlert,
   ShieldCheck,
 } from "lucide-react";
 import { useMemo, useState } from "react";
@@ -38,7 +39,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import {
-  useDashboard,
+  useDashboardQuery,
   usePlanLimits,
   useTrades,
   useSubscription,
@@ -80,7 +81,8 @@ function DashboardPage() {
   const { news } = usePlatform();
   const limits = usePlanLimits();
   const subscription = useSubscription();
-  const dashboard = useDashboard();
+  const dashboardQuery = useDashboardQuery();
+  const dashboard = dashboardQuery.data;
   const trades = useTrades();
   const equityCurve = dashboard?.equityCurve ?? [];
   const winLossData = dashboard?.winLossData ?? [];
@@ -121,8 +123,13 @@ function DashboardPage() {
   const maxDrawdown = dashboard?.maxDrawdown ?? 0;
   const bestTrade = dashboard?.bestTrade ?? null;
   const worstTrade = dashboard?.worstTrade ?? null;
+  const tradeCount = dashboard?.tradeCount ?? 0;
   const winnerPct = winLossData.find((w) => w.name === "برنده")?.value ?? 0;
-  const loserPct = 100 - winnerPct;
+  // The loser slice used to be "whatever is left of 100", so an account with
+  // no trades at all read ۱۰۰٪ باخته. Nothing is decided until a trade closes.
+  const loserPct = tradeCount > 0 ? 100 - winnerPct : 0;
+  const pctLabel = (value: number) =>
+    tradeCount > 0 ? `${faDigits(value)}٪` : "—";
 
   const kpis = [
     {
@@ -137,7 +144,7 @@ function DashboardPage() {
       value: faDigits(winRate) + "٪",
       positive: winRate >= 50,
       icon: Percent,
-      sub: `${faDigits(dashboard?.tradeCount ?? 0)} معامله`,
+      sub: `${faDigits(tradeCount)} معامله`,
     },
     {
       label: "Profit Factor",
@@ -170,7 +177,10 @@ function DashboardPage() {
   return (
     <AppShell title="داشبورد" subtitle="خلاصه عملکرد و آمار کلی حساب شما">
       {/* Free plan upgrade banner */}
-      {limits.slug === "free" && (
+      {/* Only once the subscription actually loaded: while it is in flight (or
+          failed) `usePlanLimits` falls back to the free tier, which told paying
+          traders they were on the free plan. */}
+      {subscription !== null && limits.slug === "free" && (
         <div className="mb-4 flex items-center gap-2 rounded-lg border border-primary/20 bg-gradient-to-l from-primary/5 to-primary/10 px-4 py-3">
           <Sparkles className="h-5 w-5 shrink-0 text-primary" />
           <div className="flex-1 text-sm">
@@ -188,6 +198,27 @@ function DashboardPage() {
               ارتقا پلن
             </Button>
           </Link>
+        </div>
+      )}
+      {/* A failed load must say so — zeros look like an empty account */}
+      {dashboardQuery.error && !dashboard && (
+        <div className="mb-4 flex flex-wrap items-center gap-2 rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm">
+          <ShieldAlert className="h-5 w-5 shrink-0 text-destructive" />
+          <div className="min-w-0 flex-1">
+            <span className="font-medium">
+              اطلاعات داشبورد بارگذاری نشد.
+            </span>{" "}
+            <span className="text-muted-foreground">
+              {dashboardQuery.error}
+            </span>
+          </div>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => dashboardQuery.reload()}
+          >
+            تلاش دوباره
+          </Button>
         </div>
       )}
       {/* KPI cards */}
@@ -237,7 +268,13 @@ function DashboardPage() {
               زنده
             </Badge>
           </div>
-          <div className="mt-4 h-56 sm:h-72 w-full overflow-hidden">
+          <div className="relative mt-4 h-56 sm:h-72 w-full overflow-hidden">
+            {equityCurve.length === 0 && !dashboardQuery.loading && (
+              <div className="absolute inset-0 z-10 grid place-items-center px-6 text-center text-xs text-muted-foreground">
+                هنوز معامله‌ای بسته نشده — نمودار پس از ثبت اولین معامله ساخته
+                می‌شود.
+              </div>
+            )}
             <ResponsiveContainer>
               <AreaChart data={equityCurve} margin={{ left: 5, right: 5 }}>
                 <defs>
@@ -302,7 +339,7 @@ function DashboardPage() {
         <div className="card-surface overflow-hidden p-5">
           <h3 className="font-semibold">نرخ برد / باخت</h3>
           <p className="text-xs text-muted-foreground">
-            {faDigits(dashboard?.tradeCount ?? 0)} معامله
+            {faDigits(tradeCount)} معامله
           </p>
           <div className="mt-4 h-44 sm:h-56 w-full overflow-hidden">
             <ResponsiveContainer>
@@ -330,13 +367,13 @@ function DashboardPage() {
             <div className="rounded-lg bg-primary/10 p-3">
               <div className="text-xs text-muted-foreground">برنده</div>
               <div className="text-lg font-bold gain tabular">
-                {faDigits(winnerPct)}٪
+                {pctLabel(winnerPct)}
               </div>
             </div>
             <div className="rounded-lg bg-destructive/10 p-3">
               <div className="text-xs text-muted-foreground">بازنده</div>
               <div className="text-lg font-bold loss tabular">
-                {faDigits(loserPct)}٪
+                {pctLabel(loserPct)}
               </div>
             </div>
           </div>

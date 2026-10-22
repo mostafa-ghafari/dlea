@@ -23,7 +23,13 @@ import {
   ONBOARDING_KEY,
   useCurrentUser,
 } from "@/lib/app-state";
-import { useProfile, useRole, useSubscription, ROLE_NAMES } from "@/lib/api";
+import {
+  invalidateCache,
+  useProfile,
+  useRole,
+  useSubscription,
+  ROLE_NAMES,
+} from "@/lib/api";
 
 export function UserBlock({ compact = false }: { compact?: boolean }) {
   const user = useCurrentUser();
@@ -166,6 +172,9 @@ export function UserBlock({ compact = false }: { compact?: boolean }) {
             localStorage.removeItem("dlea:user");
             localStorage.removeItem(ONBOARDING_KEY);
             localStorage.removeItem(ACTIVE_PORTFOLIO_KEY);
+            // Drop the in-memory GET cache too, or the next sign-in serves the
+            // previous account's trades for up to a minute.
+            invalidateCache("");
             window.location.href = "/login";
           }}
         >

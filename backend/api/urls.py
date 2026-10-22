@@ -1,5 +1,6 @@
 from django.urls import include, path
 from rest_framework.routers import DefaultRouter
+from rest_framework_simplejwt.views import TokenRefreshView
 
 from .auth_views import (
     google_callback,
@@ -88,6 +89,11 @@ urlpatterns = [
     path("auth/send-otp/", send_otp, name="send-otp"),
     path("auth/verify-otp/", verify_otp_register, name="verify-otp"),
     path("auth/login/", login_view, name="login"),
+    # The client keeps the 7-day refresh token it got at login; the 24-hour
+    # access token is renewed here instead of asking the trader to sign in
+    # again. TokenRefreshView honours SIMPLE_JWT.ROTATE_REFRESH_TOKENS, so the
+    # response carries a fresh refresh token too.
+    path("auth/token/refresh/", TokenRefreshView.as_view(), name="token-refresh"),
     path("auth/google/", google_callback, name="google-callback"),
     path("auth/password-reset-request/", password_reset_request, name="password-reset-request"),
     path("auth/password-reset-verify/", password_reset_verify, name="password-reset-verify"),

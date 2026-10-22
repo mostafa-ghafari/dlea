@@ -12,7 +12,7 @@ export const Route = createFileRoute("/login")({
   component: LoginPage,
 });
 
-import { API_BASE } from "@/lib/api";
+import { API_BASE, invalidateCache, SESSION_EXPIRED_KEY } from "@/lib/api";
 
 // Google Client ID — set in backend/.env as GOOGLE_CLIENT_ID
 // For dev, we use a placeholder; when not configured, the Google button shows a toast
@@ -46,6 +46,22 @@ function LoginPage() {
   const [googleLoading, setGoogleLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const googleBtnRef = useRef<HTMLDivElement>(null);
+  // `endSession()` in the API client lands here after the refresh token was
+  // gone or refused, so the trader knows why they are back. The flag is read
+  // once and cleared, so a later manual visit to /login stays quiet.
+  const [expired] = useState(() => {
+    if (typeof window === "undefined") return false;
+    const fromUrl =
+      new URLSearchParams(window.location.search).get("expired") === "1";
+    let fromStorage = false;
+    try {
+      fromStorage = window.sessionStorage.getItem(SESSION_EXPIRED_KEY) === "1";
+      window.sessionStorage.removeItem(SESSION_EXPIRED_KEY);
+    } catch {
+      /* storage disabled */
+    }
+    return fromUrl || fromStorage;
+  });
 
   // Initialize Google Identity Services
   useEffect(() => {
@@ -87,6 +103,9 @@ function LoginPage() {
       localStorage.setItem("dlea:access", data.access);
       localStorage.setItem("dlea:refresh", data.refresh);
       localStorage.setItem("dlea:user", JSON.stringify(data.user));
+      // A previous session's GETs (possibly another account's) must not survive
+      // the sign-in within the 60 s cache window.
+      invalidateCache("");
 
       toast.success(`خوش آمدید ${data.user.firstName || ""}`);
       if (data.role === "admin") {
@@ -128,6 +147,7 @@ function LoginPage() {
       localStorage.setItem("dlea:access", data.access);
       localStorage.setItem("dlea:refresh", data.refresh);
       localStorage.setItem("dlea:user", JSON.stringify(data.user));
+      invalidateCache("");
 
       toast.success(`خوش آمدید ${data.user.firstName || ""}`);
       if (data.role === "admin") {
@@ -178,6 +198,15 @@ function LoginPage() {
           <p className="mt-1 text-sm text-muted-foreground">
             اطلاعات حساب خود را وارد کنید.
           </p>
+
+          {expired && (
+            <div
+              role="status"
+              className="mt-4 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-500"
+            >
+              نشست شما منقضی شده بود. برای ادامه، دوباره وارد شوید.
+            </div>
+          )}
 
           <form className="mt-6 space-y-4" onSubmit={handleLogin}>
             <div className="space-y-2">
