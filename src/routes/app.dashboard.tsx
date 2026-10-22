@@ -205,9 +205,7 @@ function DashboardPage() {
         <div className="mb-4 flex flex-wrap items-center gap-2 rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm">
           <ShieldAlert className="h-5 w-5 shrink-0 text-destructive" />
           <div className="min-w-0 flex-1">
-            <span className="font-medium">
-              اطلاعات داشبورد بارگذاری نشد.
-            </span>{" "}
+            <span className="font-medium">اطلاعات داشبورد بارگذاری نشد.</span>{" "}
             <span className="text-muted-foreground">
               {dashboardQuery.error}
             </span>

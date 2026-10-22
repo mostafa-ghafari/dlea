@@ -474,7 +474,8 @@ async function refreshAccessToken(): Promise<string | null> {
         window.localStorage.setItem(ACCESS_KEY, data.access);
         // Rotation is enabled, so the token we just sent is spent: keep the
         // replacement or the next refresh would present a dead one.
-        if (data.refresh) window.localStorage.setItem(REFRESH_KEY, data.refresh);
+        if (data.refresh)
+          window.localStorage.setItem(REFRESH_KEY, data.refresh);
       } catch {
         /* storage disabled — the request still goes out with the new token */
       }
