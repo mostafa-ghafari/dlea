@@ -73,10 +73,19 @@ function TradeDetail() {
 
   function saveShots(next: string[]) {
     const previous = shots;
+    // `onChange` fires for both adding and deleting, so the toast has to follow
+    // the actual change: deleting a shot used to announce that it was saved.
+    const removed = next.length < previous.length;
     setShots(next);
     if (!trade) return;
     updateTradeScreenshots(trade.id, next)
-      .then(() => toast.success("اسکرین‌شات‌ها در سرور ذخیره شد"))
+      .then(() =>
+        toast.success(
+          removed
+            ? "اسکرین‌شات از معامله حذف شد"
+            : "اسکرین‌شات‌ها در سرور ذخیره شد",
+        ),
+      )
       .catch((err) => {
         // The server refused the list (most often the plan's image cap). Roll
         // the local copy back so a rejected upload never looks saved after a
@@ -85,7 +94,7 @@ function TradeDetail() {
         toast.error(
           err instanceof Error
             ? err.message
-            : `ذخیره اسکرین‌شات ناموفق بود: ${err}`,
+            : `تغییر اسکرین‌شات‌ها ثبت نشد: ${err}`,
         );
       });
   }
