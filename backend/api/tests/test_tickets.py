@@ -38,6 +38,7 @@ class TicketTests(BaseTestCase):
     def test_user_sees_only_own_tickets(self):
         self.client.post("/api/tickets/", self._payload(), format="json")
         other = self.make_user(username="other", email="other@example.com")
+        self.auth(other)
         self.client.post(
             "/api/tickets/",
             {"subject": "تیکت دیگر", "topic": "فنی", "user": "Other", "email": "other@example.com"},
@@ -61,7 +62,9 @@ class TicketTests(BaseTestCase):
         self.make_profile(vuser, role="vip")
         self.auth(vuser)
         # The vip user can create a ticket (their own)…
-        self.client.post("/api/tickets/", self._payload(), format="json")
+        self.client.post(
+            "/api/tickets/", self._payload(email="vip@example.com"), format="json"
+        )
         # …but is NOT notified about other users' tickets like an admin,
         # and cannot list other users' tickets.
         self.auth(self.make_user(username="other", email="other@example.com"))
@@ -76,7 +79,7 @@ class TicketTests(BaseTestCase):
         )
         self.auth(vuser)
         subjects = [t["subject"] for t in self.get_list("/api/tickets/")]
-        self.assertEqual(subjects, [])
+        self.assertEqual(subjects, ["مشکل در پرداخت"])
 
     def test_admin_sees_all_tickets(self):
         self.client.post("/api/tickets/", self._payload(), format="json")
@@ -113,6 +116,7 @@ class TicketTests(BaseTestCase):
 
     def test_admin_reply_marks_answered_and_notifies_owner(self):
         owner = self.make_user(username="owner", email="owner@example.com")
+        self.auth(owner)
         self.client.post(
             "/api/tickets/",
             {"subject": "سوال", "topic": "سایر", "user": "Owner", "email": "owner@example.com"},
@@ -156,6 +160,62 @@ class TicketTests(BaseTestCase):
             f"/api/tickets/{r.data['id']}/set_status/", {"status": "نامعتبر"}, format="json"
         )
         self.assertEqual(r.status_code, 400)
+
+    def test_ticket_ownership_comes_from_the_signed_in_user(self):
+        """DEV-155: the client cannot file a ticket under another address.
+
+        `email`/`user` are display copies of the account; trusting the body let
+        a stale `dlea:user` in localStorage (or a crafted request) attach the
+        ticket to somebody else, who then saw it in their list and got its
+        notifications.
+        """
+        self.client.post(
+            "/api/tickets/",
+            self._payload(email="victim@example.com", user="Victim"),
+            format="json",
+        )
+        ticket = Ticket.objects.latest("id")
+        self.assertEqual(ticket.email, "trader@example.com")
+        self.assertNotEqual(ticket.user, "Victim")
+
+    def test_admin_reply_notifies_the_creator_not_a_spoofed_owner(self):
+        """DEV-155: a spoofed owner email must not receive the reply notification."""
+        victim = self.make_user(username="victim", email="victim@example.com")
+        self.client.post(
+            "/api/tickets/",
+            self._payload(email="victim@example.com", user="Victim"),
+            format="json",
+        )
+        ticket = Ticket.objects.latest("id")
+        self.auth_staff()
+        self.client.post(
+            f"/api/tickets/{ticket.pk}/reply/",
+            {"author": "admin", "body": "پاسخ پشتیبانی"},
+            format="json",
+        )
+        self.assertFalse(Notification.objects.filter(kind="ticket", user=victim).exists())
+        self.assertTrue(
+            Notification.objects.filter(kind="ticket", user=self.user).exists()
+        )
+
+    def test_anonymous_ticket_keeps_no_address(self):
+        """DEV-155: a guest cannot attach a ticket (and its replies) to an account."""
+        victim = self.make_user(username="victim", email="victim@example.com")
+        self.client.force_authenticate(user=None)
+        self.client.post(
+            "/api/tickets/",
+            self._payload(email="victim@example.com", user="Victim"),
+            format="json",
+        )
+        ticket = Ticket.objects.latest("id")
+        self.assertEqual(ticket.email, "")
+        self.auth_staff()
+        self.client.post(
+            f"/api/tickets/{ticket.pk}/reply/",
+            {"author": "admin", "body": "پاسخ"},
+            format="json",
+        )
+        self.assertFalse(Notification.objects.filter(kind="ticket", user=victim).exists())
 
     def test_message_time_is_jalali(self):
         r = self.client.post("/api/tickets/", self._payload(), format="json")

@@ -872,7 +872,21 @@ class TicketViewSet(viewsets.ModelViewSet):
         return qs.none()
 
     def perform_create(self, serializer):
-        ticket = serializer.save()
+        # Ownership always comes from the signed-in account. `email` and `user`
+        # are display fields the client sends along, and trusting them let a
+        # stale `dlea:user` in localStorage (or a crafted request) file a ticket
+        # under someone else's address — that person then saw the ticket in
+        # their list and received the admin reply notification for it
+        # (DEV-155).
+        user = self.request.user
+        if user.is_authenticated:
+            full_name = f"{user.first_name} {user.last_name}".strip()
+            ticket = serializer.save(email=user.email, user=full_name or user.email)
+        else:
+            # Anonymous senders cannot claim an account: a guest ticket keeps no
+            # address, so the admin's reply is never routed to someone else's
+            # bell.
+            ticket = serializer.save(email="")
         # Notify all admin users that a new ticket was created.
         if self.request.user.is_authenticated:
             from django.utils import timezone
