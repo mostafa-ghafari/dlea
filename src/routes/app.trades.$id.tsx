@@ -72,15 +72,22 @@ function TradeDetail() {
   );
 
   function saveShots(next: string[]) {
+    const previous = shots;
     setShots(next);
     if (!trade) return;
     updateTradeScreenshots(trade.id, next)
       .then(() => toast.success("اسکرین‌شات‌ها در سرور ذخیره شد"))
-      .catch((err) =>
+      .catch((err) => {
+        // The server refused the list (most often the plan's image cap). Roll
+        // the local copy back so a rejected upload never looks saved after a
+        // reload — the count lives in localStorage.
+        setShots(previous);
         toast.error(
-          `ذخیره اسکرین‌شات ناموفق بود: ${err instanceof Error ? err.message : err}`,
-        ),
-      );
+          err instanceof Error
+            ? err.message
+            : `ذخیره اسکرین‌شات ناموفق بود: ${err}`,
+        );
+      });
   }
 
   if (!trade) {
@@ -189,8 +196,8 @@ function TradeDetail() {
             <h3 className="font-semibold">اسکرین‌شات‌های چارت</h3>
           </div>
           <p className="text-xs text-muted-foreground">
-            هر تعداد تصویر می‌توانی اضافه یا حذف کنی؛ تصاویر به‌صورت خودکار
-            فشرده می‌شوند.
+            تعداد تصاویر طبق سقف پلن فعلی است؛ تصاویر به‌صورت خودکار فشرده
+            می‌شوند.
           </p>
           <ImageUploader
             images={shots}

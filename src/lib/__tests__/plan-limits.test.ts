@@ -60,6 +60,26 @@ describe("resolvePlanLimits", () => {
     expect(limits.maxTradesPerMonth).toBe(50);
   });
 
+  it("applies the admin's free-plan numbers to users without a subscription", () => {
+    // DEV-156: the free tier is what a user without a Subscription row gets,
+    // so its catalogue entry must still be matched — the built-in fallback
+    // used to hide the admin's "0 images".
+    const limits = resolvePlanLimits(
+      [plan("free", "رایگان", ["trades", "journal"], { maxImagesPerEntry: 0 })],
+      null,
+    );
+    expect(limits.maxImagesPerEntry).toBe(0);
+  });
+
+  it("keeps numeric limits when only the feature list is unconfigured", () => {
+    const limits = resolvePlanLimits(
+      [plan("free", "رایگان", [], { maxImagesPerEntry: 0 })],
+      "رایگان",
+    );
+    expect(limits.maxImagesPerEntry).toBe(0);
+    expect(limits.features.length).toBeGreaterThan(0);
+  });
+
   it("ignores an unknown plan name instead of locking anything", () => {
     expect(
       resolvePlanLimits(CATALOGUE, "Trial").features.length,

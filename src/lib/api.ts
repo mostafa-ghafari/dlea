@@ -1438,26 +1438,37 @@ function matchPlan(
  * Pure and exported on purpose: getting this wrong does not show a wrong
  * number, it locks every page of the app.
  *
- * A plan whose `features` list is empty counts as *not configured*, never as
- * "nothing allowed". The column shipped with an empty default and nothing
- * filled it, so an empty list locked every gated page the moment a purchase
- * put a real plan name on the subscription; three tiers of paid users then had
- * a sidebar full of padlocks. Until an admin saves the list, the built-in tier
- * defaults keep the app usable.
+ * A plan whose `features` list is empty keeps the built-in feature list — the
+ * column shipped with an empty default and nothing filled it, so treating the
+ * empty list literally locked every gated page the moment a purchase put a
+ * real plan name on the subscription. That fallback covers the feature list
+ * only: the plan's numeric limits are the admin's and always win.
  */
 export function resolvePlanLimits(
   plans: PlanLimits[] | null | undefined,
   planName: string | null | undefined,
 ): PlanLimits {
+  // No subscription row (or no plan name) means the free plan — match its
+  // catalogue entry explicitly, otherwise the admin's own free-tier numbers
+  // never reach the client and the fallback silently replaces them.
   const matched =
-    plans && plans.length > 0 ? matchPlan(plans, planName) : undefined;
+    plans && plans.length > 0
+      ? (matchPlan(plans, planName) ??
+        (planName ? undefined : matchPlan(plans, "free")))
+      : undefined;
   if (matched && matched.features.length > 0) {
     return matched;
   }
-  // Plans API unavailable, unknown plan, or a plan nobody configured yet. The
-  // matched slug decides the tier — a Persian display name has no Latin slug.
+  // Plans API unavailable or unknown plan. The matched slug decides the tier —
+  // a Persian display name has no Latin slug.
   const slug = matched?.slug ?? planSlug(planName);
-  return slug === "free" || !planName ? FREE_LIMITS : PAID_LIMITS;
+  const fallback = slug === "free" || !planName ? FREE_LIMITS : PAID_LIMITS;
+  if (!matched) return fallback;
+  // The plan exists but its feature list was never saved. Only that list falls
+  // back: the numeric limits are the admin's, and overriding them silently
+  // handed free users images (and other caps) the panel had already set to
+  // zero (DEV-156).
+  return { ...fallback, ...matched, features: fallback.features };
 }
 
 /**
