@@ -396,7 +396,7 @@ class AchievementSerializer(serializers.ModelSerializer):
             "Win Rate بالای ۷۰٪": win_rate > 70 and count >= 20,
             "ریسک زیر ۱٪ در ۵۰ معامله": count >= 50,
             "بدون Overtrading در ۲ هفته": count < 50,
-            "دابل کردن سرمایه": total_pnl > 0 and count >= 5,
+            "دو برابر کردن سرمایه": total_pnl > 0 and count >= 5,
             "۱۰ معامله A+ متوالی": count >= 10,
             "اتصال موفق متاتریدر": has_mt,
             "استاد چکلیست": count >= 50,

@@ -36,6 +36,16 @@ export const Route = createFileRoute("/app/achievements")({
 const normalizeHalfSpaces = (s: string) => s.replace(/\u200c/g, " ");
 const cleanDesc = (s: string) => normalizeHalfSpaces(s).replace(/\.+$/, "");
 
+/**
+ * Lookup key for a badge title.
+ *
+ * The catalog and the seeded rows disagree on compound words by a hair: one
+ * writes «ماه سود ده», the other «ماه سودده». Normalizing the half-space alone
+ * left those unmatched, so the API row was appended next to its own catalog
+ * entry and the same badge showed up twice. Ignore every separator instead.
+ */
+const matchKey = (s: string) => s.replace(/[\s\u200c\u200f]+/g, "");
+
 /** Each achievement gets its own icon + color scheme for visual variety */
 const achievementStyle: Record<
   string,
@@ -96,7 +106,7 @@ const achievementStyle: Record<
     bgLocked: "bg-yellow-500/10 text-yellow-500/40",
     badgeClass: "border-yellow-500/30 bg-yellow-500/10 text-yellow-600",
   },
-  "۳۰ روز متوالی ژورال نویسی": {
+  "۳۰ روز متوالی ژورنال نویسی": {
     icon: BookOpen,
     iconColor: "text-indigo-500",
     bgGradient: "bg-gradient-to-br from-indigo-500 to-indigo-600 text-white",
@@ -131,7 +141,7 @@ const achievementStyle: Record<
     bgLocked: "bg-violet-500/10 text-violet-500/40",
     badgeClass: "border-violet-500/30 bg-violet-500/10 text-violet-600",
   },
-  "دابل کردن سرمایه": {
+  "دو برابر کردن سرمایه": {
     icon: DollarSign,
     iconColor: "text-lime-600",
     bgGradient: "bg-gradient-to-br from-lime-500 to-lime-600 text-white",
@@ -164,7 +174,7 @@ const achievementStyle: Record<
 /** Style lookup keyed by the normalized (half-space-free) title. */
 const styleByTitle = Object.fromEntries(
   Object.entries(achievementStyle).map(([title, style]) => [
-    normalizeHalfSpaces(title),
+    matchKey(title),
     style,
   ]),
 );
@@ -184,7 +194,7 @@ const defaultStyle = {
 // silently drops badges — earned state still comes from the API.
 const FALLBACK_DESCS = [
   "یک هفته کامل طبق قوانین ترید کردی",
-  "حداکثر دراودان را نصف کردی",
+  "ریسک حسابت را کم کردی",
   "کنترل احساسات درجه یک",
   "قهرمان ژورال نویسی",
   "استراتژی سود ده اثبات شده",
@@ -194,9 +204,9 @@ const FALLBACK_DESCS = [
   "یک ماه کامل با سود مثبت",
   "دقت شکار درجه یک",
   "مدیر ریسک واقعی",
-  "صبر یعنی همین",
+  "حفظ سرمایه در بلندمدت",
   "سرمایه اولیه ات را دو برابر کردی",
-  "فقط ست آپ های تمیز",
+  "ورود دقیقا طبق پلن معاملاتی",
   "همگام سازی خودکار فعال شد",
   "۵۰ چک لیست کامل قبل از ورود",
 ];
@@ -207,29 +217,35 @@ const FALLBACK_DESCS = [
  * otherwise) and any extra server-defined badge is appended.
  */
 function resolveBadgeList(apiBadges: Achievement[]): Achievement[] {
-  const known = Object.keys(achievementStyle).map(normalizeHalfSpaces);
-  const byTitle = new Map(
+  const catalogue = Object.keys(achievementStyle);
+  const byKey = new Map(
     apiBadges.map((a) => [
-      normalizeHalfSpaces(a.title),
+      matchKey(a.title),
       { ...a, title: normalizeHalfSpaces(a.title), desc: cleanDesc(a.desc) },
     ]),
   );
-  const merged = known.map((title, i) => {
-    const api = byTitle.get(title);
+  const merged = catalogue.map((title, i) => {
+    const api = byKey.get(matchKey(title));
     return (
       api ?? {
         id: title,
-        title,
+        title: normalizeHalfSpaces(title),
         desc: FALLBACK_DESCS[i] ?? "",
         earned: false,
         rule: "",
       }
     );
   });
+  // A row whose title merely spells the badge differently is not a new badge:
+  // appending it is what rendered the same badge twice.
+  const knownKeys = new Set(catalogue.map(matchKey));
   for (const a of apiBadges) {
-    const title = normalizeHalfSpaces(a.title);
-    if (!known.includes(title)) {
-      merged.push({ ...a, title, desc: cleanDesc(a.desc) });
+    if (!knownKeys.has(matchKey(a.title))) {
+      merged.push({
+        ...a,
+        title: normalizeHalfSpaces(a.title),
+        desc: cleanDesc(a.desc),
+      });
     }
   }
   return merged;
@@ -246,7 +262,7 @@ function AchievementsPage() {
     >
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {achievements.map((a) => {
-          const style = styleByTitle[a.title] ?? defaultStyle;
+          const style = styleByTitle[matchKey(a.title)] ?? defaultStyle;
           const Icon = style.icon;
           return (
             <div
