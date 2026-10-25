@@ -26,16 +26,8 @@ export type TourStep = { title: string; body: string };
 export const tours: Record<string, TourStep[]> = {
   "/app/dashboard": [
     {
-      title: "خوش آمدی به داشبورد",
-      body: "اینجا خلاصه عملکرد کل حساب فارکس تو را می‌بینی: سود کل، نرخ برد و Profit Factor.",
-    },
-    {
-      title: "نمودار Equity",
-      body: "روند رشد سرمایه در ۳۰ روز اخیر. خط نقطه‌چین موجودی و خط پُر اکوییتی است.",
-    },
-    {
-      title: "آخرین معاملات",
-      body: "شش معامله آخر همیشه اینجاست؛ برای جزئیات کامل به بخش معاملات برو.",
+      title: "داشبورد",
+      body: "در بخش داشبورد خلاصه عملکرد حساب فارکس را می‌بینی؛ سود کل، نرخ برد و Profit Factor.",
     },
   ],
   "/app/portfolios": [
@@ -68,16 +60,8 @@ export const tours: Record<string, TourStep[]> = {
   ],
   "/app/journal": [
     {
-      title: "ژورنال بلوکی",
-      body: "ادیتور بلوکی مثل Notion: تیتر، لیست، نقل‌قول و تصویر داخل متن.",
-    },
-    {
-      title: "دسته‌بندی زمانی",
-      body: "ژورنال‌ها هفته‌به‌هفته و ماه‌به‌ماه گروه‌بندی می‌شوند.",
-    },
-    {
-      title: "ویرایش",
-      body: "هر ژورنال ثبت‌شده قابل ویرایش است؛ روی دکمه ویرایش کارت بزن.",
+      title: "ژورنال معاملاتی",
+      body: "ثبت ژورنال معاملاتی: معامله خود را با جزئیات ثبت کنید؛ احساسات، اشتباهات، درس‌های آموخته‌شده و تصویر چارت.",
     },
   ],
   "/app/ai-coach": [
@@ -121,7 +105,10 @@ export const tours: Record<string, TourStep[]> = {
     },
   ],
   "/app/goals": [
-    { title: "اهداف", body: "هدف ماهانه تعریف کن و درصد پیشرفتش را دنبال کن." },
+    {
+      title: "اهداف",
+      body: "برای اهدافت بازه زمانی مشخص تعیین کن و درصد پیشرفتش را دنبال کن.",
+    },
   ],
   "/app/billing": [
     {
@@ -256,6 +243,9 @@ export function GuideTour({
   if (!steps || steps.length === 0) return null;
   const step = steps[Math.min(index, steps.length - 1)]!;
   const last = index >= steps.length - 1;
+  // Single-text guides are one sentence of help, not a tour: no step counter,
+  // no "بعدی" and no skip button.
+  const single = steps.length === 1;
 
   function finish() {
     setSeen({ ...seen, [path]: true });
@@ -287,9 +277,11 @@ export function GuideTour({
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <span className="grid h-7 w-7 place-items-center rounded-lg bg-primary/15 text-xs font-bold text-primary tabular">
-                {index + 1}
-              </span>
+              {!single && (
+                <span className="grid h-7 w-7 place-items-center rounded-lg bg-primary/15 text-xs font-bold text-primary tabular">
+                  {index + 1}
+                </span>
+              )}
               {step.title}
             </DialogTitle>
             <DialogDescription className="pt-2 text-right leading-relaxed">
@@ -297,19 +289,27 @@ export function GuideTour({
             </DialogDescription>
           </DialogHeader>
 
-          <div className="mt-4 flex items-center justify-center gap-1.5">
-            {steps.map((_, i) => (
-              <span
-                key={i}
-                className={`h-1.5 rounded-full transition-all ${i === index ? "w-6 bg-primary" : "w-1.5 bg-border"}`}
-              />
-            ))}
-          </div>
+          {!single && (
+            <div className="mt-4 flex items-center justify-center gap-1.5">
+              {steps.map((_, i) => (
+                <span
+                  key={i}
+                  className={`h-1.5 rounded-full transition-all ${i === index ? "w-6 bg-primary" : "w-1.5 bg-border"}`}
+                />
+              ))}
+            </div>
+          )}
 
-          <DialogFooter className="mt-5 gap-2 sm:justify-between">
-            <Button variant="ghost" size="sm" onClick={finish}>
-              رد کردن راهنما
-            </Button>
+          <DialogFooter
+            className={
+              single ? "mt-5 justify-center" : "mt-5 gap-2 sm:justify-between"
+            }
+          >
+            {!single && (
+              <Button variant="ghost" size="sm" onClick={finish}>
+                رد کردن راهنما
+              </Button>
+            )}
             <div className="flex gap-2">
               {index > 0 && (
                 <Button

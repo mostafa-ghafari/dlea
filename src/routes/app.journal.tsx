@@ -630,15 +630,15 @@ function JournalPage() {
         </DialogContent>
       </Dialog>
       <Dialog open={editorOpen} onOpenChange={setEditorOpen}>
-        <DialogContent className="max-h-[90vh] max-w-3xl overflow-y-auto">
+        <DialogContent
+          className="max-h-[90vh] max-w-3xl overflow-y-auto"
+          aria-describedby={undefined}
+        >
           <form onSubmit={submit}>
             <DialogHeader>
               <DialogTitle>
                 {editingId ? "ویرایش ژورنال" : "ژورنال جدید"}
               </DialogTitle>
-              <DialogDescription>
-                یادداشت خود درباره یک معامله را با ویرایشگر پیشرفته بنویس.
-              </DialogDescription>
             </DialogHeader>
 
             <div className="mt-4 space-y-4">
