@@ -147,6 +147,35 @@ def cut_mt_link_if_destination_changed(conn, destination, portfolio):
     return True
 
 
+# The EA build shipped in public/mt. Builds before 1.07 read a position's SL/TP
+# from an in-memory cache only, so a stop set after the position opened was lost
+# whenever that cache missed; the settings page tells the trader to reinstall
+# whenever the build they report is behind this one.
+EXPECTED_EA_VERSION = "1.07"
+
+
+def _record_ea_version(conn, reported):
+    """Remember which EA build the trader is running.
+
+    The webhook body is the only place that information reaches us, so a batch
+    is stamped here before it is validated: even a rejected payload proves which
+    build the terminal has.
+    """
+    version = str(reported or "").strip()[:16]
+    if version and version != conn.ea_version:
+        conn.ea_version = version
+        conn.save(update_fields=["ea_version", "updated_at"])
+
+
+def _ea_fields(conn):
+    """EA build fields shared by the status and connect responses."""
+    return {
+        "eaVersion": conn.ea_version or None,
+        "latestEaVersion": EXPECTED_EA_VERSION,
+        "eaOutdated": conn.ea_version != EXPECTED_EA_VERSION,
+    }
+
+
 def _log_webhook_problem(payload):
     """Persist why a push was rejected so silent losses stay diagnosable.
 
@@ -260,18 +289,21 @@ class MtConnectView(APIView):
         conn.save()
 
         webhook_url = _webhook_url(request)
-        return Response({
-            "connected": True,
-            "token": conn.token,
-            "webhookUrl": webhook_url,
-            "account": conn.account,
-            "server": conn.server,
-            "broker": conn.broker,
-            "platform": conn.platform,
-            "portfolioId": str(conn.portfolio_id) if conn.portfolio_id else None,
-            "followActivePortfolio": conn.portfolio_id is None,
-            "destination": _destination_name(conn, request.user),
-        })
+        return Response(
+            {
+                "connected": True,
+                "token": conn.token,
+                "webhookUrl": webhook_url,
+                "account": conn.account,
+                "server": conn.server,
+                "broker": conn.broker,
+                "platform": conn.platform,
+                "portfolioId": str(conn.portfolio_id) if conn.portfolio_id else None,
+                "followActivePortfolio": conn.portfolio_id is None,
+                "destination": _destination_name(conn, request.user),
+                **_ea_fields(conn),
+            }
+        )
 
 
 class MtDisconnectView(APIView):
@@ -317,20 +349,23 @@ class MtStatusView(APIView):
         conn = MTConnection.objects.filter(user=request.user).first()
         if not conn:
             return Response({"connected": False})
-        return Response({
-            "connected": not conn.disconnected,
-            "disconnected": conn.disconnected,
-            "disconnectReason": conn.disconnect_reason,
-            "token": conn.token,
-            "webhookUrl": _webhook_url(request),
-            "account": conn.account,
-            "server": conn.server,
-            "broker": conn.broker,
-            "platform": conn.platform,
-            "portfolioId": str(conn.portfolio_id) if conn.portfolio_id else None,
-            "followActivePortfolio": conn.portfolio_id is None,
-            "destination": _destination_name(conn, request.user),
-        })
+        return Response(
+            {
+                "connected": not conn.disconnected,
+                "disconnected": conn.disconnected,
+                "disconnectReason": conn.disconnect_reason,
+                "token": conn.token,
+                "webhookUrl": _webhook_url(request),
+                "account": conn.account,
+                "server": conn.server,
+                "broker": conn.broker,
+                "platform": conn.platform,
+                "portfolioId": str(conn.portfolio_id) if conn.portfolio_id else None,
+                "followActivePortfolio": conn.portfolio_id is None,
+                "destination": _destination_name(conn, request.user),
+                **_ea_fields(conn),
+            }
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -364,6 +399,8 @@ def trades_webhook(request):
             },
             status=401,
         )
+
+    _record_ea_version(conn, body.get("eaVersion"))
 
     items = body.get("trades")
     if not isinstance(items, list) or not items:

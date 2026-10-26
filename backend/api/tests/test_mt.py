@@ -161,6 +161,32 @@ class MtConnectTests(BaseTestCase):
         self.assertTrue(r.data["connected"])
         self.assertEqual(r.data["account"], "999")
 
+    def test_status_warns_about_an_old_ea_build(self):
+        """Nothing pushed yet: the page must ask for a fresh EA, not stay silent.
+
+        Every build before 1.07 kept SL/TP only in the terminal's memory, so a
+        missing stop on a trade is explained by the build the trader runs —
+        which is only useful to support if it is reported.
+        """
+        self.auth(self.make_user(username="trader"))
+        self.client.post("/api/mt/connect/", {"account": "999"}, format="json")
+        r = self.client.get("/api/mt/status/")
+        self.assertIsNone(r.data["eaVersion"])
+        self.assertTrue(r.data["eaOutdated"])
+        self.assertEqual(r.data["latestEaVersion"], "1.07")
+
+    def test_status_accepts_the_current_ea_build(self):
+        user = self.auth(self.make_user(username="trader"))
+        self.client.post("/api/mt/connect/", {"account": "999"}, format="json")
+        self.client.post(
+            "/api/trades/webhook/",
+            {"token": MTConnection.objects.get(user=user).token, "eaVersion": "1.07"},
+            format="json",
+        )
+        r = self.client.get("/api/mt/status/")
+        self.assertEqual(r.data["eaVersion"], "1.07")
+        self.assertFalse(r.data["eaOutdated"])
+
 
 class PortfolioSwitchDisconnectTests(BaseTestCase):
     """Switching the active portfolio must cut the EA link.
@@ -362,6 +388,22 @@ class WebhookTests(BaseTestCase):
         r = self.client.post("/api/trades/webhook/", body, content_type="application/json")
         self.assertEqual(r.status_code, 201)
         self.assertEqual(r.json()["created"], 1)
+
+    def test_push_records_the_ea_build(self):
+        """The webhook body is the only place the running build is reported."""
+        payload = {"token": "tok123", "eaVersion": "1.07", "trades": [self._trade_item()]}
+        r = self._post(payload)
+        self.assertEqual(r.status_code, 201)
+        self.conn.refresh_from_db()
+        self.assertEqual(self.conn.ea_version, "1.07")
+
+    def test_a_push_without_a_version_keeps_the_stored_one(self):
+        self.conn.ea_version = "1.07"
+        self.conn.save(update_fields=["ea_version"])
+        r = self._post({"token": "tok123", "trades": [self._trade_item()]})
+        self.assertEqual(r.status_code, 201)
+        self.conn.refresh_from_db()
+        self.assertEqual(self.conn.ea_version, "1.07")
 
     def test_invalid_trade_reports_error(self):
         payload = {"token": "tok123", "trades": [{"ticket": "x"}]}

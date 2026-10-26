@@ -3,7 +3,7 @@
 //|              Dlea AI - MetaTrader 5 trade sync expert            |
 //+------------------------------------------------------------------+
 #property copyright "Dlea AI"
-#property version   "1.06"
+#property version   "1.07"
 #property strict
 #property description "Syncs closed trades from MetaTrader 5 to Dlea AI"
 
@@ -16,6 +16,10 @@ input bool   InpDebugLog    = true;                                       // Pri
 
 ulong g_lastDeal = 0; // dedupe: last deal ticket we already sent
 
+// Reported in every payload so the site can tell which build a trader runs.
+// Keep it in step with the `version` property above.
+#define EA_VERSION "1.07"
+
 //--- SL/TP cache: position ticket → {sl, tp} -------------------------
 // In MT5, when a position closes the original order's SL/TP are reset
 // to 0. We must capture them while the position is still open.
@@ -24,6 +28,43 @@ ulong g_cacheKeys[CACHE_SIZE];
 double g_cacheSL[CACHE_SIZE];
 double g_cacheTP[CACHE_SIZE];
 int g_cacheCount = 0;
+
+//+------------------------------------------------------------------+
+//| Free a cache slot.                                                |
+//|                                                                  |
+//| Entries for positions the EA never saw close (terminal was off,   |
+//| the trade was closed from the phone) stay behind forever; once    |
+//| the table fills up, CacheSLTP refused every new position and all  |
+//| later trades reached Dlea with sl = tp = 0. Sweeping the dead      |
+//| entries is the difference between a cache and a leak.             |
+//+------------------------------------------------------------------+
+void MakeCacheRoom()
+{
+   for(int i = g_cacheCount - 1; i >= 0; i--)
+   {
+      if(PositionSelectByTicket(g_cacheKeys[i]))
+         continue;
+      for(int j = i; j < g_cacheCount - 1; j++)
+      {
+         g_cacheKeys[j] = g_cacheKeys[j + 1];
+         g_cacheSL[j]   = g_cacheSL[j + 1];
+         g_cacheTP[j]   = g_cacheTP[j + 1];
+      }
+      g_cacheCount--;
+   }
+   if(g_cacheCount >= CACHE_SIZE)
+   {
+      // Everything left is still open: drop the oldest so a new position
+      // always fits.
+      for(int j = 0; j < g_cacheCount - 1; j++)
+      {
+         g_cacheKeys[j] = g_cacheKeys[j + 1];
+         g_cacheSL[j]   = g_cacheSL[j + 1];
+         g_cacheTP[j]   = g_cacheTP[j + 1];
+      }
+      g_cacheCount--;
+   }
+}
 
 //+------------------------------------------------------------------+
 //| Store SL/TP for a position in the cache                           |
@@ -45,7 +86,10 @@ bool CacheSLTP(ulong posTicket, double sl, double tp)
          return true;
       }
    }
-   // Add new entry
+   // Add new entry — make room first, so a long-running terminal never
+   // silently stops caching new positions.
+   if(g_cacheCount >= CACHE_SIZE)
+      MakeCacheRoom();
    if(g_cacheCount < CACHE_SIZE)
    {
       g_cacheKeys[g_cacheCount] = posTicket;
@@ -139,7 +183,7 @@ int OnInit()
    // Warm-up: scan currently open positions to cache their SL/TP
    CacheOpenPositions();
 
-   Print("DleaSync v1.04 started. Waiting for closed trades...");
+   Print("DleaSync v", EA_VERSION, " started. Waiting for closed trades...");
 
    // Backfill: import trades that closed before the EA was attached.
    if(InpSyncHistory)
@@ -264,7 +308,10 @@ void OnTradeTransaction(const MqlTradeTransaction &trans,
          if(dealTicket == g_lastDeal) return;
          g_lastDeal = dealTicket;
          SendDeal(dealTicket);
-         RemoveFromCache(position);
+         // A partial close leaves the position open; dropping its cache
+         // entry here is what lost the stop on the final close.
+         if(!PositionSelectByTicket(position))
+            RemoveFromCache(position);
       }
    }
 
@@ -297,6 +344,62 @@ string JsonEscape(const string s)
       else              out += ShortToString(c);
    }
    return out;
+}
+
+//+------------------------------------------------------------------+
+//| Best-known SL/TP for a position that has just closed.            |
+//|                                                                  |
+//| The exit deal itself stores the position's SL/TP as they were at  |
+//| close time (MQL5: DEAL_SL / DEAL_TP), so a stop the trader set     |
+//| *after* opening the position survives a restart, a close made from |
+//| the mobile app and a partial close — all of which the in-memory    |
+//| cache loses. Each level falls back on its own: exit deal, cache,   |
+//| entry order, then MT5's own close comment.                        |
+//+------------------------------------------------------------------+
+void ResolveStops(const ulong dealTicket, const ulong position,
+                  double &sl, double &tp)
+{
+   sl = HistoryDealGetDouble(dealTicket, DEAL_SL);
+   tp = HistoryDealGetDouble(dealTicket, DEAL_TP);
+
+   if(sl <= 0 || tp <= 0)
+   {
+      double cachedSL = 0.0, cachedTP = 0.0;
+      if(GetCachedSLTP(position, cachedSL, cachedTP))
+      {
+         if(sl <= 0) sl = cachedSL;
+         if(tp <= 0) tp = cachedTP;
+      }
+   }
+
+   if(sl <= 0 || tp <= 0)
+   {
+      // The order that opened the position records the levels it was placed
+      // with — zero when the stop was added afterwards. Scans the history
+      // selection the caller already made; reselecting here would break the
+      // backfill loop that is iterating over it.
+      int total = HistoryDealsTotal();
+      for(int i = 0; i < total; i++)
+      {
+         ulong t = HistoryDealGetTicket(i);
+         if(t == 0) continue;
+         if(HistoryDealGetInteger(t, DEAL_POSITION_ID) != (long)position) continue;
+         if((ENUM_DEAL_ENTRY)HistoryDealGetInteger(t, DEAL_ENTRY) != DEAL_ENTRY_IN) continue;
+         ulong orderTicket = (ulong)HistoryDealGetInteger(t, DEAL_ORDER);
+         if(HistoryOrderSelect(orderTicket))
+         {
+            if(sl <= 0) sl = HistoryOrderGetDouble(orderTicket, ORDER_SL);
+            if(tp <= 0) tp = HistoryOrderGetDouble(orderTicket, ORDER_TP);
+         }
+         break;
+      }
+   }
+
+   string comment = HistoryDealGetString(dealTicket, DEAL_COMMENT);
+   if(sl <= 0 && ParseLevelFromComment(comment, "sl", sl) && InpDebugLog)
+      Print("DleaSync: SL recovered from deal comment for pos #", position, " -> ", sl);
+   if(tp <= 0 && ParseLevelFromComment(comment, "tp", tp) && InpDebugLog)
+      Print("DleaSync: TP recovered from deal comment for pos #", position, " -> ", tp);
 }
 
 //+------------------------------------------------------------------+
@@ -333,34 +436,11 @@ bool SendDeal(const ulong dealTicket)
       break;
    }
 
-   //--- get SL/TP from cache (captured when position was open)
+   //--- SL/TP as they stood when the position closed, however late the
+   //--- trader set them
    double sl = 0.0;
    double tp = 0.0;
-   if(!GetCachedSLTP((ulong)position, sl, tp))
-   {
-      // Fallback: try reading from the entry order in history
-      for(int i = 0; i < total; i++)
-      {
-         ulong t = HistoryDealGetTicket(i);
-         if(t == 0) continue;
-         if(HistoryDealGetInteger(t, DEAL_POSITION_ID) != position) continue;
-         ENUM_DEAL_ENTRY e = (ENUM_DEAL_ENTRY)HistoryDealGetInteger(t, DEAL_ENTRY);
-         if(e != DEAL_ENTRY_IN) continue;
-         ulong orderTicket = (ulong)HistoryDealGetInteger(t, DEAL_ORDER);
-         if(HistoryOrderSelect(orderTicket))
-         {
-            sl = HistoryOrderGetDouble(orderTicket, ORDER_SL);
-            tp = HistoryOrderGetDouble(orderTicket, ORDER_TP);
-         }
-         break;
-      }
-   }
-
-   //--- last resort: the level MT5 itself closed the position at
-   if(sl <= 0 && ParseLevelFromComment(comment, "sl", sl) && InpDebugLog)
-      Print("DleaSync: SL recovered from deal comment for pos #", position, " -> ", sl);
-   if(tp <= 0 && ParseLevelFromComment(comment, "tp", tp) && InpDebugLog)
-      Print("DleaSync: TP recovered from deal comment for pos #", position, " -> ", tp);
+   ResolveStops(dealTicket, (ulong)position, sl, tp);
 
    //--- R:R = how far price actually travelled / how much was risked.
    //--- It needs the stop (the old formula divided by volume x 100 and
@@ -386,11 +466,12 @@ bool SendDeal(const ulong dealTicket)
 
    //--- build the JSON payload (now includes sl and tp)
    string payload = StringFormat(
-      "{\"token\":\"%s\",\"trades\":[{\"ticket\":\"%I64u\",\"symbol\":\"%s\",\"side\":\"%s\","
+      "{\"token\":\"%s\",\"eaVersion\":\"%s\",\"trades\":[{\"ticket\":\"%I64u\",\"symbol\":\"%s\",\"side\":\"%s\","
       "\"entry\":%.5f,\"exit\":%.5f,\"sl\":%.5f,\"tp\":%.5f,\"volume\":%.2f,\"pnl\":%.2f,\"commission\":%.2f,"
       "\"swap\":%.2f,\"rr\":%.2f,\"open_time\":\"%s\",\"close_time\":\"%s\","
       "\"magic\":%I64d,\"comment\":\"%s\",\"reason\":\"EA\",\"followedPlan\":true}]}",
       InpToken,
+      EA_VERSION,
       dealTicket,
       JsonEscape(symbol),
       sideStr,

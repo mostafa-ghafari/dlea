@@ -13,6 +13,7 @@ import {
   Loader2,
   Camera,
   Link2Off,
+  TriangleAlert,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -574,7 +575,23 @@ function MetaTraderTab({ pinnedPortfolioId }: { pinnedPortfolioId?: string }) {
                 <dt className="text-muted-foreground">نسخه</dt>
                 <dd>{mt?.platform?.toUpperCase()}</dd>
               </div>
+              <div className="flex justify-between">
+                <dt className="text-muted-foreground">نسخه اکسپرت</dt>
+                <dd className="tabular">
+                  {mt?.eaVersion ?? "هنوز ارسالی نرسیده"}
+                </dd>
+              </div>
             </dl>
+            {mt?.eaOutdated && (
+              <div className="mt-4 flex items-start gap-2 rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 text-xs leading-relaxed text-amber-600 dark:text-amber-400">
+                <TriangleAlert className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                <span>
+                  {mt?.eaVersion
+                    ? `اکسپرت نصب‌شده نسخه ${mt.eaVersion} است و نسخه ${mt.latestEaVersion} منتشر شده. نسخه‌های قدیمی استاپ‌لاس و تارگت را فقط لحظهٔ باز شدن معامله می‌خواندند، پس استاپی که بعداً گذاشته می‌شد در سایت خالی می‌ماند. فایل DleaSync.ex5 را از همین صفحه دوباره دانلود و جایگزین کن؛ معاملات قبلی هم با اولین اجرا خودکار ترمیم می‌شوند.`
+                    : `تا اکسپرت یک‌بار اجرا نشود نسخه‌اش معلوم نیست. مطمئن شو آخرین نسخه (${mt?.latestEaVersion}) را از همین صفحه نصب کرده‌ای.`}
+                </span>
+              </div>
+            )}
           </div>
 
           <div className="card-surface p-6">

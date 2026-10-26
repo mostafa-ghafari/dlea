@@ -693,6 +693,12 @@ export type MtStatus = {
   followActivePortfolio?: boolean;
   /** where the next import will land, as resolved by the server */
   destination?: string | null;
+  /** build the EA reported on its last push; null until it has pushed once */
+  eaVersion?: string | null;
+  /** build the download link currently serves */
+  latestEaVersion?: string;
+  /** the installed EA is older than the download — stops may be missing */
+  eaOutdated?: boolean;
 };
 
 export type MtConnectInput = {

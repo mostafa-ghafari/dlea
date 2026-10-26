@@ -298,6 +298,11 @@ class MTConnection(Timestamped):
     server = models.CharField(max_length=128, default="")
     account = models.CharField(max_length=32, default="")
     platform = models.CharField(max_length=8, choices=[("mt4", "MT4"), ("mt5", "MT5")], default="mt5")
+    # The EA build that last pushed. Older builds read SL/TP only once, when the
+    # position opened, so a stop the trader set afterwards never reached us;
+    # recording the version is what lets the settings page say "your EA is old"
+    # instead of leaving a missing stop unexplained.
+    ea_version = models.CharField(max_length=16, blank=True, default="")
     token = models.CharField(max_length=64, unique=True)
     # A single token serves every portfolio of the user, so anything that moves
     # the *active* portfolio would silently start filing a different account's
