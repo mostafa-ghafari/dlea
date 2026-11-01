@@ -603,36 +603,85 @@ function ConnectPanel() {
 
           <div className="card-surface p-6">
             <h3 className="font-semibold">نصب EA (اکسپرت)</h3>
-            <ol className="mt-3 list-inside list-decimal space-y-1.5 text-sm text-muted-foreground">
-              <li>
-                فایل{" "}
-                <span dir="ltr" className="font-mono">
-                  DleaSync.ex5
-                </span>{" "}
-                را دانلود کن.
-              </li>
-              <li>در MT5: File → Open Data Folder → پوشه MQL5/Experts.</li>
-              <li>
-                فایل را در پوشه{" "}
-                <span dir="ltr" className="font-mono">
-                  MQL5/Experts
-                </span>{" "}
-                متاتریدر کپی کن.
-              </li>
-              <li>
-                در MT5: Tools → Options → Expert Advisors → «Allow WebRequest»
-                را تیک بزن و آدرس وب‌هوک را اضافه کن.
-              </li>
-              <li>
-                EA را روی چارت بکش، توکن و آدرس وب‌هوک را وارد کن و Algo Trading
-                را فعال کن.
-              </li>
-            </ol>
-            <a href="/mt/DleaSync.ex5" download className="mt-4 inline-block">
-              <Button variant="outline" className="gap-2">
-                <Download className="h-4 w-4" /> دانلود DleaSync.ex5
-              </Button>
-            </a>
+            <p className="mt-1 text-sm text-muted-foreground">
+              اکسپرت مخصوص نسخهٔ متاتریدر خودت را دانلود کن؛ هر دو با همین توکن
+              و همین آدرس وب‌هوک کار می‌کنند.
+            </p>
+
+            <div className="mt-4 rounded-xl border border-border/60 p-4">
+              <h4 className="text-sm font-semibold">MetaTrader 5</h4>
+              <ol className="mt-2 list-inside list-decimal space-y-1.5 text-sm text-muted-foreground">
+                <li>
+                  فایل{" "}
+                  <span dir="ltr" className="font-mono">
+                    DleaSync.ex5
+                  </span>{" "}
+                  را دانلود کن.
+                </li>
+                <li>
+                  در MT5: File → Open Data Folder → پوشه{" "}
+                  <span dir="ltr" className="font-mono">
+                    MQL5/Experts
+                  </span>
+                  .
+                </li>
+                <li>فایل را در همان پوشه کپی کن.</li>
+                <li>
+                  در MT5: Tools → Options → Expert Advisors → «Allow WebRequest»
+                  را تیک بزن و آدرس وب‌هوک را اضافه کن.
+                </li>
+                <li>
+                  EA را روی چارت بکش، توکن و آدرس وب‌هوک را وارد کن و Algo
+                  Trading را فعال کن.
+                </li>
+              </ol>
+              <a href="/mt/DleaSync.ex5" download className="mt-3 inline-block">
+                <Button variant="outline" className="gap-2">
+                  <Download className="h-4 w-4" /> دانلود DleaSync.ex5
+                </Button>
+              </a>
+            </div>
+
+            <div className="mt-3 rounded-xl border border-border/60 p-4">
+              <h4 className="text-sm font-semibold">MetaTrader 4</h4>
+              <ol className="mt-2 list-inside list-decimal space-y-1.5 text-sm text-muted-foreground">
+                <li>
+                  فایل{" "}
+                  <span dir="ltr" className="font-mono">
+                    DleaSync.ex4
+                  </span>{" "}
+                  را دانلود کن.
+                </li>
+                <li>
+                  در MT4: File → Open Data Folder → پوشه{" "}
+                  <span dir="ltr" className="font-mono">
+                    MQL4/Experts
+                  </span>
+                  .
+                </li>
+                <li>
+                  فایل را در همان پوشه کپی کن و ترمینال را یک بار ببند و باز کن.
+                </li>
+                <li>
+                  در MT4: Tools → Options → Expert Advisors → «Allow WebRequest
+                  for listed URL» را تیک بزن و آدرس وب‌هوک را اضافه کن.
+                </li>
+                <li>
+                  EA را روی چارت بکش، توکن و آدرس وب‌هوک را وارد کن و
+                  «AutoTrading» را روشن کن.
+                </li>
+              </ol>
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                <a href="/mt/DleaSync.ex4" download className="inline-block">
+                  <Button variant="outline" className="gap-2">
+                    <Download className="h-4 w-4" /> دانلود DleaSync.ex4
+                  </Button>
+                </a>
+                <a href="/mt/DleaSync.mq4" download className="inline-block">
+                  <Button variant="ghost">سورس MQ4</Button>
+                </a>
+              </div>
+            </div>
           </div>
         </div>
       ) : (

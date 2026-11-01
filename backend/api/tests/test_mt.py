@@ -382,6 +382,52 @@ class WebhookTests(BaseTestCase):
         self.assertEqual(float(trade.tp), 0)
         self.assertEqual(float(trade.pips), 0)
 
+    def test_mt4_ea_payload_is_accepted(self):
+        """The exact body DleaSync.mq4 builds must validate.
+
+        MT4 has no deals and no position ids: one closed order *is* the trade,
+        tickets are 32-bit ints and prices arrive through DoubleToString, so
+        the wire format of the older platform is pinned here — a serializer
+        change must not silently break it.
+        """
+        payload = {
+            "token": "tok123",
+            "trades": [
+                {
+                    "ticket": "1002345",
+                    "symbol": "EURUSD",
+                    "side": "buy",
+                    "entry": 1.1,
+                    "exit": 1.105,
+                    "sl": 1.095,
+                    "tp": 1.11,
+                    "volume": 0.1,
+                    "pnl": 50.0,
+                    "commission": -0.7,
+                    "swap": 0.0,
+                    "rr": 1.0,
+                    "open_time": "2026.10.01 09:15",
+                    "close_time": "2026.10.01 12:45",
+                    "magic": 0,
+                    "comment": "cstop",
+                    "reason": "EA",
+                    "followedPlan": True,
+                }
+            ],
+        }
+
+        r = self._post(payload)
+
+        self.assertEqual(r.status_code, 201)
+        self.assertEqual(r.json()["created"], 1)
+        trade = Trade.objects.get(ticket="1002345")
+        self.assertEqual(trade.symbol, "EURUSD")
+        self.assertEqual(trade.reason, "EA")
+        self.assertEqual(float(trade.sl), 1.095)
+        self.assertEqual(float(trade.tp), 1.11)
+        self.assertEqual(trade.open_time.isoformat(), "2026-10-01T09:15:00+00:00")
+        self.assertEqual(trade.close_time.isoformat(), "2026-10-01T12:45:00+00:00")
+
     def test_webhook_body_with_trailing_null_bytes(self):
         """MetaTrader's StringToCharArray appends \\0 — must still parse."""
         body = json.dumps({"token": "tok123", "trades": [self._trade_item()]}).encode() + b"\x00\x00"
