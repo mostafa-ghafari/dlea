@@ -671,16 +671,11 @@ function ConnectPanel() {
                   «AutoTrading» را روشن کن.
                 </li>
               </ol>
-              <div className="mt-3 flex flex-wrap items-center gap-2">
-                <a href="/mt/DleaSync.ex4" download className="inline-block">
-                  <Button variant="outline" className="gap-2">
-                    <Download className="h-4 w-4" /> دانلود DleaSync.ex4
-                  </Button>
-                </a>
-                <a href="/mt/DleaSync.mq4" download className="inline-block">
-                  <Button variant="ghost">سورس MQ4</Button>
-                </a>
-              </div>
+              <a href="/mt/DleaSync.ex4" download className="mt-3 inline-block">
+                <Button variant="outline" className="gap-2">
+                  <Download className="h-4 w-4" /> دانلود DleaSync.ex4
+                </Button>
+              </a>
             </div>
           </div>
         </div>
