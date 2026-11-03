@@ -151,6 +151,21 @@ class PortfolioSerializer(serializers.ModelSerializer):
         return super().update(instance, validated_data)
 
 
+def _image_cap_error(cap, label):
+    """The refusal a request gets when it stores more images than the plan allows.
+
+    A cap of zero is not a quota the user can wait out — their plan simply does
+    not include images — so the message names the way out (upgrading) instead of
+    asking for "at most 0 images", which reads like a bug.
+    """
+    if cap <= 0:
+        return (
+            f"پلن فعلی اجازه آپلود تصویر برای {label} را ندارد. "
+            "برای افزودن تصویر، پلن خود را ارتقا بده."
+        )
+    return f"حداکثر {cap} تصویر برای {label} مجاز است."
+
+
 class TradeSerializer(serializers.ModelSerializer):
     id = serializers.CharField(source="pk", read_only=True)
     openTime = serializers.SerializerMethodField()
@@ -216,7 +231,7 @@ class TradeSerializer(serializers.ModelSerializer):
         screenshots = attrs.get("screenshots", getattr(self.instance, "screenshots", None))
         if cap >= 0 and len(screenshots or []) > cap:
             raise serializers.ValidationError(
-                {"screenshots": f"حداکثر {cap} تصویر برای هر معامله مجاز است."}
+                {"screenshots": _image_cap_error(cap, "هر معامله")}
             )
 
         attrs = self._fill_rr(attrs)
@@ -338,7 +353,7 @@ class JournalEntrySerializer(serializers.ModelSerializer):
                     if total <= previous:
                         return attrs  # legacy content, not made any larger
                 raise serializers.ValidationError(
-                    {"images": f"حداکثر {cap} تصویر برای هر یادداشت مجاز است."}
+                    {"images": _image_cap_error(cap, "هر یادداشت")}
                 )
         return attrs
 

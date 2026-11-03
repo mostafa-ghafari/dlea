@@ -437,3 +437,115 @@ class PlanFeatureBackfillTests(BaseTestCase):
         items = self.get_list("/api/plans/limits/")
         pro = next(p for p in items if p["slug"] == "pro")
         self.assertEqual(pro["features"], ["portfolios", "journal"])
+
+
+class ZeroImageCapTests(BaseTestCase):
+    """A plan the admin set to zero images refuses every save path.
+
+    DEV-156: free users were reported as still storing images in trades and the
+    journal although the panel said 0. Creates and edits, the screenshot
+    gallery and the body editor all go through here, because a cap that only
+    guards one of those paths is not a cap.
+    """
+
+    SHOT = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQ"
+
+    def setUp(self):
+        self.make_plan(slug="free", name="رایگان", max_images_per_entry=0)
+        self.user = self.auth(self.make_user(username="freeuser"))
+        self.make_profile(self.user, plan="رایگان")
+        self.portfolio = self.make_portfolio(user=self.user)
+
+    # -- trades -------------------------------------------------------------
+
+    def test_free_plan_cannot_create_a_trade_with_a_screenshot(self):
+        r = self.client.post(
+            "/api/trades/",
+            self.trade_payload(self.portfolio, screenshots=[self.SHOT]),
+            format="json",
+        )
+        self.assertEqual(r.status_code, 400)
+        self.assertIn("ارتقا", str(r.data))
+        self.assertEqual(Trade.objects.count(), 0)
+
+    def test_free_plan_cannot_add_a_screenshot_to_an_existing_trade(self):
+        trade = self.make_trade(self.portfolio, screenshots=[])
+        r = self.client.patch(
+            f"/api/trades/{trade.pk}/", {"screenshots": [self.SHOT]}, format="json"
+        )
+        self.assertEqual(r.status_code, 400)
+        self.assertIn("ارتقا", str(r.data))
+        trade.refresh_from_db()
+        self.assertEqual(trade.screenshots, [])
+
+    def test_free_plan_can_still_remove_screenshots_it_already_has(self):
+        """A trade written before the cap must stay editable."""
+        trade = self.make_trade(self.portfolio, screenshots=[self.SHOT, self.SHOT])
+        r = self.client.patch(
+            f"/api/trades/{trade.pk}/", {"screenshots": []}, format="json"
+        )
+        self.assertEqual(r.status_code, 200)
+        trade.refresh_from_db()
+        self.assertEqual(trade.screenshots, [])
+
+    def test_the_demo_trades_follow_the_same_cap(self):
+        """Logged-out visitors use the demo portfolio, not a free pass."""
+        self.client.force_authenticate(None)
+        portfolio = self.make_portfolio(user=None)
+        r = self.client.post(
+            "/api/trades/",
+            self.trade_payload(portfolio, screenshots=[self.SHOT]),
+            format="json",
+        )
+        self.assertEqual(r.status_code, 400)
+
+    # -- journal ------------------------------------------------------------
+
+    def test_free_plan_cannot_create_a_journal_entry_with_images(self):
+        r = self.client.post(
+            "/api/journal/entries/",
+            {"title": "یادداشت", "images": [self.SHOT]},
+            format="json",
+        )
+        self.assertEqual(r.status_code, 400)
+        self.assertIn("ارتقا", str(r.data))
+        self.assertEqual(JournalEntry.objects.count(), 0)
+
+    def test_free_plan_cannot_add_images_to_an_existing_entry(self):
+        entry = self.make_journal_entry(user=self.user, title="یادداشت")
+        r = self.client.patch(
+            f"/api/journal/entries/{entry.pk}/", {"images": [self.SHOT]}, format="json"
+        )
+        self.assertEqual(r.status_code, 400)
+        self.assertIn("ارتقا", str(r.data))
+        entry.refresh_from_db()
+        self.assertEqual(entry.images, [])
+
+    def test_free_plan_cannot_paste_images_into_the_entry_body(self):
+        html = '<p>متن</p><img src="data:image/png;base64,x">'
+        r = self.client.post(
+            "/api/journal/entries/", {"title": "یادداشت", "html": html}, format="json"
+        )
+        self.assertEqual(r.status_code, 400)
+        self.assertIn("ارتقا", str(r.data))
+
+    def test_free_plan_cannot_smuggle_images_through_blocks(self):
+        r = self.client.post(
+            "/api/journal/entries/",
+            {"title": "یادداشت", "blocks": ['<img src="data:image/png;base64,x">']},
+            format="json",
+        )
+        self.assertEqual(r.status_code, 400)
+
+    def test_text_only_entry_is_still_allowed(self):
+        r = self.client.post(
+            "/api/journal/entries/",
+            {"title": "یادداشت", "html": "<p>بدون تصویر</p>"},
+            format="json",
+        )
+        self.assertEqual(r.status_code, 201)
+
+    def test_limits_endpoint_reports_zero(self):
+        items = self.get_list("/api/plans/limits/")
+        free = next(p for p in items if p["slug"] == "free")
+        self.assertEqual(free["maxImagesPerEntry"], 0)

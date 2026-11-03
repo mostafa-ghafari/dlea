@@ -489,7 +489,7 @@ function TradesPage() {
                   )}
                   {visibleColumns.includes("screenshots") && (
                     <td className="py-3">
-                      <ShotsCell id={t.id} initial={t.screenshots} />
+                      <ShotsCell initial={t.screenshots} />
                     </td>
                   )}
                   <td className="py-3">
@@ -593,7 +593,7 @@ function TradesPage() {
                     ))}
                 </div>
                 {visibleColumns.includes("screenshots") && (
-                  <ShotsCell id={t.id} initial={t.screenshots} />
+                  <ShotsCell initial={t.screenshots} />
                 )}
               </div>
             </Link>
@@ -665,15 +665,15 @@ function TradesPage() {
   );
 }
 
-/** Screenshot count for a trade (stored per-trade in localStorage). */
-function ShotsCell({ id, initial }: { id: string; initial: string[] }) {
-  const [shots] = useLocalState<string[]>(`tj:trade-shots:${id}`, initial);
+/** Screenshot count as the server stored it — a local copy used to show images
+ * a plan-blocked save had already been refused (DEV-156). */
+function ShotsCell({ initial }: { initial: string[] }) {
   return (
     <span
-      className={`inline-flex items-center gap-1 text-xs tabular ${shots.length ? "text-primary" : "text-muted-foreground"}`}
+      className={`inline-flex items-center gap-1 text-xs tabular ${initial.length ? "text-primary" : "text-muted-foreground"}`}
     >
       <Images className="h-3.5 w-3.5" />
-      {shots.length ? shots.length : "افزودن"}
+      {initial.length ? initial.length : "افزودن"}
     </span>
   );
 }

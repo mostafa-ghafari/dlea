@@ -24,17 +24,20 @@ beforeEach(() => {
 });
 
 describe("ImageUploader", () => {
-  it("blocks every upload when the plan allows no images", () => {
-    // DEV-156: the free plan can be set to zero images in the admin panel.
+  it("offers no picker at all when the plan allows no images", () => {
+    // DEV-156: the free plan can be set to zero images in the admin panel. A
+    // picker that only failed on save looked like a working upload.
     const onChange = vi.fn();
-    const { container } = render(
+    const { container, getByText } = render(
       <ImageUploader images={[]} onChange={onChange} maxImages={0} />,
     );
 
-    pickFile(container);
-
+    expect(container.querySelector('input[type="file"]')).toBeNull();
+    expect(getByText(/پلن فعلی اجازه آپلود تصویر/)).toBeTruthy();
+    expect(getByText(/پلن خود را ارتقا بده/).getAttribute("href")).toBe(
+      "/app/billing",
+    );
     expect(onChange).not.toHaveBeenCalled();
-    expect(toast.error).toHaveBeenCalledWith(expect.stringContaining("ارتقا"));
   });
 
   it("stops at the plan cap instead of taking every picked file", () => {

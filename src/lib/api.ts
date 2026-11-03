@@ -1367,7 +1367,11 @@ const FREE_LIMITS: PlanLimits = {
   maxTradesPerMonth: 50,
   aiRequestsLimit: 1,
   aiRequestsPeriod: "month",
-  maxImagesPerEntry: 2,
+  // Fail closed. The admin panel owns the free plan's real number; this copy
+  // only covers the window before /plans/limits/ answers (or when it fails).
+  // It used to say 2, which is exactly how a free user could pick images the
+  // panel had already set to zero (DEV-156).
+  maxImagesPerEntry: 0,
   features: [
     "portfolios",
     "trades",
@@ -1412,6 +1416,20 @@ const PAID_LIMITS: PlanLimits = {
 
 /** Fetch plan limits from the backend API. */
 export const fetchPlanLimits = () => get<PlanLimits[]>("plans/limits/");
+
+/**
+ * The image cap the UI may act on.
+ *
+ * `-1` is the plan editor's "unlimited", which the server still ceilings at
+ * three items per entry; a missing number means the API did not send the field
+ * at all (an older backend), and that must fail closed rather than quietly
+ * granting uploads the admin panel never allowed (DEV-156).
+ */
+function imageCap(value: number | undefined): number {
+  if (typeof value !== "number") return 0;
+  if (value < 0) return 3;
+  return Math.min(value, 3);
+}
 
 /** Normalise a plan label so "Pro Max" and "پرو مکس" can be compared. */
 function planKey(value: string | null | undefined): string {
@@ -1463,18 +1481,34 @@ export function resolvePlanLimits(
         (planName ? undefined : matchPlan(plans, "free")))
       : undefined;
   if (matched && matched.features.length > 0) {
-    return matched;
+    return {
+      ...matched,
+      maxImagesPerEntry: imageCap(matched.maxImagesPerEntry),
+    };
   }
   // Plans API unavailable or unknown plan. The matched slug decides the tier —
   // a Persian display name has no Latin slug.
   const slug = matched?.slug ?? planSlug(planName);
   const fallback = slug === "free" || !planName ? FREE_LIMITS : PAID_LIMITS;
-  if (!matched) return fallback;
+  if (!matched) {
+    // The feature list stays permissive so a rename or an unreachable
+    // catalogue never padlocks the app, but images do not: without the plan we
+    // cannot know whether this user bought images, and guessing "yes" is how
+    // free users kept uploads the admin had removed (DEV-156).
+    return { ...fallback, maxImagesPerEntry: 0 };
+  }
   // The plan exists but its feature list was never saved. Only that list falls
   // back: the numeric limits are the admin's, and overriding them silently
   // handed free users images (and other caps) the panel had already set to
   // zero (DEV-156).
-  return { ...fallback, ...matched, features: fallback.features };
+  return {
+    ...fallback,
+    ...matched,
+    features: fallback.features,
+    maxImagesPerEntry: imageCap(
+      matched.maxImagesPerEntry ?? fallback.maxImagesPerEntry,
+    ),
+  };
 }
 
 /**

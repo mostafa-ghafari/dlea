@@ -53,6 +53,17 @@ export function RichTextEditor({
   const fileRef = useRef<HTMLInputElement>(null);
   const [empty, setEmpty] = useState(!value);
 
+  // The plan's cap counts the screenshot gallery and the inline images
+  // together — the same number the server enforces — so inline inserts cannot
+  // become the way around it.
+  const cap =
+    maxImages === undefined
+      ? null
+      : maxImages < 0
+        ? MAX_IMAGES_PER_ENTRY
+        : Math.min(maxImages, MAX_IMAGES_PER_ENTRY);
+  const noImages = cap !== null && cap <= 0;
+
   useEffect(() => {
     const el = ref.current;
     if (el && el.innerHTML !== value) el.innerHTML = value || "";
@@ -144,7 +155,15 @@ export function RichTextEditor({
       {
         icon: ImagePlus,
         label: "تصویر داخل متن",
-        run: () => fileRef.current?.click(),
+        run: () => {
+          if (noImages) {
+            toast.error(
+              "پلن فعلی اجازه افزودن تصویر به ژورنال را ندارد. برای این کار، پلن خود را ارتقا بده.",
+            );
+            return;
+          }
+          fileRef.current?.click();
+        },
       },
     ],
     [
@@ -204,18 +223,13 @@ export function RichTextEditor({
           const file = e.target.files?.[0];
           e.target.value = "";
           if (!file) return;
-          // The plan's image cap counts the screenshot gallery and the images
-          // embedded in the body together — the same number the server
-          // enforces — so inline inserts cannot become the way around it.
-          if (maxImages !== undefined) {
-            const cap =
-              maxImages < 0
-                ? MAX_IMAGES_PER_ENTRY
-                : Math.min(maxImages, MAX_IMAGES_PER_ENTRY);
+          if (cap !== null) {
             const inline = ref.current?.querySelectorAll("img").length ?? 0;
             if (inline + usedImages >= cap) {
               toast.error(
-                `سقف ${cap} تصویر برای هر یادداشت پر شده است — تصاویر داخل متن هم شمرده می‌شوند.`,
+                cap <= 0
+                  ? "پلن فعلی اجازه افزودن تصویر به ژورنال را ندارد. برای این کار، پلن خود را ارتقا بده."
+                  : `سقف ${cap} تصویر برای هر یادداشت پر شده است — تصاویر داخل متن هم شمرده می‌شوند.`,
               );
               return;
             }

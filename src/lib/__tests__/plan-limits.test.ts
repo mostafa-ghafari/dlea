@@ -80,6 +80,32 @@ describe("resolvePlanLimits", () => {
     expect(limits.features.length).toBeGreaterThan(0);
   });
 
+  it("grants no images while the catalogue is unavailable", () => {
+    // DEV-156: the built-in free fallback offered two images, so a slow or
+    // failing /plans/limits/ let a free user pick uploads the panel had taken
+    // away. The fallback must fail closed.
+    expect(resolvePlanLimits(undefined, null).maxImagesPerEntry).toBe(0);
+    expect(resolvePlanLimits([], "رایگان").maxImagesPerEntry).toBe(0);
+  });
+
+  it("treats a missing cap from an older API as zero, not as unlimited", () => {
+    // A backend deployed before the field existed sent no maxImagesPerEntry;
+    // `undefined ?? -1` used to read as "unlimited".
+    const limits = resolvePlanLimits(
+      [plan("free", "رایگان", ["trades"])],
+      null,
+    );
+    expect(limits.maxImagesPerEntry).toBe(0);
+  });
+
+  it("applies the three-image ceiling to an unlimited plan", () => {
+    const limits = resolvePlanLimits(
+      [plan("pro", "Pro", ["trades"], { maxImagesPerEntry: -1 })],
+      "Pro",
+    );
+    expect(limits.maxImagesPerEntry).toBe(3);
+  });
+
   it("ignores an unknown plan name instead of locking anything", () => {
     expect(
       resolvePlanLimits(CATALOGUE, "Trial").features.length,

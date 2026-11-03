@@ -83,21 +83,85 @@ export function ImageUploader({
   const inputRef = useRef<HTMLInputElement>(null);
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
 
+  // `-1` is the plan editor's "unlimited"; the real ceiling is the same number
+  // the server stores.
+  const cap =
+    maxImages < 0
+      ? MAX_IMAGES_PER_ENTRY
+      : Math.min(maxImages, MAX_IMAGES_PER_ENTRY);
+
+  // Images already stored stay visible and removable even when the plan no
+  // longer allows new ones: refusing to show them would lock old screenshots in.
+  const gallery = images.length > 0 && (
+    <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
+      {images.map((src, i) => (
+        <div
+          key={i}
+          className="group relative overflow-hidden rounded-lg border border-border"
+        >
+          <img
+            src={src}
+            alt={`اسکرین‌شات ${i + 1}`}
+            loading="lazy"
+            className="h-24 w-full cursor-pointer object-cover"
+            onClick={() => setLightboxIndex(i)}
+          />
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onChange(images.filter((_, idx) => idx !== i));
+            }}
+            className="absolute left-1 top-1 grid h-6 w-6 place-items-center rounded-md bg-background/85 text-destructive opacity-0 transition-opacity group-hover:opacity-100"
+            aria-label="حذف تصویر"
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      ))}
+    </div>
+  );
+  const lightbox = lightboxIndex !== null && (
+    <ImageLightbox
+      images={images}
+      initialIndex={lightboxIndex}
+      onClose={() => setLightboxIndex(null)}
+    />
+  );
+
+  // A plan that allows no images does not get a file picker at all: offering
+  // one and failing on save was how a blocked upload still looked stored
+  // (DEV-156). The reason and the way out are visible instead.
+  if (cap <= 0) {
+    return (
+      <div className="space-y-2">
+        {!compact && <div className="text-sm font-medium">{label}</div>}
+        <div className="rounded-lg border border-dashed border-border bg-secondary/30 px-4 py-4 text-center">
+          <p className="text-sm text-muted-foreground">
+            پلن فعلی اجازه آپلود تصویر در این بخش را ندارد.
+          </p>
+          <a
+            href="/app/billing"
+            className="mt-1 inline-block text-sm font-medium text-primary hover:underline"
+          >
+            برای افزودن تصویر، پلن خود را ارتقا بده
+          </a>
+        </div>
+        {gallery}
+        {lightbox}
+      </div>
+    );
+  }
+
   async function handleFiles(files: FileList | null) {
     if (!files || files.length === 0) return;
 
     // The cap is part of the plan, so stop before doing the (expensive) image
     // work and tell the user why.
-    const cap =
-      maxImages < 0
-        ? MAX_IMAGES_PER_ENTRY
-        : Math.min(maxImages, MAX_IMAGES_PER_ENTRY);
     const room = cap - images.length;
     if (room <= 0) {
       toast.error(
-        maxImages <= 0
-          ? "پلن فعلی اجازه آپلود تصویر ندارد. برای فعال شدن، پلن را ارتقا بده."
-          : `سقف ${cap} تصویر پر شده است — هر معامله حداکثر ${MAX_IMAGES_PER_ENTRY} اسکرین‌شات می‌پذیرد.`,
+        `سقف ${cap} تصویر پر شده است — هر معامله حداکثر ${MAX_IMAGES_PER_ENTRY} اسکرین‌شات می‌پذیرد.`,
       );
       return;
     }
@@ -143,42 +207,8 @@ export function ImageUploader({
         <span className="text-sm text-muted-foreground">{hint}</span>
       </button>
 
-      {images.length > 0 && (
-        <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
-          {images.map((src, i) => (
-            <div
-              key={i}
-              className="group relative overflow-hidden rounded-lg border border-border"
-            >
-              <img
-                src={src}
-                alt={`اسکرین‌شات ${i + 1}`}
-                loading="lazy"
-                className="h-24 w-full cursor-pointer object-cover"
-                onClick={() => setLightboxIndex(i)}
-              />
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onChange(images.filter((_, idx) => idx !== i));
-                }}
-                className="absolute left-1 top-1 grid h-6 w-6 place-items-center rounded-md bg-background/85 text-destructive opacity-0 transition-opacity group-hover:opacity-100"
-                aria-label="حذف تصویر"
-              >
-                <X className="h-3.5 w-3.5" />
-              </button>
-            </div>
-          ))}
-        </div>
-      )}
-      {lightboxIndex !== null && (
-        <ImageLightbox
-          images={images}
-          initialIndex={lightboxIndex}
-          onClose={() => setLightboxIndex(null)}
-        />
-      )}
+      {gallery}
+      {lightbox}
     </div>
   );
 }

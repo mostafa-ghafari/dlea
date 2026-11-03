@@ -6,7 +6,7 @@ import { ArrowRight, CheckCircle2, XCircle, Images } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ImageUploader } from "@/components/ImageUploader";
-import { useLocalState } from "@/lib/app-state";
+import { useEffect, useState } from "react";
 import { updateTradeScreenshots, usePlanLimits, useTrades } from "@/lib/api";
 import { toast } from "sonner";
 
@@ -66,10 +66,14 @@ function TradeDetail() {
   const limits = usePlanLimits();
   const trade = trades.find((t) => t.id === id);
 
-  const [shots, setShots] = useLocalState<string[]>(
-    `tj:trade-shots:${id}`,
-    trade?.screenshots ?? [],
-  );
+  // The server owns this list. It used to live in localStorage, which kept a
+  // copy that survived a refused save — so an image the plan had blocked looked
+  // stored again after every reload, and the trade list counted it too (DEV-156).
+  const [shots, setShots] = useState<string[]>(trade?.screenshots ?? []);
+  const savedShots = trade?.screenshots;
+  useEffect(() => {
+    if (savedShots) setShots(savedShots);
+  }, [trade?.id, savedShots]);
 
   function saveShots(next: string[]) {
     const previous = shots;
@@ -88,8 +92,7 @@ function TradeDetail() {
       )
       .catch((err) => {
         // The server refused the list (most often the plan's image cap). Roll
-        // the local copy back so a rejected upload never looks saved after a
-        // reload — the count lives in localStorage.
+        // the optimistic copy back so a rejected upload never looks saved.
         setShots(previous);
         toast.error(
           err instanceof Error
