@@ -12,11 +12,13 @@ Two pieces make the MT4/MT5 sync real:
    connection.
 """
 
+import datetime
 import json
 import os
 import secrets
 
 from django.http import JsonResponse
+from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 from rest_framework.permissions import IsAuthenticated
@@ -24,7 +26,8 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.authentication import JWTAuthentication
 
-from .models import MTConnection, Portfolio, Trade
+from .jutils import month_label, week_label
+from .models import JournalEntry, MTConnection, Portfolio, Trade
 from .mt_stops import levels_from_comment, realized_rr
 from .serializers import TradeSerializer
 
@@ -226,6 +229,17 @@ def _fill_missing_stops(trade, item):
     if changed:
         trade.save(update_fields=["sl", "tp", "rr", "updated_at"])
     return changed
+
+
+def _normalize_mt_date(value):
+    """Convert MetaTrader '2026.11.03' to a date; None when unusable."""
+    if not isinstance(value, str) or not value.strip():
+        return None
+    v = value.strip().replace(".", "-").split(" ")[0].split("T")[0]
+    try:
+        return datetime.date.fromisoformat(v)
+    except ValueError:
+        return None
 
 
 def _normalize_mt_datetime(value):
@@ -465,6 +479,194 @@ def trades_webhook(request):
     if errors:
         payload["errors"] = errors[:10]
         # Debug: persist the exact validation errors so they can be diagnosed.
+        _log_webhook_problem({"errors": errors[:3], "sample": items[:1]})
+    if errors and created == 0:
+        return JsonResponse(payload, status=400)
+    return JsonResponse(payload, status=201 if created else 200)
+
+
+# ---------------------------------------------------------------------------
+# Journal webhook (EA, token auth)
+# ---------------------------------------------------------------------------
+SIDE_FA = {"buy": "خرید", "sell": "فروش"}
+
+
+def _num(item, key, digits=2, default=0.0):
+    try:
+        return round(float(item.get(key)), digits)
+    except (TypeError, ValueError):
+        return default
+
+
+def _compose_journal(item):
+    """Build the Persian journal title and body from the EA's numbers.
+
+    The EA sends the values it actually traded on; the wording lives here so a
+    journal entry reads in the trader's language no matter which build of the
+    expert pushed it.
+    """
+    side = "sell" if str(item.get("side", "")).lower() == "sell" else "buy"
+    side_fa = SIDE_FA[side]
+    symbol = str(item.get("symbol", "")).strip()[:12]
+    fast_p = item.get("ema_fast_period") or ""
+    slow_p = item.get("ema_slow_period") or ""
+    ema_fast = _num(item, "ema_fast")
+    ema_slow = _num(item, "ema_slow")
+    cross_fa = "کراس صعودی" if side == "buy" else "کراس نزولی"
+    periods = f"{fast_p}/{slow_p}" if fast_p and slow_p else ""
+
+    title = f"{side_fa} {symbol} — {cross_fa} EMA {periods}".strip()
+
+    parts = []
+    parts.append("<h2>دلیل ورود</h2>")
+    parts.append(
+        "<p>میانگین متحرک سریع "
+        f"({fast_p or '-'}) روی میانگین کند ({slow_p or '-'}) {cross_fa} کرد: "
+        f"<strong>{ema_fast:.2f}</strong> در برابر <strong>{ema_slow:.2f}</strong>.</p>"
+        if ema_fast or ema_slow
+        else f"<p>سیگنال {cross_fa} میانگین‌های متحرک فعال شد.</p>"
+    )
+
+    rsi = _num(item, "rsi", 1)
+    if item.get("rsi_on"):
+        limit = _num(item, "rsi_limit", 0)
+        parts.append(
+            f"<p>فیلتر RSI: مقدار <strong>{rsi:.1f}</strong> "
+            f"(حد مجاز {'زیر' if side == 'buy' else 'بالای'} {limit:.0f}) — عبور کرد.</p>"
+        )
+
+    lot = _num(item, "lot", 2)
+    risk_money = _num(item, "risk_money")
+    risk_pct = _num(item, "risk_pct")
+    equity = _num(item, "equity")
+    dd = _num(item, "dd_pct", 1)
+    parts.append("<h2>مدیریت سرمایه</h2><ul>")
+    parts.append(f"<li>حجم: <strong>{lot:g} لات</strong></li>")
+    if risk_money:
+        parts.append(f"<li>ریسک تا حد ضرر: <strong>{risk_money:.2f}$</strong> ({risk_pct:.2f}٪ حساب)</li>")
+    if equity:
+        parts.append(f"<li>موجودی هنگام ورود: {equity:.2f}$</li>")
+    if item.get("spike"):
+        parts.append(
+            "<li>لات جهشی پنجشنبه از سود انباشته و با سقف ۵ لات محاسبه شد.</li>"
+        )
+    if dd > 0:
+        parts.append(f"<li>دراوداون لحظهٔ ورود از سقف حساب: {dd:.1f}٪</li>")
+    parts.append("</ul>")
+
+    parts.append("<h2>پارامترهای معامله</h2><ul>")
+    parts.append(f"<li>قیمت ورود: {_num(item, 'price', 5)}</li>")
+    parts.append(f"<li>حد ضرر: {_num(item, 'sl', 5)} ({_num(item, 'sl_points', 0)} پوینت)</li>")
+    parts.append(f"<li>حد سود: {_num(item, 'tp', 5)} ({_num(item, 'tp_points', 0)} پوینت)</li>")
+    spread = _num(item, "spread", 0)
+    if spread:
+        parts.append(f"<li>اسپرد هنگام ورود: {spread} پوینت</li>")
+    when = str(item.get("time", "")).strip()
+    if when:
+        parts.append(f"<li>زمان باز شدن: {when}</li>")
+    parts.append("</ul>")
+
+    return title, "".join(parts)
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def journal_webhook(request):
+    """Receive the EA's reasoning for each *opened* trade.
+
+    The trades webhook only sees a position once it is closed, so the decision
+    behind it — which signal fired, the RSI reading, the size and risk that
+    were chosen — would arrive too late to be a journal entry. The EA posts
+    that reasoning the moment the order is filled and it is stored as a
+    ``JournalEntry`` linked to the ticket, so the trader can read *why* a trade
+    was taken next to the trade itself.
+
+    Body: {"token": "<webhook token>", "entries": [{
+        "ticket", "symbol", "side", "ema_fast", "ema_slow", "rsi",
+        "lot", "risk_money", "risk_pct", "equity", "dd_pct", "spike",
+        "price", "sl", "tp", "sl_points", "tp_points", "spread", "time",
+        "title"?, "html"?  -- explicit text wins over the composed body
+    }]}
+
+    Entries are deduplicated on (user, ticket, title): the EA retries on a
+    failed push, and a retry must not duplicate what is already journaled.
+    """
+    body = _json_body(request)
+    if not body or not isinstance(body, dict):
+        return JsonResponse({"error": "داده نامعتبر"}, status=400)
+
+    token = str(body.get("token", "")).strip()
+    conn = MTConnection.objects.filter(token=token).select_related("user").first()
+    if not conn:
+        return JsonResponse(
+            {"error": "توکن نامعتبر است — از تنظیمات متاتریدر توکن جدید بگیرید"},
+            status=401,
+        )
+    if conn.disconnected:
+        return JsonResponse(
+            {
+                "error": "اتصال متاتریدر قطع شده است — از تنظیمات دوباره وصل کن",
+                "reason": conn.disconnect_reason,
+            },
+            status=401,
+        )
+
+    _record_ea_version(conn, body.get("eaVersion"))
+
+    items = body.get("entries")
+    if not isinstance(items, list) or not items:
+        return JsonResponse({"error": "لیست ژورنال خالی است"}, status=400)
+
+    portfolio = _destination_portfolio(conn, body.get("portfolio_id"))
+    if not portfolio:
+        return JsonResponse(
+            {"error": "برای این اتصال پرتفولیوی مقصد مشخص نشده است — در تنظیمات انتخاب کنید"},
+            status=400,
+        )
+
+    created = 0
+    skipped = 0
+    errors = []
+    for idx, item in enumerate(items):
+        if not isinstance(item, dict):
+            errors.append({"index": idx, "detail": "entry must be an object"})
+            continue
+
+        ticket = str(item.get("ticket", "")).strip()[:24]
+        symbol = str(item.get("symbol", "")).strip()[:12]
+        entry_date = _normalize_mt_date(item.get("date")) or timezone.localdate()
+
+        composed_title, composed_html = _compose_journal(item)
+        title = (str(item.get("title", "")).strip() or composed_title)[:160]
+        html = str(item.get("html", "")).strip() or composed_html
+
+        if ticket and JournalEntry.objects.filter(
+            user=conn.user, trade_id=ticket, title=title
+        ).exists():
+            skipped += 1
+            continue
+
+        try:
+            JournalEntry.objects.create(
+                user=conn.user,
+                portfolio=portfolio,
+                date=entry_date,
+                week=week_label(entry_date),
+                month=month_label(entry_date),
+                trade_id=ticket,
+                symbol=symbol,
+                title=title,
+                html=html,
+                blocks=[],
+                images=[],
+            )
+            created += 1
+        except Exception as exc:  # pragma: no cover - defensive
+            errors.append({"index": idx, "detail": str(exc)})
+
+    payload = {"created": created, "skipped": skipped, "total": len(items)}
+    if errors:
+        payload["errors"] = errors[:10]
         _log_webhook_problem({"errors": errors[:3], "sample": items[:1]})
     if errors and created == 0:
         return JsonResponse(payload, status=400)

@@ -6,7 +6,7 @@ from unittest.mock import patch
 
 from rest_framework import status
 
-from api.models import MTConnection, Trade
+from api.models import JournalEntry, MTConnection, Trade
 from api.tests.common import BaseTestCase
 
 
@@ -597,3 +597,100 @@ class WebhookTests(BaseTestCase):
             "open_time": "2026.08.19 08:00",
             "close_time": "2026.08.19 09:00",
         }
+
+
+class JournalWebhookTests(BaseTestCase):
+    """The EA posts the *reason* for an entry the moment the order fills."""
+
+    def setUp(self):
+        self.user = self.make_user(username="trader-j")
+        self.portfolio = self.make_portfolio(user=self.user)
+        self.conn = MTConnection.objects.create(
+            user=self.user, portfolio=self.portfolio, account="123", token="tok-j"
+        )
+
+    def _post(self, payload):
+        return self.client.post("/api/journal/webhook/", payload, format="json")
+
+    def _entry(self, **over):
+        entry = {
+            "ticket": "55501",
+            "symbol": "XAUUSD",
+            "side": "buy",
+            "title": "خرید XAUUSD — کراس صعودی EMA 9/21",
+            "html": "<h2>دلیل ورود</h2><p>کراس صعودی.</p>",
+            "date": "2026.11.03",
+        }
+        entry.update(over)
+        return entry
+
+    def test_invalid_token_returns_401(self):
+        r = self._post({"token": "nope", "entries": [self._entry()]})
+        self.assertEqual(r.status_code, 401)
+
+    def test_empty_entries_returns_400(self):
+        r = self._post({"token": "tok-j", "entries": []})
+        self.assertEqual(r.status_code, 400)
+
+    def test_creates_journal_entry_for_the_ticket(self):
+        r = self._post({"token": "tok-j", "entries": [self._entry()]})
+
+        self.assertEqual(r.status_code, 201)
+        self.assertEqual(r.json()["created"], 1)
+        entry = JournalEntry.objects.get(trade_id="55501")
+        self.assertEqual(entry.user, self.user)
+        self.assertEqual(entry.portfolio, self.portfolio)
+        self.assertEqual(entry.symbol, "XAUUSD")
+        self.assertEqual(entry.date.isoformat(), "2026-11-03")
+        self.assertIn("کراس صعودی", entry.title)
+        self.assertIn("دلیل ورود", entry.html)
+        self.assertTrue(entry.week)
+        self.assertTrue(entry.month)
+
+    def test_repeat_push_is_skipped_not_duplicated(self):
+        self._post({"token": "tok-j", "entries": [self._entry()]})
+        r = self._post({"token": "tok-j", "entries": [self._entry()]})
+
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.json()["skipped"], 1)
+        self.assertEqual(JournalEntry.objects.filter(trade_id="55501").count(), 1)
+
+    def test_disconnected_connection_rejects_the_push(self):
+        self.conn.disconnected = True
+        self.conn.save(update_fields=["disconnected"])
+        r = self._post({"token": "tok-j", "entries": [self._entry()]})
+
+        self.assertEqual(r.status_code, 401)
+        self.assertEqual(JournalEntry.objects.count(), 0)
+
+    def test_composes_persian_body_from_ea_numbers(self):
+        """The EA sends numbers only; the wording is built server-side."""
+        r = self._post({"token": "tok-j", "entries": [{
+            "ticket": "777", "symbol": "XAUUSD", "side": "buy",
+            "ema_fast_period": 9, "ema_slow_period": 21,
+            "ema_fast": 4001.25, "ema_slow": 3999.10,
+            "rsi": 42.5, "rsi_on": True, "rsi_limit": 65,
+            "lot": 0.05, "risk_money": 1.25, "risk_pct": 2.5,
+            "equity": 50.0, "dd_pct": 0.0, "spike": False,
+            "price": 4000.1, "sl": 3997.6, "tp": 4004.1,
+            "sl_points": 250, "tp_points": 400, "spread": 18,
+            "time": "2026.11.03 09:00", "date": "2026.11.03",
+        }]})
+
+        self.assertEqual(r.status_code, 201)
+        entry = JournalEntry.objects.get(trade_id="777")
+        self.assertIn("کراس صعودی", entry.title)
+        self.assertIn("EMA 9/21", entry.title)
+        self.assertIn("دلیل ورود", entry.html)
+        self.assertIn("42.5", entry.html)
+        self.assertIn("0.05", entry.html)
+        self.assertIn("مدیریت سرمایه", entry.html)
+
+    def test_no_destination_returns_400(self):
+        self.portfolio.is_active = False
+        self.portfolio.save(update_fields=["is_active"])
+        MTConnection.objects.create(user=self.user, account="x", token="tok-j-nopf")
+        r = self._post({"token": "tok-j-nopf", "entries": [self._entry()]})
+
+        self.assertEqual(r.status_code, 400)
+        self.assertEqual(JournalEntry.objects.count(), 0)

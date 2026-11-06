@@ -17,7 +17,13 @@ from .billing_views import (
     BillingCouponView,
     BillingOrderView,
 )
-from .mt_views import MtConnectView, MtDisconnectView, MtStatusView, trades_webhook
+from .mt_views import (
+    MtConnectView,
+    MtDisconnectView,
+    MtStatusView,
+    journal_webhook,
+    trades_webhook,
+)
 from .views import (
     AchievementHistoryViewSet,
     AchievementViewSet,
@@ -102,6 +108,7 @@ urlpatterns = [
     path("mt/status/", MtStatusView.as_view(), name="mt-status"),
     path("mt/disconnect/", MtDisconnectView.as_view(), name="mt-disconnect"),
     path("trades/webhook/", trades_webhook, name="trades-webhook"),
+    path("journal/webhook/", journal_webhook, name="journal-webhook"),
     path("dashboard/", DashboardView.as_view(), name="dashboard"),
     path("ai/quota/", AiQuotaView.as_view(), name="ai-quota"),
     path("coach/insights/", CoachInsightsView.as_view(), name="coach-insights"),
