@@ -345,6 +345,12 @@ class Coupon(models.Model):
     """
 
     code = models.CharField(max_length=32, unique=True)
+    # The plan this code was minted for. Empty means "any sellable plan": a
+    # campaign code, where a plan-specific code is the normal case (an admin
+    # picks the plan first, then announces the code that goes with it).
+    plan = models.ForeignKey(
+        Plan, null=True, blank=True, on_delete=models.CASCADE, related_name="coupons"
+    )
     # Percentage off (0–100). Used when set; `amount` is the fallback.
     percent = models.PositiveSmallIntegerField(default=0)
     # Fixed discount in Toman. Used only when `percent` is 0.
@@ -367,6 +373,17 @@ class Coupon(models.Model):
     def normalize(raw) -> str:
         """` dlea20 ` → `DLEA20` — codes ignore case and stray spaces."""
         return str(raw or "").strip().upper()
+
+    def applies_to(self, plan) -> bool:
+        """True when this code prices `plan`.
+
+        A code for Pro Max must not quietly discount Pro: the admin picked one
+        plan when minting it, and checkout re-checks that here rather than
+        trusting the preview the page showed.
+        """
+        if self.plan_id is None:
+            return True
+        return plan is not None and self.plan_id == getattr(plan, "pk", None)
 
     def is_usable(self, now=None) -> tuple[bool, str]:
         """``(usable, reason)`` — why a code cannot be applied, in Persian."""

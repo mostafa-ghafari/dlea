@@ -141,6 +141,9 @@ function BillingPage() {
   // same plan, by contrast, adds them to the new period. No card says that, so
   // it is spelled out above the cards, and only when there is something to lose.
   const daysAtRisk = subscription && sub.daysLeft > 0 ? sub.daysLeft : 0;
+  // A code is minted for one plan, so only the plans the server actually
+  // priced may show a discounted total or carry the code to the gateway.
+  const quotedPlans = sellable.filter((p) => quotes[p.id]);
 
   // A discount is a share of the amount actually billed, so a monthly quote is
   // the wrong number for a yearly order: re-ask the server on every cycle
@@ -231,7 +234,13 @@ function BillingPage() {
   async function buy(planId: string) {
     setBusyPlan(planId);
     try {
-      const session = await startCheckout(planId, cycle, appliedCode);
+      // Only a plan this code actually prices may carry it: the server refuses
+      // a code minted for another plan, which would stop the buy dead.
+      const session = await startCheckout(
+        planId,
+        cycle,
+        quotes[planId] ? appliedCode : "",
+      );
       // Full navigation, not a router push: the bank owns the next page.
       window.location.href = session.paymentUrl;
     } catch (e) {
@@ -425,13 +434,13 @@ function BillingPage() {
               </Button>
             )}
           </div>
-          {appliedCode && Object.keys(quotes).length > 0 && (
+          {appliedCode && quotedPlans.length > 0 && (
             <div className="mt-3 space-y-1 text-xs text-primary">
               <div className="flex items-center gap-1">
                 <BadgeCheck className="h-3 w-3" />
                 کد {appliedCode} فعال است
-                {quotes[sellable[0]?.id]?.percent
-                  ? ` — ${quotes[sellable[0].id].percent}% تخفیف`
+                {quotes[quotedPlans[0]?.id ?? ""]?.percent
+                  ? ` — ${quotes[quotedPlans[0].id].percent}% تخفیف`
                   : ""}
               </div>
               <div className="text-muted-foreground">

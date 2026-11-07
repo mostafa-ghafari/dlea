@@ -1,4 +1,5 @@
 import {
+  BadgePercent,
   LayoutDashboard,
   Wallet,
   LineChart,
@@ -132,6 +133,13 @@ export const nav = [
     to: "/app/admin/plans",
     icon: TrendingUp,
     label: "مدیریت پلن‌ها",
+    feature: null,
+    admin: true,
+  },
+  {
+    to: "/app/admin/coupons",
+    icon: BadgePercent,
+    label: "کدهای تخفیف",
     feature: null,
     admin: true,
   },

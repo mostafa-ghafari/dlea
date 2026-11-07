@@ -76,7 +76,7 @@ class BillingCheckoutView(APIView):
         # Discount first, gateway bounds second: what gets measured against the
         # gateway's range has to be the amount actually charged, not the list
         # price, or a coupon could push an order under the floor unnoticed.
-        coupon, coupon_error = _coupon_for(request.data.get("coupon"))
+        coupon, coupon_error = _coupon_for(request.data.get("coupon"), plan)
         if coupon_error:
             return Response(
                 {"detail": coupon_error}, status=status.HTTP_400_BAD_REQUEST
@@ -189,7 +189,7 @@ class BillingCouponView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        coupon, coupon_error = _coupon_for(request.data.get("code"))
+        coupon, coupon_error = _coupon_for(request.data.get("code"), plan)
         if coupon_error:
             return Response(
                 {"detail": coupon_error}, status=status.HTTP_400_BAD_REQUEST
@@ -308,19 +308,23 @@ def _phone(user) -> str:
         return ""
 
 
-def _coupon_for(raw_code):
+def _coupon_for(raw_code, plan=None):
     """``(coupon, error)`` — the code the buyer typed, or why it cannot apply.
 
     An empty code is not an error: it means "no coupon", which is the normal
     case for every order that is not discounted. Matching ignores case and
-    stray spaces so a buyer who types `dlea20` still gets `DLEA20`.
+    stray spaces so a buyer who types `dlea20` still gets `DLEA20`. A code
+    minted for another plan is refused here — this is the check checkout runs
+    itself, so a preview from a tampered page buys nothing.
     """
     code = Coupon.normalize(raw_code)
     if not code:
         return None, ""
-    coupon = Coupon.objects.filter(code=code).first()
+    coupon = Coupon.objects.select_related("plan").filter(code=code).first()
     if coupon is None:
         return None, "کد تخفیف معتبر نیست"
+    if not coupon.applies_to(plan):
+        return None, f"این کد تخفیف فقط برای پلن {coupon.plan.name} است"
     usable, reason = coupon.is_usable()
     if not usable:
         return None, reason

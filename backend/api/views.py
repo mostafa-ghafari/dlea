@@ -17,6 +17,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from . import gemini, jutils, payment_health
+from .coupon_announce import announce as announce_coupon
 from .mt_views import current_mt_destination, cut_mt_link_if_destination_changed
 from .plan_limits import MAX_IMAGES_PER_ENTRY, ai_quota_for_user
 from .models import (
@@ -28,6 +29,7 @@ from .models import (
     LogEntry,
     CoachInsights,
     CoachPeriod,
+    Coupon,
     EconomicEvent,
     EquityCurvePoint,
     ForexSymbol,
@@ -61,6 +63,7 @@ from .serializers import (
     LogEntrySerializer,
     CoachInsightsSerializer,
     CoachPeriodSerializer,
+    CouponSerializer,
     EconomicEventSerializer,
     EquityCurvePointSerializer,
     ForexSymbolSerializer,
@@ -806,6 +809,32 @@ class ReferralLinkViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = ReferralLink.objects.all()
     serializer_class = ReferralLinkSerializer
     permission_classes = [IsAdminUserPermission]
+
+
+class CouponViewSet(viewsets.ModelViewSet):
+    """Discount codes: minted for one plan, then announced (DEV-157).
+
+    The billed amount is re-derived in `billing/checkout/` from the code's own
+    row, so nothing this endpoint stores can change a price by itself — it only
+    decides what a buyer can type and what gets announced.
+    """
+
+    queryset = Coupon.objects.select_related("plan").all()
+    serializer_class = CouponSerializer
+    permission_classes = [IsAdminUserPermission]
+
+    @action(detail=True, methods=["post"])
+    def announce(self, request, pk=None):
+        """Publish the code in the news feed, or notify its plan's users."""
+        coupon = self.get_object()
+        channel = str(request.data.get("channel", "news")).strip()
+        try:
+            result = announce_coupon(
+                coupon, channel, pinned=bool(request.data.get("pinned"))
+            )
+        except ValueError as exc:
+            return Response({"detail": str(exc)}, status=400)
+        return Response({"ok": True, **result})
 
 
 class NewsItemViewSet(viewsets.ModelViewSet):

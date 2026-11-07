@@ -1,6 +1,7 @@
 from django.contrib import admin, messages
 from django.db.models import Q
 
+from .coupon_announce import CHANNEL_NEWS, CHANNEL_PRIVATE, announce
 from .mt_stops import missing_levels, repair_missing_stops
 from .models import (
     Achievement,
@@ -122,20 +123,52 @@ admin.site.register(AchievementHistory)
 admin.site.register(RoleTier)
 @admin.register(Coupon)
 class CouponAdmin(admin.ModelAdmin):
-    """Where discount codes are created (DEV-156).
+    """Where discount codes are created and announced (DEV-156, DEV-157).
 
-    The app's own admin panel prices plans; codes are minted here, which keeps
-    one place that can hand out free money. The code is saved upper-cased so a
-    search for `dlea20` finds `DLEA20` — matching is case-insensitive anyway.
+    The app's own admin panel prices plans; codes are minted here too, which
+    keeps one place that can hand out free money. The code is saved upper-cased
+    so a search for `dlea20` finds `DLEA20` — matching is case-insensitive
+    anyway. A code with no plan covers every sellable plan; one with a plan only
+    prices that plan, which is what the announce actions target.
     """
 
-    list_display = ("code", "percent", "amount", "active", "used_count", "max_uses", "expires_at")
-    list_filter = ("active",)
+    list_display = (
+        "code",
+        "plan",
+        "percent",
+        "amount",
+        "active",
+        "used_count",
+        "max_uses",
+        "expires_at",
+    )
+    list_filter = ("active", "plan")
     search_fields = ("code",)
+    actions = ["announce_in_news", "notify_plan_users"]
 
     def save_model(self, request, obj, form, change):
         obj.code = Coupon.normalize(obj.code)
         super().save_model(request, obj, form, change)
+
+    @admin.action(description="اعلام در اخبار (برای همهٔ کاربران)")
+    def announce_in_news(self, request, queryset):
+        for coupon in queryset:
+            result = announce(coupon, CHANNEL_NEWS)
+            self.message_user(
+                request,
+                f"{coupon.code}: خبر منتشر شد و برای {result['sent']} کاربر اعلان رفت.",
+                level=messages.SUCCESS,
+            )
+
+    @admin.action(description="اعلان خصوصی به کاربران همان پلن")
+    def notify_plan_users(self, request, queryset):
+        for coupon in queryset:
+            result = announce(coupon, CHANNEL_PRIVATE)
+            self.message_user(
+                request,
+                f"{coupon.code}: اعلان برای {result['sent']} کاربر رفت.",
+                level=messages.SUCCESS,
+            )
 
 
 @admin.register(Payment)

@@ -38,6 +38,7 @@ from .views import (
     CoachGenerateView,
     CoachInsightsView,
     CoachPeriodViewSet,
+    CouponViewSet,
     DashboardView,
     EconomicEventViewSet,
     ForexSymbolViewSet,
@@ -76,6 +77,7 @@ router.register("plans", PlanViewSet)
 router.register("subscription", SubscriptionViewSet)
 router.register("admin/users", PlatformUserViewSet, basename="admin-user")
 router.register("admin/payments", PaymentViewSet)
+router.register("admin/coupons", CouponViewSet, basename="admin-coupon")
 router.register("admin/referrals", ReferralLinkViewSet)
 router.register("news", NewsItemViewSet)
 router.register("tickets", TicketViewSet)

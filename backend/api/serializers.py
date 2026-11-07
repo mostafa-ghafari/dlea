@@ -23,6 +23,7 @@ from .models import (
     LogEntry,
     CoachInsights,
     CoachPeriod,
+    Coupon,
     EconomicEvent,
     EquityCurvePoint,
     ForexSymbol,
@@ -516,6 +517,76 @@ class PaymentSerializer(serializers.ModelSerializer):
 
     def get_paidAt(self, obj):
         return jutils.to_jalali_date(obj.paid_at.date()) if obj.paid_at else ""
+
+
+class CouponSerializer(serializers.ModelSerializer):
+    """One discount code, as the admin panel manages it.
+
+    `planSlug` is the write side and empty means "every plan"; `planName` is
+    what the table prints. `expiresOn` takes an ISO date because that is what an
+    `<input type="date">` sends, while `expiresAt` is the display string.
+    """
+
+    planSlug = serializers.SlugRelatedField(
+        source="plan",
+        slug_field="slug",
+        queryset=Plan.objects.all(),
+        allow_null=True,
+        required=False,
+    )
+    planName = serializers.SerializerMethodField()
+    maxUses = serializers.IntegerField(source="max_uses", required=False)
+    usedCount = serializers.IntegerField(source="used_count", read_only=True)
+    expiresAt = serializers.SerializerMethodField()
+    expiresOn = serializers.DateField(
+        source="expires_at", write_only=True, required=False, allow_null=True
+    )
+
+    class Meta:
+        model = Coupon
+        fields = [
+            "id",
+            "code",
+            "planSlug",
+            "planName",
+            "percent",
+            "amount",
+            "active",
+            "maxUses",
+            "usedCount",
+            "expiresAt",
+            "expiresOn",
+        ]
+
+    def get_planName(self, obj):
+        return obj.plan.name if obj.plan_id else ""
+
+    def get_expiresAt(self, obj):
+        return obj.expires_at.date().isoformat() if obj.expires_at else ""
+
+    def validate(self, attrs):
+        percent = attrs.get("percent", getattr(self.instance, "percent", 0))
+        amount = attrs.get("amount", getattr(self.instance, "amount", 0))
+        if not percent and not amount:
+            raise serializers.ValidationError(
+                {"detail": "یکی از درصد یا مبلغ تخفیف را وارد کن"}
+            )
+        if percent and percent > 100:
+            raise serializers.ValidationError(
+                {"detail": "درصد تخفیف نمی‌تواند بیشتر از ۱۰۰ باشد"}
+            )
+        return attrs
+
+    def _normalise(self, attrs):
+        if "code" in attrs:
+            attrs["code"] = Coupon.normalize(attrs["code"])
+        return attrs
+
+    def create(self, validated_data):
+        return super().create(self._normalise(validated_data))
+
+    def update(self, instance, validated_data):
+        return super().update(instance, self._normalise(validated_data))
 
 
 class ReferralLinkSerializer(serializers.ModelSerializer):

@@ -10,6 +10,7 @@ export {
 export { AdminDashboard } from "./admin/AdminDashboard";
 export { UsersManager } from "./admin/UsersManager";
 export { PlansManager } from "./admin/PlansManager";
+export { CouponsManager } from "./admin/CouponsManager";
 export { NewsManager } from "./admin/NewsManager";
 export { TicketsManager } from "./admin/TicketsManager";
 export { AuditLogPanel } from "./admin/AuditLogPanel";

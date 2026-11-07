@@ -31,6 +31,7 @@ import { Route as AppSettingsRouteImport } from './routes/app.settings'
 import { Route as AppSupportRouteImport } from './routes/app.support'
 import { Route as AppAdminApisRouteImport } from './routes/app.admin.apis'
 import { Route as AppAdminAuditRouteImport } from './routes/app.admin.audit'
+import { Route as AppAdminCouponsRouteImport } from './routes/app.admin.coupons'
 import { Route as AppAdminDashboardRouteImport } from './routes/app.admin.dashboard'
 import { Route as AppAdminLogsRouteImport } from './routes/app.admin.logs'
 import { Route as AppAdminNewsRouteImport } from './routes/app.admin.news'
@@ -156,6 +157,11 @@ const AppAdminAuditRoute = AppAdminAuditRouteImport.update({
   path: '/audit',
   getParentRoute: () => AppAdminRoute,
 } as any)
+const AppAdminCouponsRoute = AppAdminCouponsRouteImport.update({
+  id: '/coupons',
+  path: '/coupons',
+  getParentRoute: () => AppAdminRoute,
+} as any)
 const AppAdminDashboardRoute = AppAdminDashboardRouteImport.update({
   id: '/dashboard',
   path: '/dashboard',
@@ -250,6 +256,7 @@ export interface FileRoutesByFullPath {
   '/app/support': typeof AppSupportRoute
   '/app/admin/apis': typeof AppAdminApisRoute
   '/app/admin/audit': typeof AppAdminAuditRoute
+  '/app/admin/coupons': typeof AppAdminCouponsRoute
   '/app/admin/dashboard': typeof AppAdminDashboardRoute
   '/app/admin/logs': typeof AppAdminLogsRoute
   '/app/admin/news': typeof AppAdminNewsRoute
@@ -288,6 +295,7 @@ export interface FileRoutesByTo {
   '/app/support': typeof AppSupportRoute
   '/app/admin/apis': typeof AppAdminApisRoute
   '/app/admin/audit': typeof AppAdminAuditRoute
+  '/app/admin/coupons': typeof AppAdminCouponsRoute
   '/app/admin/dashboard': typeof AppAdminDashboardRoute
   '/app/admin/logs': typeof AppAdminLogsRoute
   '/app/admin/news': typeof AppAdminNewsRoute
@@ -327,6 +335,7 @@ export interface FileRoutesById {
   '/app/support': typeof AppSupportRoute
   '/app/admin/apis': typeof AppAdminApisRoute
   '/app/admin/audit': typeof AppAdminAuditRoute
+  '/app/admin/coupons': typeof AppAdminCouponsRoute
   '/app/admin/dashboard': typeof AppAdminDashboardRoute
   '/app/admin/logs': typeof AppAdminLogsRoute
   '/app/admin/news': typeof AppAdminNewsRoute
@@ -367,6 +376,7 @@ export interface FileRouteTypes {
     | '/app/support'
     | '/app/admin/apis'
     | '/app/admin/audit'
+    | '/app/admin/coupons'
     | '/app/admin/dashboard'
     | '/app/admin/logs'
     | '/app/admin/news'
@@ -405,6 +415,7 @@ export interface FileRouteTypes {
     | '/app/support'
     | '/app/admin/apis'
     | '/app/admin/audit'
+    | '/app/admin/coupons'
     | '/app/admin/dashboard'
     | '/app/admin/logs'
     | '/app/admin/news'
@@ -443,6 +454,7 @@ export interface FileRouteTypes {
     | '/app/support'
     | '/app/admin/apis'
     | '/app/admin/audit'
+    | '/app/admin/coupons'
     | '/app/admin/dashboard'
     | '/app/admin/logs'
     | '/app/admin/news'
@@ -626,6 +638,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppAdminAuditRouteImport
       parentRoute: typeof AppAdminRoute
     }
+    '/app/admin/coupons': {
+      id: '/app/admin/coupons'
+      path: '/coupons'
+      fullPath: '/app/admin/coupons'
+      preLoaderRoute: typeof AppAdminCouponsRouteImport
+      parentRoute: typeof AppAdminRoute
+    }
     '/app/admin/dashboard': {
       id: '/app/admin/dashboard'
       path: '/dashboard'
@@ -730,6 +749,7 @@ declare module '@tanstack/react-router' {
 interface AppAdminRouteChildren {
   AppAdminApisRoute: typeof AppAdminApisRoute
   AppAdminAuditRoute: typeof AppAdminAuditRoute
+  AppAdminCouponsRoute: typeof AppAdminCouponsRoute
   AppAdminDashboardRoute: typeof AppAdminDashboardRoute
   AppAdminLogsRoute: typeof AppAdminLogsRoute
   AppAdminNewsRoute: typeof AppAdminNewsRoute
@@ -743,6 +763,7 @@ interface AppAdminRouteChildren {
 const AppAdminRouteChildren: AppAdminRouteChildren = {
   AppAdminApisRoute: AppAdminApisRoute,
   AppAdminAuditRoute: AppAdminAuditRoute,
+  AppAdminCouponsRoute: AppAdminCouponsRoute,
   AppAdminDashboardRoute: AppAdminDashboardRoute,
   AppAdminLogsRoute: AppAdminLogsRoute,
   AppAdminNewsRoute: AppAdminNewsRoute,

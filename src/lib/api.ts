@@ -753,6 +753,60 @@ export function updatePlan(
 ): Promise<Plan> {
   return patch<Plan>(`plans/${slug}/`, changes);
 }
+
+/** One discount code, as the admin panel manages it. */
+export type AdminCoupon = {
+  id: number;
+  code: string;
+  /** Empty when the code covers every sellable plan. */
+  planSlug: string | null;
+  planName: string;
+  percent: number;
+  amount: number;
+  active: boolean;
+  /** 0 = as many uses as it gets. */
+  maxUses: number;
+  usedCount: number;
+  /** ISO date (`2026-11-20`); empty when it never expires. */
+  expiresAt: string;
+};
+
+export type CouponInput = {
+  code: string;
+  /** null means every plan. */
+  planSlug?: string | null;
+  percent?: number;
+  amount?: number;
+  active?: boolean;
+  maxUses?: number;
+  /** ISO date the code stops working on. */
+  expiresOn?: string | null;
+};
+
+export const fetchAdminCoupons = () => get<AdminCoupon[]>("admin/coupons/");
+export const createCoupon = (input: CouponInput) =>
+  post<AdminCoupon>("admin/coupons/", input);
+export const updateCoupon = (id: number, changes: Partial<CouponInput>) =>
+  patch<AdminCoupon>(`admin/coupons/${id}/`, changes);
+export const deleteCoupon = (id: number) =>
+  del<{ ok: boolean }>(`admin/coupons/${id}/`);
+
+/**
+ * Announce a code: `news` publishes a public خبر (and rings every bell),
+ * `private` only notifies the accounts already on the code's own plan.
+ */
+export const announceCoupon = (
+  id: number,
+  channel: "news" | "private",
+  pinned = false,
+) =>
+  post<{
+    ok: boolean;
+    channel: string;
+    newsId: number | null;
+    sent: number;
+    title: string;
+  }>(`admin/coupons/${id}/announce/`, { channel, pinned });
 export type AdminStats = {
   total_users: number;
   active_subscriptions: number;
