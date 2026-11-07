@@ -1,6 +1,7 @@
 import { AppShell } from "@/components/AppShell";
 import { createFileRoute } from "@tanstack/react-router";
 import {
+  AlertTriangle,
   BadgeCheck,
   CalendarClock,
   Check,
@@ -135,6 +136,11 @@ function BillingPage() {
     () => plans.filter((p) => p.sellable && p.id !== "free"),
     [plans],
   );
+  // Buying a plan other than the current one replaces it instead of stacking on
+  // it, so the days still left on the running plan are forfeited — renewing the
+  // same plan, by contrast, adds them to the new period. No card says that, so
+  // it is spelled out above the cards, and only when there is something to lose.
+  const daysAtRisk = subscription && sub.daysLeft > 0 ? sub.daysLeft : 0;
 
   // A discount is a share of the amount actually billed, so a monthly quote is
   // the wrong number for a yearly order: re-ask the server on every cycle
@@ -463,6 +469,17 @@ function BillingPage() {
       </div>
 
       <h2 className="mt-8 text-lg font-semibold">انتخاب پلن</h2>
+      {daysAtRisk > 0 && (
+        <div className="mt-4 flex items-start gap-2 rounded-lg border border-warning/40 bg-warning/10 p-3 text-sm text-warning">
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+          <span>
+            با انتخاب پلنی غیر از اشتراک فعلی،{" "}
+            {daysAtRisk.toLocaleString("fa-IR")} روز باقی‌ماندهٔ آن سوخت می‌شود
+            و دورهٔ جدید از امروز شروع می‌شود. تمدید همین پلن، این روزها را به
+            دورهٔ جدید اضافه می‌کند.
+          </span>
+        </div>
+      )}
       <div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         {sellable.map((p) => (
           <div
