@@ -280,6 +280,57 @@ class ImageCapTests(BaseTestCase):
         self.assertIn("حداکثر 2 تصویر", str(r.data))
         self.assertEqual(JournalEntry.objects.count(), 0)
 
+    # -- removing images after the plan shrank ------------------------------
+
+    def test_a_trade_can_still_lose_images_after_the_plan_shrinks(self):
+        """Deleting a screenshot must never be blocked by the image cap.
+
+        A trade saved while subscribed holds three screenshots; after the
+        subscription ends the free cap is two, so the stored list is already
+        over it. Measuring the remaining list against the cap refused every
+        save — the delete button did nothing and the image came back — while the
+        journal, which only classifies growth, let the same buyer remove one.
+        """
+        self._subscribe()
+        self.client.post("/api/trades/", self._trade_payload(3), format="json")
+        trade = Trade.objects.get(ticket="123456")
+        self.assertEqual(len(trade.screenshots), 3)
+
+        # The subscription lapses: the account falls back to the free cap of 2.
+        from api.models import Subscription
+
+        Subscription.objects.all().delete()
+
+        r = self.client.patch(
+            "/api/trades/%s/" % trade.pk, {"screenshots": trade.screenshots[:2]}, format="json"
+        )
+        self.assertEqual(r.status_code, 200)
+        trade.refresh_from_db()
+        self.assertEqual(len(trade.screenshots), 2)
+
+        r = self.client.patch(
+            "/api/trades/%s/" % trade.pk, {"screenshots": []}, format="json"
+        )
+        self.assertEqual(r.status_code, 200)
+        trade.refresh_from_db()
+        self.assertEqual(trade.screenshots, [])
+
+    def test_a_downgraded_trade_still_cannot_grow_past_the_cap(self):
+        """Shrinking is allowed; growing above the plan's cap is still refused."""
+        self._subscribe()
+        self.client.post("/api/trades/", self._trade_payload(2), format="json")
+        trade = Trade.objects.get(ticket="123456")
+
+        from api.models import Subscription
+
+        Subscription.objects.all().delete()
+
+        r = self.client.patch(
+            "/api/trades/%s/" % trade.pk, {"screenshots": self._trade_payload(3)["screenshots"]}, format="json"
+        )
+        self.assertEqual(r.status_code, 400)
+        self.assertIn("حداکثر 2 تصویر", str(r.data))
+
     # -- images embedded in the entry body ----------------------------------
 
     def test_journal_body_images_count_toward_the_cap(self):

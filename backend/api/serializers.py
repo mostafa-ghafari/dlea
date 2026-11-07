@@ -225,15 +225,26 @@ class TradeSerializer(serializers.ModelSerializer):
         The uploader already limits the count client-side; this is the
         server-side half of the same rule, so a crafted request cannot store
         unlimited images in the trade's JSON column.
+
+        An update is only refused when it *raises* the count above the cap. A
+        trade saved under a bigger plan may already hold more screenshots than
+        the current plan allows, and measuring the remaining list against the
+        new cap refused the one thing the buyer must still be able to do:
+        delete them. That is why images could not be removed from a trade while
+        the same action worked in the journal, which already had this
+        exception.
         """
         request = self.context.get("request")
         user = getattr(request, "user", None)
         cap = max_images_for_user(user)
         screenshots = attrs.get("screenshots", getattr(self.instance, "screenshots", None))
-        if cap >= 0 and len(screenshots or []) > cap:
-            raise serializers.ValidationError(
-                {"screenshots": _image_cap_error(cap, "هر معامله")}
-            )
+        count = len(screenshots or [])
+        if cap >= 0 and count > cap:
+            previous = len(getattr(self.instance, "screenshots", None) or [])
+            if self.instance is None or count > previous:
+                raise serializers.ValidationError(
+                    {"screenshots": _image_cap_error(cap, "هر معامله")}
+                )
 
         attrs = self._fill_rr(attrs)
         return attrs
