@@ -128,7 +128,9 @@ export function UserBlock({ compact = false }: { compact?: boolean }) {
                 <span className="text-muted-foreground">
                   اشتراک {subscription?.plan ?? "—"}
                 </span>
-                <span dir="ltr" className="font-medium text-primary tabular">
+                {/* RTL on purpose: with `dir="ltr"` the count was pushed to the
+                    end of the sentence (…روز باقی‌مانده ۰) instead of starting it. */}
+                <span dir="rtl" className="font-medium text-primary tabular">
                   {daysLeft} روز باقی‌مانده
                 </span>
               </div>
