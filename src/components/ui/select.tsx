@@ -6,7 +6,17 @@ import { Check, ChevronDown, ChevronUp } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 
-const Select = SelectPrimitive.Root;
+/**
+ * RTL at the root, like our DropdownMenu.
+ *
+ * Radix defaults a Select's direction to LTR, which drives the content's own
+ * `dir` (it is portalled, so it does not inherit the page's) and the arrow-key
+ * navigation inside the list. `SelectContent` below used to set `dir="rtl"` on
+ * its own; declaring it here covers the whole component in one place.
+ */
+const Select = (
+  props: React.ComponentPropsWithoutRef<typeof SelectPrimitive.Root>,
+) => <SelectPrimitive.Root dir="rtl" {...props} />;
 
 const SelectGroup = SelectPrimitive.Group;
 
