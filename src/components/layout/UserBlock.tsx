@@ -75,19 +75,8 @@ export function UserBlock({ compact = false }: { compact?: boolean }) {
                 text is ellipsized instead of wrapping the sidebar footer. */}
             <div className="truncate text-sm font-medium">{name}</div>
             <div className="mt-0.5 flex flex-nowrap items-center gap-1 overflow-hidden">
-              {planName && (
-                <Badge
-                  variant="outline"
-                  className={cn(
-                    "h-4 max-w-full shrink-0 truncate px-1.5 text-[10px]",
-                    subscription
-                      ? "border-primary/40 bg-primary/10 text-primary"
-                      : "border-border bg-secondary/60 text-muted-foreground",
-                  )}
-                >
-                  {planName}
-                </Badge>
-              )}
+              {/* Order matters and reads right-to-left: role, then the
+                  subscription days, and the plan badge last. */}
               <Badge
                 variant="outline"
                 className={cn(
@@ -103,6 +92,19 @@ export function UserBlock({ compact = false }: { compact?: boolean }) {
                   className="h-4 shrink-0 border-border bg-secondary/60 px-1.5 text-[10px] text-muted-foreground tabular"
                 >
                   {daysLeft} روز
+                </Badge>
+              )}
+              {planName && (
+                <Badge
+                  variant="outline"
+                  className={cn(
+                    "h-4 max-w-full shrink-0 truncate px-1.5 text-[10px]",
+                    subscription
+                      ? "border-primary/40 bg-primary/10 text-primary"
+                      : "border-border bg-secondary/60 text-muted-foreground",
+                  )}
+                >
+                  {planName}
                 </Badge>
               )}
             </div>
