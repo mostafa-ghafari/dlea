@@ -184,13 +184,14 @@ html.light .loss {
   * {
     border-color: var(--color-border);
   }
-  /* Reserve the scrollbar track even when nothing scrolls.
+  /* Reserve the scrollbar track even when nothing scrolls, so a page that
+     grows past one viewport does not jump sideways when the scrollbar appears.
 
-     Every Radix menu/select locks body scroll while it is open, which removes
-     the page scrollbar and compensates with `padding-right`. In an RTL document
-     the scrollbar lives on the *left*, so that compensation shifted the whole
-     page sideways the moment a dropdown opened. With the track always
-     reserved there is no scrollbar to remove, and therefore no shift. */
+     This alone does NOT stop the shift Radix menus used to cause: a modal menu
+     locks body scroll and compensates with `padding-right`, and the gutter does
+     not make that measurement zero. The fix for that lives in
+     `components/ui/dropdown-menu.tsx`, where menus are non-modal (`modal={false}`)
+     and therefore never lock the page. */
   html {
     scrollbar-gutter: stable;
   }
