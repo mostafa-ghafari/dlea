@@ -71,9 +71,13 @@ export function AppShell({
     <div className="min-h-screen w-full max-w-full overflow-x-clip bg-background text-foreground">
       <div className="flex min-h-screen">
         {/* Desktop Sidebar */}
+        {/* The whole column is pinned: the logo, the user block and the list
+            stay put while only the page content scrolls past them. `h-screen`
+            caps the height so `sticky` has something to move against, and the
+            nav below scrolls inside the column when the menu outgrows it. */}
         <aside
           className={cn(
-            "hidden shrink-0 border-l border-sidebar-border bg-sidebar transition-all duration-200 lg:flex lg:flex-col",
+            "hidden shrink-0 border-l border-sidebar-border bg-sidebar transition-all duration-200 lg:sticky lg:top-0 lg:flex lg:h-screen lg:flex-col",
             collapsed ? "w-[74px]" : "w-64",
           )}
         >
