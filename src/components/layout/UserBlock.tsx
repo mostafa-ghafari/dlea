@@ -55,7 +55,7 @@ export function UserBlock({ compact = false }: { compact?: boolean }) {
       <DropdownMenuTrigger asChild>
         <button
           className={cn(
-            "flex w-full items-center gap-3 rounded-lg border border-sidebar-border bg-sidebar-accent/40 p-2.5 text-right transition-colors hover:bg-sidebar-accent/70",
+            "group flex w-full items-center gap-3 rounded-lg border border-sidebar-border bg-sidebar-accent/40 p-2.5 text-right transition-colors hover:bg-sidebar-accent/70",
             compact &&
               "border-0 bg-transparent p-1.5 hover:bg-sidebar-accent/40",
           )}
@@ -108,7 +108,10 @@ export function UserBlock({ compact = false }: { compact?: boolean }) {
             </div>
           </div>
 
-          <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" />
+          <ChevronDown
+            aria-hidden
+            className="h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200 group-data-[state=open]:rotate-180"
+          />
         </button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" className="w-56">
