@@ -1,0 +1,25 @@
+// /etc/bind/named.conf.options for the dlea.ir authoritative server.
+// Managed by deploy/dlea-ir/apply.sh
+//
+// Two things about this box:
+//  1. It runs systemd-resolved, which owns 127.0.0.53:53 and 127.0.0.54:53.
+//     Bind must not try to bind those, so we never disable resolved — we just
+//     listen only on the addresses we care about.
+//  2. The public IP 37.255.212.62 is NAT'd by the provider; the machine's real
+//     interface address is 192.168.0.200 on enp0s25. Binding the public IP
+//     would listen on nothing, so we bind the interface address instead.
+options {
+    directory "/var/cache/bind";
+
+    listen-on { 192.168.0.200; 127.0.0.1; };
+    listen-on-v6 { none; };
+
+    // Authoritative-only: do not recurse for the outside world, and skip
+    // DNSSEC validation (it tries to prime the root over IPv6, which is
+    // unreachable here and just spams the log).
+    recursion no;
+    dnssec-validation no;
+    allow-transfer { none; };
+    allow-query { any; };
+    version none;
+};

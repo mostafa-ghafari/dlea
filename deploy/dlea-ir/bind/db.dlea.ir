@@ -1,0 +1,31 @@
+$TTL    3600
+@       IN      SOA     ns1.dlea.ir. admin.dlea.ir. (
+                        2026093001 ; Serial  (YYYYMMDDnn — bump on every edit)
+                        3600       ; Refresh (1 hour)
+                        1800       ; Retry (30 minutes)
+                        1209600    ; Expire (2 weeks)
+                        86400 )    ; Negative Cache TTL (1 day)
+
+; --- Name Servers ---
+; NOTE: IRNIC (.ir registry) requires at least two nameservers. Both are parked
+; on this same host/IP for now. If IRNIC refuses identical IPs, add a second
+; address (a cheap VPS or a secondary provider) and point ns2 at it.
+        IN      NS      ns1.dlea.ir.
+        IN      NS      ns2.dlea.ir.
+
+; --- Nameserver glue ---
+ns1     IN      A       37.255.212.62
+ns2     IN      A       37.255.212.62
+
+; --- App (Dlea AI frontend + backend live on this box) ---
+@       IN      A       37.255.212.62
+www     IN      A       37.255.212.62
+dev     IN      A       37.255.212.62
+api     IN      A       37.255.212.62
+
+; --- Blog (WordPress container on this box) ---
+blog    IN      A       37.255.212.62
+
+; --- Optional mail (uncomment when you add MX) ---
+; @     IN      MX 10   mail.dlea.ir.
+; mail  IN      A       37.255.212.62

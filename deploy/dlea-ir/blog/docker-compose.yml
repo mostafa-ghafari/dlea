@@ -1,0 +1,59 @@
+# blog.dlea.ir — WordPress + MariaDB on 37.255.212.62
+#
+# Run from this directory on the VPS:
+#   docker compose -f docker-compose.yml up -d
+# (compose v1 is broken on this box — use `docker compose` v2 or the
+#  `docker run` fallback documented in the README.)
+#
+# WordPress is published on 127.0.0.1:8090 and reached through the
+# blog.dlea.ir nginx vhost, so nothing is exposed publicly except via nginx.
+# 8080 is taken by meraat-prod-web-1 on this box — do not reuse it.
+
+services:
+  db:
+    image: mariadb:11
+    container_name: dlea-blog-db
+    restart: unless-stopped
+    environment:
+      MARIADB_DATABASE: ${WP_DB_NAME}
+      MARIADB_USER: ${WP_DB_USER}
+      MARIADB_PASSWORD: ${WP_DB_PASSWORD}
+      MARIADB_ROOT_PASSWORD: ${WP_DB_ROOT_PASSWORD}
+    volumes:
+      - blog-db:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  wordpress:
+    image: wordpress:php8.3-apache
+    container_name: dlea-blog
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:${WP_PORT:-8090}:80"
+    environment:
+      WORDPRESS_DB_HOST: db
+      WORDPRESS_DB_NAME: ${WP_DB_NAME}
+      WORDPRESS_DB_USER: ${WP_DB_USER}
+      WORDPRESS_DB_PASSWORD: ${WP_DB_PASSWORD}
+      # Force the canonical public URLs so WP never leaks the proxy origin.
+      WORDPRESS_CONFIG_EXTRA: |
+        define('WP_HOME', 'https://blog.dlea.ir');
+        define('WP_SITEURL', 'https://blog.dlea.ir');
+        define('FORCE_SSL_ADMIN', true);
+    volumes:
+      - blog-html:/var/www/html
+      # Persist uploads/themes/plugins on the host so the Netafraz backup can
+      # be dropped straight in and so they survive image upgrades.
+      - ./wp-content:/var/www/html/wp-content
+
+volumes:
+  blog-db:
+    name: dlea-blog-db
+  blog-html:
+    name: dlea-blog-html

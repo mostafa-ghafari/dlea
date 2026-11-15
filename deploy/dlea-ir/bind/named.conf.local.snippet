@@ -1,0 +1,7 @@
+// Append to /etc/bind/named.conf.local  (dlea.ir authoritative zone)
+// Managed by deploy/dlea-ir/apply.sh
+zone "dlea.ir" {
+    type master;
+    file "/etc/bind/zones/db.dlea.ir";
+    allow-transfer { none; };
+};
