@@ -131,14 +131,14 @@ function RootShell({ children }: { children: ReactNode }) {
       dir="rtl"
       className="dark"
       suppressHydrationWarning
-      style={{ overflowX: "hidden", maxWidth: "100vw", width: "100%" }}
+      style={{ overflowX: "clip", maxWidth: "100vw", width: "100%" }}
     >
       <head>
         <HeadContent />
       </head>
       <body
         className="bg-background text-foreground antialiased"
-        style={{ overflowX: "hidden", maxWidth: "100vw", width: "100%" }}
+        style={{ overflowX: "clip", maxWidth: "100vw", width: "100%" }}
       >
         {children}
         <Scripts />

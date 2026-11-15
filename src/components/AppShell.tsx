@@ -68,10 +68,7 @@ export function AppShell({
     location.pathname !== "/app/portfolios";
 
   return (
-    <div
-      className="min-h-screen w-full max-w-full bg-background text-foreground"
-      style={{ overflowX: "hidden", maxWidth: "100vw" }}
-    >
+    <div className="min-h-screen w-full max-w-full overflow-x-clip bg-background text-foreground">
       <div className="flex min-h-screen">
         {/* Desktop Sidebar */}
         <aside
@@ -151,7 +148,9 @@ export function AppShell({
         </aside>
 
         {/* Main */}
-        <div className="flex min-w-0 flex-1 flex-col w-full overflow-x-hidden">
+        {/* overflow-x-clip (not hidden) so the sticky topbar below still sticks
+            to the viewport instead of to this column. */}
+        <div className="flex w-full min-w-0 flex-1 flex-col overflow-x-clip">
           {/* Topbar */}
           <header className="sticky top-0 z-30 flex h-16 items-center gap-3 overflow-hidden border-b border-border bg-background/80 px-4 backdrop-blur-xl md:px-8">
             {/* Mobile/Tablet menu trigger */}

@@ -200,14 +200,17 @@ html.light .loss {
     color: var(--color-foreground);
     font-family: var(--font-sans);
     font-feature-settings: "ss01", "cv01";
-    overflow-x: hidden;
+    /* `clip`, not `hidden`: `overflow-x: hidden` turns html/body into a scroll
+       container, and every `sticky top-0` bar (AppShell header, legal pages)
+       then sticks to that container instead of the viewport — i.e. it never
+       sticks. `clip` trims the same horizontal overflow without doing that. */
+    overflow-x: clip;
     max-width: 100vw;
-    width: 100%;
     width: 100%;
   }
   #root,
   #app {
-    overflow-x: hidden;
+    overflow-x: clip;
     max-width: 100%;
     width: 100%;
   }
