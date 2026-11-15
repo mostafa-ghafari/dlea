@@ -17,7 +17,16 @@ import { cn } from "@/lib/utils";
  */
 const DropdownMenu = (
   props: React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.Root>,
-) => <DropdownMenuPrimitive.Root modal={false} {...props} />;
+) => (
+  <DropdownMenuPrimitive.Root
+    modal={false}
+    // The menu is portalled into <body> and Radix defaults its own direction
+    // to LTR, which ordered every row left-to-right and showed "اشتراک VIP"
+    // as "VIP اشتراک". This app is RTL, so say so at the source.
+    dir="rtl"
+    {...props}
+  />
+);
 DropdownMenu.displayName = "DropdownMenu";
 
 const DropdownMenuTrigger = DropdownMenuPrimitive.Trigger;
